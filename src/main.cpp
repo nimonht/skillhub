@@ -253,7 +253,7 @@ int runCli(const QStringList &a) {
             ++shown;
             const QString state = d.managed ? (d.detected ? QStringLiteral("managed") : QStringLiteral("managed (forced)")) : (d.detected ? QStringLiteral("detected, off") : QStringLiteral("not found"));
             QString where = d.mode == QLatin1String("link") ? QStringLiteral("links in ") + d.dir : d.mode == QLatin1String("config") ? QStringLiteral("lists the shared folder in ") + d.configFile : QStringLiteral("reads the shared folder");
-            where.replace(QDir::homePath(), QStringLiteral("~"));
+            where.replace(platform::homeDir(), QStringLiteral("~"));
             out() << d.id.leftJustified(18) << state.leftJustified(17) << (d.detectedBy.isEmpty() ? QStringLiteral("-") : d.detectedBy).leftJustified(34) << where << '\n';
         }
         out() << shown << (all ? " known providers, " : " providers shown, ") << st.agents().size() << " managed. `skillhub providers --all` lists every known agent.\n";

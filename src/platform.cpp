@@ -19,6 +19,11 @@
 
 namespace hub::platform {
 
+QString homeDir() {
+    const QString forced = qEnvironmentVariable("SKILLHUB_HOME");
+    return forced.isEmpty() ? QDir::homePath() : QDir::cleanPath(forced);
+}
+
 #ifdef Q_OS_WIN
 
 namespace {

@@ -4,6 +4,10 @@
 
 namespace hub::platform {
 
+// The user's home directory: $SKILLHUB_HOME when set (tests, portable setups), else the system's. Windows ignores the
+// USERPROFILE variable, so a throw-away home cannot be set up with it there.
+QString homeDir();
+
 // Directory links are symlinks everywhere. On Windows a symlink needs Developer Mode or an administrator, so a junction
 // (absolute target, no privilege needed) is used when a symlink is refused.
 bool isLink(const QString &path);           // the entry itself is a link (never follows it)

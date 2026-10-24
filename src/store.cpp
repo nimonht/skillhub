@@ -252,7 +252,7 @@ int pathRank(const QString &p) {
 // ------------------------------------------------------------------------------------------------
 
 Store::Store(QObject *parent) : QObject(parent) {
-    const QString home = QDir::homePath();
+    const QString home = platform::homeDir();
     central_ = home + QStringLiteral("/.agents/skills");
     lock_ = home + QStringLiteral("/.agents/.skill-lock.json");
     backup_ = home + QStringLiteral("/.agents/.backup");
@@ -800,10 +800,10 @@ bool Store::track(const QString &name, const QString &repoInput, const QString &
 
 #ifdef Q_OS_LINUX
 
-static QString unitDir() { return QDir::homePath() + QStringLiteral("/.config/systemd/user"); }
+static QString unitDir() { return platform::homeDir() + QStringLiteral("/.config/systemd/user"); }
 
 static QString exeForUnits() {
-    const QString installed = QDir::homePath() + QStringLiteral("/.local/bin/skillhub");
+    const QString installed = platform::homeDir() + QStringLiteral("/.local/bin/skillhub");
     return QFileInfo::exists(installed) ? QStringLiteral("%h/.local/bin/skillhub") : QCoreApplication::applicationFilePath();
 }
 
@@ -896,7 +896,7 @@ bool Store::removeUnits(bool, bool, QString *) { return true; }
 // ---- uninstall -----------------------------------------------------------------------------------------------
 
 bool Store::uninstall(bool dryRun, bool keepCache) {
-    const QString home = QDir::homePath();
+    const QString home = platform::homeDir();
     const QString verb = dryRun ? QStringLiteral("would remove") : QStringLiteral("removed");
     bool ok = true;
 

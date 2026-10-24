@@ -45,7 +45,7 @@ QString linkKey(LinkState s) {
 bool badLink(LinkState s) { return s == LinkState::Missing || s == LinkState::Copy || s == LinkState::Foreign; }
 
 QString tilde(QString p) {
-    const QString home = QDir::homePath();
+    const QString home = platform::homeDir();
     if (p == home || p.startsWith(home + QLatin1Char('/'))) p.replace(0, home.size(), QStringLiteral("~"));
     return p;
 }
@@ -800,7 +800,7 @@ namespace {
 QString cleanUserPath(QString p) {
     p = p.trimmed();
     if (p.startsWith(QLatin1String("file://"))) p = QUrl(p).toLocalFile();
-    if (p == QLatin1String("~") || p.startsWith(QLatin1String("~/"))) p = QDir::homePath() + p.mid(1);
+    if (p == QLatin1String("~") || p.startsWith(QLatin1String("~/"))) p = platform::homeDir() + p.mid(1);
     return p;
 }
 }  // namespace
@@ -813,7 +813,7 @@ QVariantMap AppController::exportInfo() const {
 
 QString AppController::documentsFolder() const {
     const QString d = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
-    return d.isEmpty() ? QDir::homePath() : d;
+    return d.isEmpty() ? platform::homeDir() : d;
 }
 
 QString AppController::defaultExportPath() const {
