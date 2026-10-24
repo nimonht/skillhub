@@ -40,7 +40,10 @@ jobs:
       - name: Name
         run: |
           cd dist/out
-          for f in skillhub_*.deb; do mv "$f" "$(echo "$f" | sed 's/_\([a-z0-9]*\)\.deb$/${{ matrix.suffix }}_\1.deb/')"; done
+          suffix='${{ matrix.suffix }}'
+          if [ -n "$suffix" ]; then
+            for f in skillhub_*.deb; do mv "$f" "$(echo "$f" | sed "s/_\([a-z0-9]*\)\.deb$/${suffix}_\1.deb/")"; done
+          fi
           ls -la
       - uses: actions/upload-artifact@v4
         with:
