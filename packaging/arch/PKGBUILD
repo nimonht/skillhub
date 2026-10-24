@@ -10,7 +10,7 @@ depends=('qt6-base' 'qt6-declarative' 'git')
 makedepends=('python')
 options=('!debug')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('SKIP')
+sha256sums=('5383db7230867601c70435a400a6a9c1577ae18832194d2715c5627c4148e0f9')
 
 build() {
   cd "$pkgname-$pkgver"
