@@ -88,8 +88,9 @@ Packages are attached to every [release](https://github.com/nimonht/skillhub/rel
 
 **The macOS and Windows builds are not code-signed** (that needs paid developer accounts), so the system asks you once:
 
-- *macOS*: right-click *Skill Hub* in Applications and choose **Open**, or run
-  `xattr -dr com.apple.quarantine "/Applications/Skill Hub.app"`. For the command line:
+- *macOS*: the first start is blocked. On macOS 15 and newer open **System Settings, Privacy & Security** and press **Open
+  Anyway** next to *Skill Hub*; on older versions right-click the app and choose **Open**. Or run
+  `xattr -dr com.apple.quarantine "/Applications/Skill Hub.app"` once. For the command line:
   `sudo ln -s "/Applications/Skill Hub.app/Contents/MacOS/skillhub" /usr/local/bin/skillhub`.
 - *Windows*: SmartScreen says "Windows protected your PC": **More info**, then **Run anyway**. The window is `skillhub.exe`;
   `skillhub-cli.exe` is the same program for terminals and scripts (the installer can add it to your PATH).

@@ -59,9 +59,11 @@ QString linkTarget(const QString &path) {
 }
 
 bool makeDirLink(const QString &linkPath, const QString &target) {
-    std::error_code ec;
-    std::filesystem::create_directory_symlink(std::filesystem::path(native(target)), std::filesystem::path(native(linkPath)), ec);
-    if (!ec) return true;
+    if (!qEnvironmentVariableIsSet("SKILLHUB_NO_SYMLINKS")) {  // set by tests: behave like an account that may not create symlinks
+        std::error_code ec;
+        std::filesystem::create_directory_symlink(std::filesystem::path(native(target)), std::filesystem::path(native(linkPath)), ec);
+        if (!ec) return true;
+    }
     const QString abs = QFileInfo(target).isAbsolute() ? target : QDir::cleanPath(QFileInfo(linkPath).absolutePath() + QLatin1Char('/') + target);
     return makeJunction(linkPath, abs);
 }

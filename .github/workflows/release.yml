@@ -149,6 +149,7 @@ jobs:
         run: |
           dist/SkillHub/skillhub-cli.exe --version
           python3 tests/portable_smoke.py dist/SkillHub/skillhub-cli.exe
+          SKILLHUB_NO_SYMLINKS=1 python3 tests/portable_smoke.py dist/SkillHub/skillhub-cli.exe
           SKILLHUB_TEST_PLATFORM=windows python3 tests/gui_launch.py dist/SkillHub/skillhub-cli.exe "$RUNNER_TEMP/screens"
       - name: Zip
         shell: pwsh
