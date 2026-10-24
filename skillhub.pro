@@ -2,7 +2,7 @@ QT += core gui qml quick quickcontrols2 concurrent
 CONFIG += c++17 warn_on
 TEMPLATE = app
 TARGET = skillhub
-VERSION = 1.0.0
+VERSION = 1.0.1
 DEFINES += SKILLHUB_VERSION=\\\"$$VERSION\\\"
 
 SOURCES += src/main.cpp src/store.cpp src/providers.cpp src/transfer.cpp src/platform.cpp src/app.cpp

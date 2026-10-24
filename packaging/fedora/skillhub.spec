@@ -1,5 +1,5 @@
 Name:           skillhub
-Version:        1.0.0
+Version:        1.0.1
 Release:        1%{?dist}
 Summary:        One skills folder for every coding agent
 License:        MIT AND OFL-1.1 AND CC0-1.0
@@ -53,5 +53,8 @@ appstream-util validate-relax --nonet %{buildroot}%{_metainfodir}/io.github.nimo
 %{_datadir}/icons/hicolor/scalable/apps/skillhub.svg
 
 %changelog
+* Sat Oct 24 2026 nimonht <181256175+nimonht@users.noreply.github.com> - 1.0.1-1
+- Windows junction links, packaging fixes
+
 * Sat Oct 24 2026 nimonht <181256175+nimonht@users.noreply.github.com> - 1.0.0-1
 - First release
