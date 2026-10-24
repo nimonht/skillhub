@@ -1,3 +1,9 @@
+skillhub (1.0.1) unstable; urgency=low
+
+  * Windows link handling fix, packaging and documentation updates.
+
+ -- nimonht <181256175+nimonht@users.noreply.github.com>  Sat, 24 Oct 2026 16:00:00 +0700
+
 skillhub (1.0.0) unstable; urgency=low
 
   * First release.

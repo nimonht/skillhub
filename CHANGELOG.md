@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.1 - 2026-10-24
+
+- **Windows: accounts that cannot create symlinks** (the default: Developer Mode off, not an administrator) link agent folders with
+  junctions. Those links showed as "OTHER" instead of linked, because Qt cannot resolve junctions; the link target is now read
+  from the link itself. CI runs the whole command-line test a second time with symlinks switched off to cover this path.
+- macOS 15: the first-start instructions use System Settings, Privacy & Security, Open Anyway.
+- `skillhub uninstall` also removes the installed AppStream file; the Arch package checksum is filled in.
+
 ## 1.0.0 - 2026-10-24
 
 First stable release.
