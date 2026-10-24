@@ -44,6 +44,18 @@ bool makeJunction(const QString &linkPath, const QString &absTarget) {
     return p.exitStatus() == QProcess::NormalExit && p.exitCode() == 0;
 }
 
+// REPARSE_DATA_BUFFER (only in the driver kit): the tag, then the name offsets and lengths of a symlink or junction
+struct ReparseBuffer {
+    ULONG tag;
+    USHORT dataLength;
+    USHORT reserved;
+    USHORT subOffset;
+    USHORT subLength;
+    USHORT printOffset;
+    USHORT printLength;
+    char data[1];  // junction: the path names; symlink: 4 bytes of flags, then the path names
+};
+
 }  // namespace
 
 bool isLink(const QString &path) {
@@ -53,10 +65,46 @@ bool isLink(const QString &path) {
 
 QString linkTarget(const QString &path) {
     if (!isLink(path)) return {};
-    const QFileInfo fi(path);
-    const QString t = fi.symLinkTarget();
-    return t.isEmpty() ? fi.canonicalFilePath() : t;
+    // read the reparse point itself: Qt does not resolve junctions (canonicalFilePath) and may not report their target
+    HANDLE h = CreateFileW(native(path).c_str(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
+                           FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+    if (h == INVALID_HANDLE_VALUE) return {};
+    alignas(8) char buf[16 * 1024];
+    DWORD got = 0;
+    const BOOL ok = DeviceIoControl(h, FSCTL_GET_REPARSE_POINT, nullptr, 0, buf, sizeof buf, &got, nullptr);
+    CloseHandle(h);
+    if (!ok) return {};
+    const auto *r = reinterpret_cast<const ReparseBuffer *>(buf);
+    const char *names = nullptr;
+    USHORT off = 0, len = 0;
+    bool relative = false;
+    if (r->tag == IO_REPARSE_TAG_MOUNT_POINT) {
+        names = r->data;
+        off = r->subOffset;
+        len = r->subLength;
+    } else if (r->tag == IO_REPARSE_TAG_SYMLINK) {
+        names = r->data + 4;  // after the flags
+        off = r->subOffset;
+        len = r->subLength;
+        relative = (*reinterpret_cast<const ULONG *>(r->data) & 1) != 0;  // SYMLINK_FLAG_RELATIVE
+    } else {
+        return {};
+    }
+    QString t = QString::fromWCharArray(reinterpret_cast<const wchar_t *>(names + off), len / int(sizeof(wchar_t)));
+    if (t.startsWith(QLatin1String("\\??\\"))) t = t.mid(4);  // NT namespace prefix
+    t = QDir::fromNativeSeparators(t);
+    if (relative) t = QFileInfo(path).absolutePath() + QLatin1Char('/') + t;
+    return QDir::cleanPath(t);
 }
+
+bool pointsTo(const QString &linkPath, const QString &dir) {
+    const QString t = linkTarget(linkPath);
+    if (t.isEmpty()) return false;
+    auto norm = [](const QString &p) { return QDir::cleanPath(QFileInfo(p).absoluteFilePath()).toLower(); };
+    return norm(t) == norm(dir) || QFileInfo(linkPath).canonicalFilePath().toLower() == QFileInfo(dir).canonicalFilePath().toLower();
+}
+
+Qt::CaseSensitivity pathCase() { return Qt::CaseInsensitive; }
 
 bool makeDirLink(const QString &linkPath, const QString &target) {
     if (!qEnvironmentVariableIsSet("SKILLHUB_NO_SYMLINKS")) {  // set by tests: behave like an account that may not create symlinks
@@ -99,6 +147,13 @@ QString linkTarget(const QString &path) {
 bool makeDirLink(const QString &linkPath, const QString &target) {
     return ::symlink(QFile::encodeName(target).constData(), QFile::encodeName(linkPath).constData()) == 0;
 }
+
+bool pointsTo(const QString &linkPath, const QString &dir) {
+    const QFileInfo fi(linkPath);
+    return fi.isSymLink() && fi.exists() && fi.canonicalFilePath() == QFileInfo(dir).canonicalFilePath();
+}
+
+Qt::CaseSensitivity pathCase() { return Qt::CaseSensitive; }
 
 bool removeLink(const QString &linkPath) { return isLink(linkPath) && QFile::remove(linkPath); }
 
