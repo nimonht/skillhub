@@ -13,6 +13,6 @@ make -s -j"$(nproc 2>/dev/null || echo 2)" >/dev/null
 make -s install INSTALL_ROOT="$R" >/dev/null
 [ -x "$R/usr/bin/skillhub" ] && [ -f "$R/usr/share/icons/hicolor/48x48/apps/skillhub.png" ] || { echo "FAIL: install incomplete" >&2; exit 1; }
 make -s uninstall INSTALL_ROOT="$R" >/dev/null 2>&1   # rmdir noise = non-empty shared dirs, as intended
-[ ! -e "$R/usr/bin/skillhub" ] && [ ! -e "$R/usr/share/applications/skillhub.desktop" ] && [ ! -e "$R/usr/share/icons/hicolor/48x48/apps/skillhub.png" ] || { echo "FAIL: uninstall left our files" >&2; exit 1; }
+[ ! -e "$R/usr/bin/skillhub" ] && [ ! -e "$R/usr/share/applications/skillhub.desktop" ] && [ ! -e "$R/usr/share/metainfo/io.github.nimonht.skillhub.metainfo.xml" ] && [ ! -e "$R/usr/share/icons/hicolor/48x48/apps/skillhub.png" ] || { echo "FAIL: uninstall left our files" >&2; exit 1; }
 [ -f "$R/usr/share/icons/hicolor/48x48/apps/other.png" ] && [ -f "$R/usr/share/applications/other.desktop" ] || { echo "FAIL: uninstall removed foreign files" >&2; exit 1; }
 echo "install round-trip passed"

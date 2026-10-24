@@ -923,6 +923,7 @@ bool Store::uninstall(bool dryRun, bool keepCache) {
     }
     for (const QString &prefix : prefixes) {
         QStringList files{prefix + QStringLiteral("/bin/skillhub"), prefix + QStringLiteral("/share/applications/skillhub.desktop"),
+                          prefix + QStringLiteral("/share/metainfo/io.github.nimonht.skillhub.metainfo.xml"),
                           prefix + QStringLiteral("/share/icons/hicolor/scalable/apps/skillhub.svg")};
         for (int sz : {16, 24, 32, 48, 64, 128, 256, 512})
             files << QStringLiteral("%1/share/icons/hicolor/%2x%2/apps/skillhub.png").arg(prefix).arg(sz);
