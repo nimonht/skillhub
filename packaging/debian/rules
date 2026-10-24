@@ -1,0 +1,19 @@
+#!/usr/bin/make -f
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+include /usr/share/dpkg/buildflags.mk
+
+%:
+	dh $@
+
+override_dh_auto_configure:
+	qmake6 PREFIX=/usr CONFIG+=release \
+	    QMAKE_CXXFLAGS_RELEASE="$(CXXFLAGS) $(CPPFLAGS)" QMAKE_LFLAGS_RELEASE="$(LDFLAGS)" skillhub.pro
+
+override_dh_auto_test:
+ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
+	python3 -I tests/catalog-check.py
+	python3 -I tests/portable_smoke.py ./skillhub
+endif
+
+override_dh_auto_install:
+	$(MAKE) INSTALL_ROOT=$(CURDIR)/debian/skillhub install

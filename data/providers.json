@@ -1,0 +1,962 @@
+{
+ "format": "skillhub-providers",
+ "version": 1,
+ "source": "vercel-labs/skills src/agents.ts @ a80e4c9 (MIT) with skillhub overrides",
+ "providers": [
+  {
+   "id": "claude-code",
+   "label": "Claude Code",
+   "dir": "${CLAUDE_CONFIG_DIR:-~/.claude}/skills",
+   "detect": [
+    "${CLAUDE_CONFIG_DIR:-~/.claude}"
+   ],
+   "mode": "link",
+   "ignore": [
+    "synced"
+   ],
+   "bins": [
+    "claude"
+   ],
+   "extraDirs": []
+  },
+  {
+   "id": "codex",
+   "label": "Codex",
+   "dir": "~/.agents/skills",
+   "detect": [
+    "${CODEX_HOME:-~/.codex}"
+   ],
+   "mode": "native",
+   "extraDirs": [
+    "${CODEX_HOME:-~/.codex}/skills"
+   ],
+   "ignore": [
+    ".system"
+   ],
+   "bins": [
+    "codex"
+   ]
+  },
+  {
+   "id": "gemini-cli",
+   "label": "Gemini CLI",
+   "dir": "~/.agents/skills",
+   "detect": [
+    "~/.gemini/settings.json",
+    "~/.gemini/oauth_creds.json",
+    "~/.gemini/GEMINI.md"
+   ],
+   "mode": "native",
+   "extraDirs": [
+    "~/.gemini/skills"
+   ],
+   "bins": [
+    "gemini"
+   ],
+   "ignore": []
+  },
+  {
+   "id": "antigravity",
+   "label": "Antigravity",
+   "dir": "",
+   "mode": "config",
+   "configFile": "~/.gemini/config/skills.json",
+   "detect": [
+    "~/.gemini/antigravity",
+    "~/.gemini/antigravity-cli",
+    "~/.antigravity-ide"
+   ],
+   "extraDirs": [
+    "~/.gemini/antigravity/skills",
+    "~/.gemini/antigravity-cli/skills"
+   ],
+   "bins": [
+    "agy",
+    "antigravity"
+   ],
+   "ignore": []
+  },
+  {
+   "id": "cursor",
+   "label": "Cursor",
+   "dir": "~/.cursor/skills",
+   "detect": [
+    "~/.cursor"
+   ],
+   "mode": "link",
+   "bins": [
+    "cursor-agent"
+   ],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "github-copilot",
+   "label": "GitHub Copilot",
+   "dir": "~/.copilot/skills",
+   "detect": [
+    "~/.copilot"
+   ],
+   "mode": "link",
+   "bins": [
+    "copilot"
+   ],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "opencode",
+   "label": "OpenCode",
+   "dir": "${XDG_CONFIG_HOME:-~/.config}/opencode/skills",
+   "detect": [
+    "${XDG_CONFIG_HOME:-~/.config}/opencode"
+   ],
+   "mode": "link",
+   "bins": [
+    "opencode"
+   ],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "windsurf",
+   "label": "Windsurf",
+   "dir": "~/.codeium/windsurf/skills",
+   "detect": [
+    "~/.codeium/windsurf"
+   ],
+   "mode": "link",
+   "bins": [
+    "windsurf"
+   ],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "zed",
+   "label": "Zed",
+   "dir": "~/.agents/skills",
+   "detect": [
+    "${XDG_CONFIG_HOME:-~/.config}/zed"
+   ],
+   "mode": "native",
+   "bins": [
+    "zed",
+    "zeditor"
+   ],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "amp",
+   "label": "Amp",
+   "dir": "${XDG_CONFIG_HOME:-~/.config}/agents/skills",
+   "detect": [
+    "${XDG_CONFIG_HOME:-~/.config}/amp"
+   ],
+   "mode": "link",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "goose",
+   "label": "Goose",
+   "dir": "${XDG_CONFIG_HOME:-~/.config}/goose/skills",
+   "detect": [
+    "${XDG_CONFIG_HOME:-~/.config}/goose"
+   ],
+   "mode": "link",
+   "bins": [
+    "goose"
+   ],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "kiro-cli",
+   "label": "Kiro CLI",
+   "dir": "~/.kiro/skills",
+   "detect": [
+    "~/.kiro"
+   ],
+   "mode": "link",
+   "bins": [
+    "kiro-cli"
+   ],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "qwen-code",
+   "label": "Qwen Code",
+   "dir": "~/.qwen/skills",
+   "detect": [
+    "~/.qwen"
+   ],
+   "mode": "link",
+   "bins": [
+    "qwen"
+   ],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "cline",
+   "label": "Cline",
+   "dir": "~/.agents/skills",
+   "detect": [
+    "~/.cline"
+   ],
+   "mode": "native",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "roo",
+   "label": "Roo Code",
+   "dir": "~/.roo/skills",
+   "detect": [
+    "~/.roo"
+   ],
+   "mode": "link",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "kilo",
+   "label": "Kilo Code",
+   "dir": "~/.kilo/skills",
+   "detect": [
+    "~/.kilo",
+    "~/.kilocode"
+   ],
+   "mode": "link",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "junie",
+   "label": "Junie",
+   "dir": "~/.junie/skills",
+   "detect": [
+    "~/.junie"
+   ],
+   "mode": "link",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "droid",
+   "label": "Droid",
+   "dir": "~/.agents/skills",
+   "detect": [
+    "~/.factory"
+   ],
+   "mode": "native",
+   "extraDirs": [
+    "~/.factory/skills"
+   ],
+   "bins": [
+    "droid"
+   ],
+   "ignore": []
+  },
+  {
+   "id": "openhands",
+   "label": "OpenHands",
+   "dir": "~/.openhands/skills",
+   "detect": [
+    "~/.openhands"
+   ],
+   "mode": "link",
+   "bins": [
+    "openhands"
+   ],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "continue",
+   "label": "Continue",
+   "dir": "~/.continue/skills",
+   "detect": [
+    "~/.continue"
+   ],
+   "mode": "link",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "adal",
+   "label": "AdaL",
+   "dir": "~/.adal/skills",
+   "detect": [
+    "~/.adal"
+   ],
+   "mode": "link",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "aider-desk",
+   "label": "AiderDesk",
+   "dir": "~/.aider-desk/skills",
+   "detect": [
+    "~/.aider-desk"
+   ],
+   "mode": "link",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "astrbot",
+   "label": "AstrBot",
+   "dir": "~/.astrbot/data/skills",
+   "detect": [
+    "~/.astrbot"
+   ],
+   "mode": "link",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "augment",
+   "label": "Augment",
+   "dir": "~/.augment/skills",
+   "detect": [
+    "~/.augment"
+   ],
+   "mode": "link",
+   "bins": [
+    "auggie"
+   ],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "autohand-code",
+   "label": "Autohand Code CLI",
+   "dir": "${AUTOHAND_HOME:-~/.autohand}/skills",
+   "detect": [
+    "${AUTOHAND_HOME:-~/.autohand}"
+   ],
+   "mode": "link",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "bob",
+   "label": "IBM Bob",
+   "dir": "~/.bob/skills",
+   "detect": [
+    "~/.bob"
+   ],
+   "mode": "link",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "codearts-agent",
+   "label": "CodeArts Agent",
+   "dir": "~/.codeartsdoer/skills",
+   "detect": [
+    "~/.codeartsdoer"
+   ],
+   "mode": "link",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "codebuddy",
+   "label": "CodeBuddy",
+   "dir": "~/.codebuddy/skills",
+   "detect": [
+    "~/.codebuddy"
+   ],
+   "mode": "link",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "codemaker",
+   "label": "Codemaker",
+   "dir": "~/.codemaker/skills",
+   "detect": [
+    "~/.codemaker"
+   ],
+   "mode": "link",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "codestudio",
+   "label": "Code Studio",
+   "dir": "~/.codestudio/skills",
+   "detect": [
+    "~/.codestudio"
+   ],
+   "mode": "link",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "command-code",
+   "label": "Command Code",
+   "dir": "~/.commandcode/skills",
+   "detect": [
+    "~/.commandcode"
+   ],
+   "mode": "link",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "cortex",
+   "label": "Cortex Code",
+   "dir": "~/.snowflake/cortex/skills",
+   "detect": [
+    "~/.snowflake/cortex"
+   ],
+   "mode": "link",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "crush",
+   "label": "Crush",
+   "dir": "~/.config/crush/skills",
+   "detect": [
+    "~/.config/crush"
+   ],
+   "mode": "link",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "deepagents",
+   "label": "Deep Agents",
+   "dir": "~/.deepagents/agent/skills",
+   "detect": [
+    "~/.deepagents"
+   ],
+   "mode": "link",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "devin",
+   "label": "Devin for Terminal",
+   "dir": "${XDG_CONFIG_HOME:-~/.config}/devin/skills",
+   "detect": [
+    "${XDG_CONFIG_HOME:-~/.config}/devin"
+   ],
+   "mode": "link",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "dexto",
+   "label": "Dexto",
+   "dir": "~/.agents/skills",
+   "detect": [
+    "~/.dexto"
+   ],
+   "mode": "native",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "firebender",
+   "label": "Firebender",
+   "dir": "~/.firebender/skills",
+   "detect": [
+    "~/.firebender"
+   ],
+   "mode": "link",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "forgecode",
+   "label": "ForgeCode",
+   "dir": "~/.forge/skills",
+   "detect": [
+    "~/.forge"
+   ],
+   "mode": "link",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "fx",
+   "label": "fx",
+   "dir": "~/.agents/skills",
+   "detect": [
+    "~/.fx"
+   ],
+   "mode": "native",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "grok",
+   "label": "Grok Build",
+   "dir": "${GROK_HOME:-~/.grok}/skills",
+   "detect": [
+    "${GROK_HOME:-~/.grok}"
+   ],
+   "mode": "link",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "hermes-agent",
+   "label": "Hermes Agent",
+   "dir": "${HERMES_HOME:-~/.hermes}/skills",
+   "detect": [
+    "${HERMES_HOME:-~/.hermes}"
+   ],
+   "mode": "link",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "iflow-cli",
+   "label": "iFlow CLI",
+   "dir": "~/.iflow/skills",
+   "detect": [
+    "~/.iflow"
+   ],
+   "mode": "link",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "inference-sh",
+   "label": "inference.sh",
+   "dir": "~/.inferencesh/skills",
+   "detect": [
+    "~/.inferencesh"
+   ],
+   "mode": "link",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "jazz",
+   "label": "Jazz",
+   "dir": "~/.jazz/skills",
+   "detect": [
+    "~/.jazz"
+   ],
+   "mode": "link",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "kimchi",
+   "label": "Kimchi",
+   "dir": "~/.config/kimchi/harness/skills",
+   "detect": [
+    "~/.config/kimchi"
+   ],
+   "mode": "link",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "kimi-code-cli",
+   "label": "Kimi Code CLI",
+   "dir": "~/.agents/skills",
+   "detect": [
+    "~/.kimi-code",
+    "~/.kimi"
+   ],
+   "mode": "native",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "kode",
+   "label": "Kode",
+   "dir": "~/.kode/skills",
+   "detect": [
+    "~/.kode"
+   ],
+   "mode": "link",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "lingma",
+   "label": "Lingma",
+   "dir": "~/.lingma/skills",
+   "detect": [
+    "~/.lingma"
+   ],
+   "mode": "link",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "loaf",
+   "label": "Loaf",
+   "dir": "~/.agents/skills",
+   "detect": [
+    "~/.loaf"
+   ],
+   "mode": "native",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "mcpjam",
+   "label": "MCPJam",
+   "dir": "~/.mcpjam/skills",
+   "detect": [
+    "~/.mcpjam"
+   ],
+   "mode": "link",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "minimax-code",
+   "label": "MiniMax Code",
+   "dir": "~/.minimax/skills",
+   "detect": [
+    "~/.minimax"
+   ],
+   "mode": "link",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "mistral-vibe",
+   "label": "Mistral Vibe",
+   "dir": "${VIBE_HOME:-~/.vibe}/skills",
+   "detect": [
+    "${VIBE_HOME:-~/.vibe}"
+   ],
+   "mode": "link",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "moxby",
+   "label": "Moxby",
+   "dir": "~/.moxby/skills",
+   "detect": [
+    "~/.moxby"
+   ],
+   "mode": "link",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "mux",
+   "label": "Mux",
+   "dir": "~/.mux/skills",
+   "detect": [
+    "~/.mux"
+   ],
+   "mode": "link",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "neovate",
+   "label": "Neovate",
+   "dir": "~/.neovate/skills",
+   "detect": [
+    "~/.neovate"
+   ],
+   "mode": "link",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "ona",
+   "label": "Ona",
+   "dir": "~/.ona/skills",
+   "detect": [
+    "~/.ona"
+   ],
+   "mode": "link",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "openclaw",
+   "label": "OpenClaw",
+   "dir": "~/.openclaw/skills",
+   "detect": [
+    "~/.openclaw",
+    "~/.clawdbot",
+    "~/.moltbot"
+   ],
+   "mode": "link",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "pi",
+   "label": "Pi",
+   "dir": "~/.agents/skills",
+   "detect": [
+    "~/.pi/agent"
+   ],
+   "mode": "native",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "pochi",
+   "label": "Pochi",
+   "dir": "~/.pochi/skills",
+   "detect": [
+    "~/.pochi"
+   ],
+   "mode": "link",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "posit-assistant",
+   "label": "Posit Assistant",
+   "dir": "~/.posit/assistant/skills",
+   "detect": [
+    "~/.posit/assistant",
+    "~/.positai"
+   ],
+   "mode": "link",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "qoder",
+   "label": "Qoder",
+   "dir": "~/.qoder/skills",
+   "detect": [
+    "~/.qoder"
+   ],
+   "mode": "link",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "qoder-cn",
+   "label": "Qoder CN",
+   "dir": "~/.qoder-cn/skills",
+   "detect": [
+    "~/.qoder-cn"
+   ],
+   "mode": "link",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "reasonix",
+   "label": "Reasonix",
+   "dir": "~/.reasonix/skills",
+   "detect": [
+    "~/.reasonix"
+   ],
+   "mode": "link",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "replit",
+   "label": "Replit",
+   "dir": "${XDG_CONFIG_HOME:-~/.config}/agents/skills",
+   "detect": [
+    "${XDG_CONFIG_HOME:-~/.config}/agents"
+   ],
+   "mode": "link",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "rovodev",
+   "label": "Rovo Dev",
+   "dir": "~/.rovodev/skills",
+   "detect": [
+    "~/.rovodev"
+   ],
+   "mode": "link",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "sarvam-code",
+   "label": "Sarvam Code",
+   "dir": "~/.agents/skills",
+   "detect": [
+    "${SARVAM_HOME:-~/.sarvam}"
+   ],
+   "mode": "native",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "tabnine-cli",
+   "label": "Tabnine CLI",
+   "dir": "~/.tabnine/agent/skills",
+   "detect": [
+    "~/.tabnine"
+   ],
+   "mode": "link",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "terramind",
+   "label": "Terramind",
+   "dir": "~/.terramind/skills",
+   "detect": [
+    "~/.terramind"
+   ],
+   "mode": "link",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "tinycloud",
+   "label": "Tinycloud",
+   "dir": "~/.tinycloud/skills",
+   "detect": [
+    "~/.tinycloud"
+   ],
+   "mode": "link",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "trae",
+   "label": "Trae",
+   "dir": "~/.trae/skills",
+   "detect": [
+    "~/.trae"
+   ],
+   "mode": "link",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "trae-cn",
+   "label": "Trae CN",
+   "dir": "~/.trae-cn/skills",
+   "detect": [
+    "~/.trae-cn"
+   ],
+   "mode": "link",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "warp",
+   "label": "Warp",
+   "dir": "~/.agents/skills",
+   "detect": [
+    "~/.warp"
+   ],
+   "mode": "native",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "zcode",
+   "label": "ZCode",
+   "dir": "~/.zcode/skills",
+   "detect": [
+    "~/.zcode"
+   ],
+   "mode": "link",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "zencoder",
+   "label": "Zencoder",
+   "dir": "~/.zencoder/skills",
+   "detect": [
+    "~/.zencoder"
+   ],
+   "mode": "link",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  },
+  {
+   "id": "zenflow",
+   "label": "Zenflow",
+   "dir": "~/.zencoder/skills",
+   "detect": [
+    "~/.zencoder"
+   ],
+   "mode": "link",
+   "bins": [],
+   "extraDirs": [],
+   "ignore": []
+  }
+ ]
+}

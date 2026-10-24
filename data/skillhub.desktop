@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Skill Hub
+GenericName=Coding Agent Skill Manager
+Comment=One skills folder for every coding agent
+Exec=skillhub gui
+Icon=skillhub
+Terminal=false
+Categories=Development;Utility;
+Keywords=skills;agents;claude;codex;cursor;opencode;gemini;antigravity;
+StartupWMClass=skillhub

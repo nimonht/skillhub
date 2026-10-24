@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.nimonht.skillhub</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>Skill Hub</name>
+  <summary>One skills folder for every coding agent</summary>
+  <description>
+    <p>Skill Hub finds the AI coding agents installed on your computer, keeps one shared folder of agent skills for all of them, installs skills from GitHub, keeps them up to date, and moves your whole skill set to another computer with one file.</p>
+    <ul>
+      <li>Detects Claude Code, Codex, Cursor, OpenCode, Gemini CLI, Antigravity, Zed and about 70 more agents</li>
+      <li>Shows which agent can see which skill, and repairs the links when something drifts</li>
+      <li>Installs skills from GitHub and tracks their upstream for updates</li>
+      <li>Exports and imports the whole skill set as a single file</li>
+      <li>A native Qt 6 application with a command line in the same program</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">skillhub.desktop</launchable>
+  <url type="homepage">https://github.com/nimonht/skillhub</url>
+  <url type="bugtracker">https://github.com/nimonht/skillhub/issues</url>
+  <provides>
+    <binary>skillhub</binary>
+  </provides>
+  <categories>
+    <category>Development</category>
+    <category>Utility</category>
+  </categories>
+  <developer id="io.github.nimonht">
+    <name>nimonht</name>
+  </developer>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="1.0.0" date="2026-10-24"/>
+  </releases>
+</component>
