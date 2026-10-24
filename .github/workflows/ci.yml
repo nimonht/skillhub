@@ -103,6 +103,11 @@ jobs:
       - name: Portable CLI test
         shell: bash
         run: python3 tests/portable_smoke.py build/release/skillhub-cli.exe
+      - name: Portable CLI test again, as an account that may not create symlinks (junction fallback)
+        shell: bash
+        env:
+          SKILLHUB_NO_SYMLINKS: "1"
+        run: python3 tests/portable_smoke.py build/release/skillhub-cli.exe
       - name: GUI renders headless
         shell: bash
         run: python3 tests/gui_launch.py build/release/skillhub-cli.exe "$RUNNER_TEMP/screens"
