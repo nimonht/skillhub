@@ -1,6 +1,7 @@
 #pragma once
 // The few places where operating systems differ: directory links, copying, desktop notifications, terminals, automation.
 #include <QString>
+#include <Qt>
 
 namespace hub::platform {
 
@@ -12,6 +13,8 @@ QString homeDir();
 // (absolute target, no privilege needed) is used when a symlink is refused.
 bool isLink(const QString &path);           // the entry itself is a link (never follows it)
 QString linkTarget(const QString &path);    // absolute target of a link, "" when `path` is not one
+bool pointsTo(const QString &linkPath, const QString &dir);  // `linkPath` is a link that leads to the folder `dir`
+Qt::CaseSensitivity pathCase();             // how this system compares paths (Windows ignores case)
 bool makeDirLink(const QString &linkPath, const QString &target);  // target: relative to the link's folder, or absolute
 bool removeLink(const QString &linkPath);   // removes the link only, never what it points to
 bool canMakeDirLinks();                     // this user can create directory links here (probes on Windows)

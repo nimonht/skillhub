@@ -310,10 +310,7 @@ static QJsonObject sourceToJson(const Source &s, const QJsonObject &base = {}) {
 static LinkState stateFor(const AgentDef &a, const QString &name, const QString &centralSkill, const QString &central) {
     if (a.mode == QLatin1String("link")) {
         const QFileInfo fi(a.dir + QLatin1Char('/') + name);
-        if (platform::isLink(fi.filePath())) {
-            if (fi.exists() && fi.canonicalFilePath() == QFileInfo(centralSkill).canonicalFilePath()) return LinkState::Linked;
-            return LinkState::Foreign;
-        }
+        if (platform::isLink(fi.filePath())) return fi.exists() && platform::pointsTo(fi.filePath(), centralSkill) ? LinkState::Linked : LinkState::Foreign;
         return fi.exists() ? LinkState::Copy : LinkState::Missing;
     }
     // native / config: the agent reads the shared folder itself; a real folder of the same name in one of its own
@@ -472,7 +469,7 @@ int Store::relink() {
         const QFileInfoList all = QDir(a.dir).entryInfoList(QDir::AllEntries | QDir::NoDotAndDotDot | QDir::System | QDir::Hidden);
         for (const QFileInfo &e : all) {
             if (platform::isLink(e.filePath()) && !e.exists() && !isHiddenName(e.fileName()) && !a.ignore.contains(e.fileName()) &&
-                platform::linkTarget(e.filePath()).startsWith(central_ + QLatin1Char('/'))) {  // only links Skill Hub could have made
+                platform::linkTarget(e.filePath()).startsWith(central_ + QLatin1Char('/'), platform::pathCase())) {  // only links Skill Hub could have made
                 platform::removeLink(e.filePath());
                 emit log(QStringLiteral("removed dead link %1").arg(e.filePath()));
                 ++changes;
