@@ -11,8 +11,9 @@ First stable release.
 - **Brand marks.** Each agent shows its own single-colour mark (Claude Code the Claude spark, Codex, Cursor, Zed, ...) instead of
   initials; 32 of the 75 known agents have one, the rest keep a two-letter tile. Marks come from lobe-icons and simple-icons
   and belong to their owners (see NOTICE.md).
-- **Linux, macOS and Windows.** Packages: `.deb` for Ubuntu 24.04+/Debian 13+ and for Debian 12, `.rpm` for Fedora 43+ (amd64
-  and arm64), a universal macOS disk image, a Windows installer and a portable zip, and an Arch PKGBUILD. Qt 6.4 or newer.
+- **Linux, macOS and Windows.** Packages: `.deb` for Debian 12 and 13 and Ubuntu 25.10+, another `.deb` for Ubuntu 24.04 and
+  Linux Mint 22, `.rpm` for Fedora 43+ (all amd64 and arm64), a universal macOS disk image, a Windows installer and a portable
+  zip, and an Arch PKGBUILD. Qt 6.4 or newer.
   The daily update timer and the stray watcher are systemd units and exist on Linux only; everything else works everywhere.
   macOS and Windows builds are not code-signed.
 - **Transfer between machines.** `skillhub export` / Export writes one JSON file (GitHub skills as their source, local skills
