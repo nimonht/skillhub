@@ -1,0 +1,59 @@
+<RCC>
+    <qresource prefix="/icons">
+        <file alias="skillhub-16.png">data/icons/hicolor/16x16/apps/skillhub.png</file>
+        <file alias="skillhub-32.png">data/icons/hicolor/32x32/apps/skillhub.png</file>
+        <file alias="skillhub-48.png">data/icons/hicolor/48x48/apps/skillhub.png</file>
+        <file alias="skillhub-64.png">data/icons/hicolor/64x64/apps/skillhub.png</file>
+        <file alias="skillhub-128.png">data/icons/hicolor/128x128/apps/skillhub.png</file>
+        <file alias="skillhub-256.png">data/icons/hicolor/256x256/apps/skillhub.png</file>
+    </qresource>
+    <qresource prefix="/data">
+        <file alias="providers.json">data/providers.json</file>
+        <file alias="provider-icons.json">data/provider-icons.json</file>
+    </qresource>
+    <qresource prefix="/qml">
+        <file alias="qmldir">qml/qmldir</file>
+        <file alias="AddSheet.qml">qml/AddSheet.qml</file>
+        <file alias="AgentTile.qml">qml/AgentTile.qml</file>
+        <file alias="Btn.qml">qml/Btn.qml</file>
+        <file alias="Chamfer.qml">qml/Chamfer.qml</file>
+        <file alias="ConsoleFeed.qml">qml/ConsoleFeed.qml</file>
+        <file alias="NumText.qml">qml/NumText.qml</file>
+        <file alias="+legacy/NumText.qml">qml/+legacy/NumText.qml</file>
+        <file alias="CurveShape.qml">qml/CurveShape.qml</file>
+        <file alias="DetailAgent.qml">qml/DetailAgent.qml</file>
+        <file alias="DetailPanel.qml">qml/DetailPanel.qml</file>
+        <file alias="DetailProviders.qml">qml/DetailProviders.qml</file>
+        <file alias="DetailSkill.qml">qml/DetailSkill.qml</file>
+        <file alias="DetailTransfer.qml">qml/DetailTransfer.qml</file>
+        <file alias="DotGrid.qml">qml/DotGrid.qml</file>
+        <file alias="EmptyDetail.qml">qml/EmptyDetail.qml</file>
+        <file alias="Field.qml">qml/Field.qml</file>
+        <file alias="FileDialogs.qml">qml/FileDialogs.qml</file>
+        <file alias="Icon.qml">qml/Icon.qml</file>
+        <file alias="ListHeader.qml">qml/ListHeader.qml</file>
+        <file alias="Logo.qml">qml/Logo.qml</file>
+        <file alias="Main.qml">qml/Main.qml</file>
+        <file alias="PortDot.qml">qml/PortDot.qml</file>
+        <file alias="ProviderBand.qml">qml/ProviderBand.qml</file>
+        <file alias="Rail.qml">qml/Rail.qml</file>
+        <file alias="Scroll.qml">qml/Scroll.qml</file>
+        <file alias="SectionLabel.qml">qml/SectionLabel.qml</file>
+        <file alias="Segmented.qml">qml/Segmented.qml</file>
+        <file alias="SkillRow.qml">qml/SkillRow.qml</file>
+        <file alias="Spinner.qml">qml/Spinner.qml</file>
+        <file alias="StatusBar.qml">qml/StatusBar.qml</file>
+        <file alias="Tag.qml">qml/Tag.qml</file>
+        <file alias="Theme.qml">qml/Theme.qml</file>
+        <file alias="Toast.qml">qml/Toast.qml</file>
+        <file alias="Toggle.qml">qml/Toggle.qml</file>
+        <file alias="TopBar.qml">qml/TopBar.qml</file>
+    </qresource>
+    <qresource prefix="/fonts">
+        <file alias="BarlowCondensed-Bold.ttf">fonts/BarlowCondensed-Bold.ttf</file>
+        <file alias="BarlowCondensed-SemiBold.ttf">fonts/BarlowCondensed-SemiBold.ttf</file>
+        <file alias="BarlowSemiCondensed-Medium.ttf">fonts/BarlowSemiCondensed-Medium.ttf</file>
+        <file alias="BarlowSemiCondensed-Regular.ttf">fonts/BarlowSemiCondensed-Regular.ttf</file>
+        <file alias="BarlowSemiCondensed-SemiBold.ttf">fonts/BarlowSemiCondensed-SemiBold.ttf</file>
+    </qresource>
+</RCC>

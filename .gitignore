@@ -1,0 +1,25 @@
+# qmake / build output
+build/
+build-*/
+Makefile*
+.qmake.stash
+*.o
+moc_*
+qrc_*.cpp
+/skillhub
+# editors
+.vscode/
+.idea/
+*.swp
+PRODUCT.md
+.impeccable/
+__pycache__/
+dist/
+*.obj
+*.exe
+*.dmg
+*.deb
+*.rpm
+*.pkg.tar.*
+release/
+debug/

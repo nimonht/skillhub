@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-labelledby="t">
+  <title id="t">Skill Hub app icon</title>
+  <rect id="tile" width="256" height="256" rx="58" fill="#0E1624"/>
+  <g id="symbol">
+    <rect x="59" y="56" width="33" height="144" rx="16.5" fill="#FFFFFF"/>
+    <rect x="164" y="56" width="33" height="144" rx="16.5" fill="#FFFFFF"/>
+    <rect x="104" y="112" width="48" height="30" rx="15" fill="#34E0A6"/>
+  </g>
+</svg>

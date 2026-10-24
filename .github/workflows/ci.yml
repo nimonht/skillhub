@@ -1,0 +1,113 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  QT_VERSION: "6.8.*"
+
+jobs:
+  linux:
+    name: Linux (Qt 6.8)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Qt (Ubuntu 24.04 ships Qt 6.4, older than the app needs)
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          cache: true
+      - name: System libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential git libgl1-mesa-dev libxkbcommon-dev libegl1 libfontconfig1 fonts-dejavu-core
+      - name: Build
+        run: |
+          mkdir build && cd build
+          qmake ../skillhub.pro
+          make -j"$(nproc)"
+      - name: Version
+        run: ./build/skillhub --version
+      - name: Design token contrast (WCAG)
+        run: python3 tests/contrast.py
+      - name: Smoke test (offline, throw-away HOME)
+        run: sh tests/smoke.sh build/skillhub
+      - name: Portable CLI test (detection, links, git install/update, export/import)
+        run: python3 tests/portable_smoke.py build/skillhub
+      - name: Install / uninstall round trip (must not remove shared directories)
+        run: sh tests/install-roundtrip.sh
+      - name: GUI renders headless (both themes, three sizes) with no QML errors
+        run: sh tests/gui-smoke.sh build/skillhub "$RUNNER_TEMP/screens"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gui-screenshots
+          path: ${{ runner.temp }}/screens
+
+  macos:
+    name: macOS (universal)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          cache: true
+      - name: Build
+        run: |
+          mkdir build && cd build
+          qmake ../skillhub.pro CONFIG+=release
+          make -j"$(sysctl -n hw.ncpu)"
+          lipo -archs skillhub.app/Contents/MacOS/skillhub
+      - name: Version
+        run: ./build/skillhub.app/Contents/MacOS/skillhub --version
+      - name: Portable CLI test
+        run: python3 tests/portable_smoke.py build/skillhub.app/Contents/MacOS/skillhub
+      - name: GUI renders headless
+        run: python3 tests/gui_launch.py build/skillhub.app/Contents/MacOS/skillhub "$RUNNER_TEMP/screens"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gui-screenshots-macos
+          path: ${{ runner.temp }}/screens
+
+  windows:
+    name: Windows (MSVC)
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          arch: win64_msvc2022_64
+          cache: true
+      - uses: ilammy/msvc-dev-cmd@v1
+      - name: Build
+        shell: cmd
+        run: |
+          mkdir build
+          cd build
+          qmake ..\skillhub.pro CONFIG+=release
+          nmake
+          dir release
+      - name: Version
+        run: ./build/release/skillhub.exe --version
+        shell: bash
+      - name: Console copy for the command line (the window build has no console)
+        shell: bash
+        run: |
+          cp build/release/skillhub.exe build/release/skillhub-cli.exe
+          python3 tools/exe-subsystem.py build/release/skillhub-cli.exe console
+      - name: Portable CLI test
+        shell: bash
+        run: python3 tests/portable_smoke.py build/release/skillhub-cli.exe
+      - name: GUI renders headless
+        shell: bash
+        run: python3 tests/gui_launch.py build/release/skillhub-cli.exe "$RUNNER_TEMP/screens"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gui-screenshots-windows
+          path: ${{ runner.temp }}/screens

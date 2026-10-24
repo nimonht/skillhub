@@ -1,0 +1,217 @@
+name: Release
+
+# Builds every package. A tag v* publishes a GitHub release; "Run workflow" (workflow_dispatch) only builds, as a dry run.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+env:
+  QT_VERSION: "6.8.*"
+
+jobs:
+  deb:
+    name: ${{ matrix.label }} (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Debian 12 names its libraries libqt6core6, Debian 13 and Ubuntu 25.10+ too: one package for all of them.
+          # Ubuntu 24.04 (and Mint 22) renamed theirs to libqt6core6t64, so they need their own.
+          - { label: "Debian 12 and 13, Ubuntu 25.10+", image: "debian:bookworm", runner: ubuntu-24.04,     arch: amd64, suffix: "" }
+          - { label: "Debian 12 and 13, Ubuntu 25.10+", image: "debian:bookworm", runner: ubuntu-24.04-arm, arch: arm64, suffix: "" }
+          - { label: "Ubuntu 24.04, Linux Mint 22",     image: "ubuntu:24.04",    runner: ubuntu-24.04,     arch: amd64, suffix: "_ubuntu24.04" }
+          - { label: "Ubuntu 24.04, Linux Mint 22",     image: "ubuntu:24.04",    runner: ubuntu-24.04-arm, arch: arm64, suffix: "_ubuntu24.04" }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the package in ${{ matrix.image }}
+        run: |
+          mkdir -p dist/out
+          docker run --rm -v "$PWD":/src:ro -v "$PWD/dist/out":/out ${{ matrix.image }} sh /src/packaging/container-deb.sh
+      - name: Install it in a fresh ${{ matrix.image }}, run the CLI and render the window
+        run: docker run --rm -v "$PWD":/src:ro -v "$PWD/dist/out":/pkg:ro ${{ matrix.image }} sh /src/packaging/container-verify-deb.sh
+      - name: Also on Debian 13 and Ubuntu 26.04
+        if: matrix.suffix == ''
+        run: |
+          for img in debian:trixie ubuntu:26.04; do
+            docker run --rm -v "$PWD":/src:ro -v "$PWD/dist/out":/pkg:ro $img sh /src/packaging/container-verify-deb.sh
+          done
+      - name: Name
+        run: |
+          cd dist/out
+          for f in skillhub_*.deb; do mv "$f" "$(echo "$f" | sed 's/_\([a-z0-9]*\)\.deb$/${{ matrix.suffix }}_\1.deb/')"; done
+          ls -la
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deb-${{ matrix.arch }}${{ matrix.suffix }}
+          path: dist/out/*.deb
+
+  rpm:
+    name: Fedora 43+ (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: ubuntu-24.04,     arch: x86_64 }
+          - { runner: ubuntu-24.04-arm, arch: aarch64 }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the package in fedora:43
+        run: |
+          mkdir -p dist/out
+          docker run --rm -v "$PWD":/src:ro -v "$PWD/dist/out":/out fedora:43 sh /src/packaging/container-rpm.sh
+      - name: Install it in a fresh fedora:43, run the CLI and render the window
+        run: docker run --rm -v "$PWD":/src:ro -v "$PWD/dist/out":/pkg:ro fedora:43 sh /src/packaging/container-verify-rpm.sh
+      - name: Also in the newest Fedora
+        run: docker run --rm -v "$PWD":/src:ro -v "$PWD/dist/out":/pkg:ro fedora:latest sh /src/packaging/container-verify-rpm.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rpm-${{ matrix.arch }}
+          path: dist/out/*.rpm
+
+  macos:
+    name: macOS (universal dmg)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          cache: true
+      - name: Build
+        run: |
+          mkdir build && cd build
+          qmake ../skillhub.pro CONFIG+=release
+          make -j"$(sysctl -n hw.ncpu)"
+          lipo -archs skillhub.app/Contents/MacOS/skillhub
+      - name: Disk image
+        id: dmg
+        run: |
+          V=$(sed -n 's/^VERSION = //p' skillhub.pro)
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "bin=$(packaging/macos/make-dmg.sh build "$V" | tail -1)" >> "$GITHUB_OUTPUT"
+          ls -la dist
+      - name: The deployed app runs (CLI, then the window with its bundled Qt)
+        run: |
+          "${{ steps.dmg.outputs.bin }}" --version
+          python3 tests/portable_smoke.py "${{ steps.dmg.outputs.bin }}"
+          SKILLHUB_TEST_PLATFORM=cocoa python3 tests/gui_launch.py "${{ steps.dmg.outputs.bin }}" "$RUNNER_TEMP/screens"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-dmg
+          path: dist/*.dmg
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gui-screenshots-macos
+          path: ${{ runner.temp }}/screens
+
+  windows:
+    name: Windows (zip + installer)
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          arch: win64_msvc2022_64
+          cache: true
+      - uses: ilammy/msvc-dev-cmd@v1
+      - name: Build
+        shell: cmd
+        run: |
+          mkdir build
+          cd build
+          qmake ..\skillhub.pro CONFIG+=release
+          nmake
+      - name: Deploy Qt next to the program
+        shell: bash
+        run: |
+          V=$(sed -n 's/^VERSION = //p' skillhub.pro)
+          echo "VERSION=$V" >> "$GITHUB_ENV"
+          D=dist/SkillHub
+          mkdir -p "$D"
+          cp build/release/skillhub.exe "$D/skillhub.exe"
+          cp "$D/skillhub.exe" "$D/skillhub-cli.exe"
+          python3 tools/exe-subsystem.py "$D/skillhub-cli.exe" console
+          windeployqt --release --no-translations --no-system-d3d-compiler --qmldir qml "$D/skillhub.exe"
+          # the Visual C++ runtime, so the zip runs on a machine that never installed it
+          for f in "$VCToolsRedistDir"x64/Microsoft.VC*.CRT/*.dll; do cp "$f" "$D/"; done
+          cp LICENSE NOTICE.md README.md "$D/"
+          ls "$D"
+      - name: The deployed program runs (CLI, then the window with its bundled Qt)
+        shell: bash
+        run: |
+          dist/SkillHub/skillhub-cli.exe --version
+          python3 tests/portable_smoke.py dist/SkillHub/skillhub-cli.exe
+          SKILLHUB_TEST_PLATFORM=windows python3 tests/gui_launch.py dist/SkillHub/skillhub-cli.exe "$RUNNER_TEMP/screens"
+      - name: Zip
+        shell: pwsh
+        run: Compress-Archive -Path dist/SkillHub/* -DestinationPath "dist/SkillHub-$env:VERSION-windows-x64.zip"
+      - name: Installer
+        shell: pwsh
+        run: |
+          choco install innosetup -y --no-progress
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$env:VERSION" "/DSourceDir=$PWD\dist\SkillHub" packaging/windows/skillhub.iss
+          Get-ChildItem dist
+      - name: Install silently, check, uninstall
+        shell: pwsh
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP "skillhub-installed"
+          Start-Process -Wait -FilePath "dist/SkillHub-$env:VERSION-windows-x64-setup.exe" -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/DIR=$dir"
+          & "$dir\skillhub-cli.exe" --version
+          Start-Process -Wait -FilePath "$dir\unins000.exe" -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES"
+          if (Test-Path "$dir\skillhub.exe") { throw "uninstall left the program behind" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: |
+            dist/*.zip
+            dist/*-setup.exe
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gui-screenshots-windows
+          path: ${{ runner.temp }}/screens
+
+  publish:
+    name: Publish the release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [deb, rpm, macos, windows]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: "{deb-*,rpm-*,macos-dmg,windows}"
+          merge-multiple: true
+      - name: Checksums and release notes
+        run: |
+          cd artifacts && sha256sum * > SHA256SUMS && cat SHA256SUMS && cd ..
+          V="${GITHUB_REF_NAME#v}"
+          awk -v v="$V" '$0 ~ "^## "v" " {on=1; next} /^## / {on=0} on' CHANGELOG.md > notes.md
+          cat >> notes.md <<'NOTES'
+
+          ### Downloads
+
+          | System | File |
+          |---|---|
+          | Debian 12 and 13, Ubuntu 25.10 and newer | `skillhub_*_amd64.deb` / `_arm64.deb` |
+          | Ubuntu 24.04, Linux Mint 22 | `skillhub_*_ubuntu24.04_*.deb` |
+          | Fedora 43+ | `skillhub-*.rpm` |
+          | macOS 12+ (Apple silicon and Intel) | `SkillHub-*-macos-universal.dmg` |
+          | Windows 10/11 (64-bit) | `SkillHub-*-windows-x64-setup.exe` or the portable `.zip` |
+          | Arch Linux | the PKGBUILD in `packaging/arch` |
+
+          The macOS and Windows builds are not code-signed: macOS and Windows SmartScreen ask you to confirm the first start (see the README).
+          NOTES
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --title "Skill Hub ${GITHUB_REF_NAME#v}" --notes-file notes.md artifacts/*

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-labelledby="t">
+  <title id="t">Skill Hub logo</title>
+  <g id="symbol">
+    <rect x="36" y="32" width="44" height="192" rx="22" fill="#0E1624"/>
+    <rect x="176" y="32" width="44" height="192" rx="22" fill="#0E1624"/>
+    <rect x="96" y="106" width="64" height="40" rx="20" fill="#0EA47A"/>
+  </g>
+</svg>
