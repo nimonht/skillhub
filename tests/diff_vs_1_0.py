@@ -24,7 +24,7 @@ WIN = os.name == "nt"
 # (command, reason): output that may differ on purpose
 KNOWN_DIFFERENCES = {
     "--version": "the version number",
-    "frobnicate": "the usage text lists the commands of 2.0 (add takes several repositories)",
+    "frobnicate": "the usage text lists the commands of 2.0 (add takes several repositories; serve)",
 }
 
 
@@ -190,9 +190,10 @@ def snapshot(home, upstream):
                 mode = "x" if (not WIN and os.access(full, os.X_OK)) else "-"
                 out[rel] = "file %s %s" % (mode, hashlib.sha256(data).hexdigest()[:16])
         dirnames[:] = [d for d in dirnames if not os.path.islink(os.path.join(dirpath, d))]
-    # 2.0's lock file for changing commands (docs/formats.md, section 8) holds no data, and 1.0.1 has none
+    # 2.0's lock file for changing commands and its swap journal (docs/formats.md, section 8): no data, and 1.0.1 has
+    # neither. A journal entry left behind after a command would still show up.
     out.pop("state/skillhub/mutate.lock", None)
-    for d in ("state/skillhub", "state"):
+    for d in ("state/skillhub/journal", "state/skillhub", "state"):
         if d in out and not any(k.startswith(d + "/") for k in out):
             del out[d]
     return out

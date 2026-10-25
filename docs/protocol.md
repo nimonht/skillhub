@@ -21,7 +21,8 @@ in `docs/formats.md`.
   at standard error, so a stray `printf` or a child process that inherits stdout can never corrupt the stream. Every child
   process (git, `systemctl`, ...) gets its output through its own pipe.
 - Requests have an `id` (integer or string) and get exactly one response. Notifications have no `id`. The backend sends
-  responses and notifications in any order.
+  responses and notifications in any order. Batches (a JSON array of messages) are not supported: they get error
+  `-32600`. Blank lines are ignored.
 - The window parses on a worker thread and hands finished objects to the UI thread.
 
 ## Lifetime
@@ -39,7 +40,8 @@ in `docs/formats.md`.
 ```json
 → {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocol":1,"client":"skillhub-gui 2.0.0"}}
 ← {"jsonrpc":"2.0","id":1,"result":{"protocol":1,"version":"2.0.0","pid":4242,
-     "capabilities":{"automation":"systemd","links":"symlink","projects":true,"terminalFetch":true}}}
+     "capabilities":{"automation":"systemd","links":"symlink","projects":true,"terminalFetch":true},
+     "paths":{"home":"...","central":"...","backup":"...","cache":"...","state":"...","config":"...","lock":"..."}}}
 ```
 
 When the protocol numbers differ, the backend answers with error `-32002` and the window says "backend and window are
@@ -58,7 +60,7 @@ its event-loop thread.
 ### `state.snapshot`
 
 ```json
-→ {"id":2,"method":"state.snapshot","params":{"page":0,"pageSize":1000}}
+→ {"id":2,"method":"state.snapshot","params":{"page":0,"pageSize":1000,"rescan":false}}
 ← {"id":2,"result":{"rev":17,"scope":"user","page":0,"pages":1,
      "skills":[ <Skill>, ... ],
      "agents":[ <AgentTile>, ... ], "overflow":{ "count":3, "problems":0, "health":"ok", "names":"..." },
@@ -66,19 +68,28 @@ its event-loop thread.
      "counts":{ "skills":137, "updates":3, "local":9, "problems":0, "strays":0, "checked":128, "wiringOk":true }}}
 ```
 
-Only page 0 carries `agents`, `providers`, `projects` and `counts`. Later pages carry `skills` only, all at the same
-`rev`. The window appends rows page by page, so startup stays responsive with 10,000 skills.
+Only page 0 carries `agents`, `providers`, `projects` and `counts`. Later pages carry `skills` only. Every page carries
+`rev`; when a later page has a different `rev` than page 0, a delta came in between and the window starts over. The
+window appends rows page by page, so startup stays responsive with 10,000 skills. With `"rescan":true` the backend reads
+the shared folder again before it answers (the window does this when it regains focus); a snapshot asked for before the
+first scan has finished is answered when it has.
 
 `<Skill>`:
 
 ```json
 { "name":"gsap-core", "description":"...", "source":"greensock/gsap-skills", "sourceType":"github",
   "status":"available", "note":"", "links":["link","shared","off"], "problem":false,
-  "parked":false, "localEdits":false, "hold":false, "versions":2, "lock":"current" }
+  "parked":false, "localEdits":false, "hold":false, "versions":2, "lock":"current",
+  "path":"~/.agents/skills/gsap-core", "upstreamPath":"skills/gsap-core/SKILL.md", "hash":"<tree id>",
+  "installedAt":"<ISO UTC>", "updatedAt":"<ISO UTC>" }
 ```
 
-`status` is `local`, `tracked`, `current`, `available`, `updated` or `error`, as 1.x shows them. `links` has one link
-state per entry of `agents`, in that order (the overflow agents follow, in the order of `overflow.names`).
+`status` is `local`, `tracked`, `current`, `available`, `updated` or `error`, as 1.x shows them. A check result stays
+attached to the lock entry it was made for: when the entry later holds the hash upstream had (another process updated
+the skill), the status becomes `current`; when it changes to anything else, the result is dropped and the status is
+`tracked` again. `links` has one link state per entry of `agents`, in that order (the overflow agents follow, in the
+order of `overflow.names`): `link`, `shared`, `missing`, `copy` or `foreign`, and later `off` and `synced`. `problem` is
+true for `error` and for `missing`, `copy` or `foreign` links. `versions` counts the backups kept for the skill.
 
 `<AgentTile>` holds what the agent column shows: `id`, `label`, `short`, `monogram`, `mode`, `mechanism`, `folder`,
 `detected`, `detectedBy`, `wired`, `ok`, `problems`, `total`, `health`. Marks (icons) stay in the window. `<Provider>` is
@@ -92,7 +103,8 @@ the same plus `managed` and `custom`, for the agents manager.
      "counts":{ ... }, "agents":[ ... ], "overflow":{ ... }}}
 ```
 
-- `counts`, `agents` and `overflow` are absolute values, sent whenever they changed; the window never adds them up.
+- `counts`, `agents`, `overflow` and `providers` are absolute values, sent whenever they changed; the window never adds
+  them up.
 - Deltas are merged for up to 50 ms before they are sent. A delta is never dropped.
 - If `baseRev` is not the window's current `rev`, the window asks for a fresh snapshot.
 - When the backend cannot keep up (its write queue for this client is over 8 MB), it drops pending deltas and sends
@@ -125,8 +137,14 @@ Then come notifications:
 - `jobs.cancel {"job":"j7"}` stops a job at its next safe point: between skills, never inside a swap. Finished items stay
   done and are committed; staging folders of unfinished ones are removed. The job then ends with `"ok":false,
   "cancelled":true`.
-- Only one job that changes files runs at a time. Another such request while one runs gets error `1001` (busy).
-  Read-only requests (`state.snapshot`, `skills.diff`, `skills.history`, `system.info`, ...) run alongside.
+- One job runs at a time. Another job request while one runs gets error `1001` (busy). Requests that are not jobs
+  (`state.snapshot`, `skills.read`, `settings.*`, ...) are answered alongside.
+- Jobs that change skills (all but `skills.check` and `sources.discover`) hold the mutation lock that the command line
+  uses (`docs/formats.md`, section 8). When another process holds it, the request gets error `1002` at once. Methods that
+  are not jobs but change what jobs read (`providers.addCustom`, `providers.removeCustom`, `automation.set`) follow the
+  same two rules.
+- `event.progress` counts skills: `done` of `total` are through, `current` is the repository that just finished.
+- `event.jobDone` carries `error` when the job as a whole failed (for example "no SKILL.md found in owner/repo").
 
 ## Methods
 
@@ -139,6 +157,7 @@ Parameters marked `?` are optional. `names` is a list of skill names; an empty o
 | `skills.install` | `source` (any input `sources.discover` accepts), `skills` (names), `mode?` (`copy` or `link` for local folders) | job |
 | `skills.remove` | `name` | job |
 | `skills.track` | `name`, `source`, `path?` | job |
+| `skills.read` | `name` | `{ "name", "text", "truncated" }`: the first 80 KB of its SKILL.md, for the preview |
 | `skills.diff` | `name` | `{ "stage", "treeSha", "localEdits", "files":[{"path","status","add","del","binary","exec","risk"}], "patch", "truncated" }` |
 | `skills.history` | `name` | `{ "versions":[{"stamp","reason","createdAt","treeSha","hasLockEntry"}], "hold": {...} }` |
 | `skills.rollback` | `name`, `stamp?` (newest when missing) | job |
@@ -164,7 +183,7 @@ Parameters marked `?` are optional. `names` is a list of skill names; an empty o
 | `projects.remove` | `path` | `{}` |
 | `scope.set` | `scope` | snapshot page 0 |
 | `settings.get` | none | the whole `settings.json` object |
-| `settings.set` | `patch` (an object merged into the settings) | the whole object; the backend also sends `settings.changed` |
+| `settings.set` | `patch` (an object merged into the settings; a `null` value removes that key) | the whole object; the backend also sends `settings.changed`. Settings are not skills, so this needs no mutation lock and works while a job runs |
 | `system.info` | none | `{ "user","host","os","kernel","shell","terminal","uptime","paths":{...} }` |
 | `paths.sizes` | none | job; results `{ "skills":bytes, "backups":bytes, "cache":bytes, "disk":{"total":bytes,"free":bytes} }` |
 | `fetch.render` | `cols`, `colors` (`truecolor` or `256`), `icons?` | `{ "ansi": "<the banner as terminal text>" }` |
@@ -172,6 +191,13 @@ Parameters marked `?` are optional. `names` is a list of skill names; an empty o
 | `jobs.cancel` | `job` | `{}` |
 
 `<Project>`: `{ "path", "name", "skills":N, "problems":N, "autoUpdate":false }`.
+
+What 2.0's backend answers today (milestone M1c): `initialize`, `shutdown`, `state.snapshot`, `skills.read`,
+`skills.check`, `skills.update`, `skills.install`, `skills.remove`, `skills.track`, `sources.discover`, `adopt`, `relink`,
+`providers.list`, `providers.setManaged`, `providers.addCustom`, `providers.removeCustom`, `providers.rescan`,
+`transfer.export`, `transfer.preview`, `transfer.import`, `automation.status`, `automation.set`, `settings.get`,
+`settings.set` and `jobs.cancel`. The others arrive with the features they belong to (diff, history and rollback;
+per-agent switches; projects; the terminal and `fetch`; the accent engine) and until then get `-32601`.
 
 ### Notifications from the backend
 
@@ -181,7 +207,7 @@ Parameters marked `?` are optional. `names` is a list of skill names; an empty o
 | `state.resync` | deltas were dropped; take a snapshot |
 | `event.progress`, `event.log`, `event.jobDone` | job reporting |
 | `settings.changed` | `settings.json` changed (by this or another process) |
-| `lock.split` | both user lock files exist (see `docs/formats.md` section 2); the window shows the "Merge" banner |
+| `lock.split` | right after `initialize`, when both user lock files exist (see `docs/formats.md` section 2): `{"primary","other","onlyInOther"}`; the window shows the "Merge" banner |
 
 ## File watching
 

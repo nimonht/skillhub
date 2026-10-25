@@ -5,6 +5,8 @@ Maintainer: nimonht <181256175+nimonht@users.noreply.github.com>
 Build-Depends: debhelper-compat (= 13),
                cmake,
                git,
+               libuv1-dev,
+               pkg-config,
                python3,
                qt6-base-dev,
                qt6-declarative-dev,

@@ -133,13 +133,25 @@ ptrdiff_t sh_strv_index(const sh_strv *v, const char *s) {
 
 bool sh_strv_contains(const sh_strv *v, const char *s) { return sh_strv_index(v, s) >= 0; }
 
-static int (*sort_cmp)(const char *, const char *);
-static int sort_trampoline(const void *a, const void *b) { return sort_cmp(*(char *const *)a, *(char *const *)b); }
+// a merge sort, not qsort: qsort has no way to pass the comparison along except a global, and threads sort at the same
+// time. It is stable too, so names that compare equal keep the order the folder listed them in.
+static void merge_sort(char **a, char **tmp, size_t n, int (*cmp)(const char *, const char *)) {
+    if (n < 2) return;
+    const size_t mid = n / 2;
+    merge_sort(a, tmp, mid, cmp);
+    merge_sort(a + mid, tmp, n - mid, cmp);
+    size_t i = 0, j = mid, k = 0;
+    while (i < mid && j < n) tmp[k++] = cmp(a[j], a[i]) < 0 ? a[j++] : a[i++];
+    while (i < mid) tmp[k++] = a[i++];
+    while (j < n) tmp[k++] = a[j++];
+    memcpy(a, tmp, n * sizeof *a);
+}
 
 void sh_strv_sort(sh_strv *v, int (*cmp)(const char *, const char *)) {
     if (v->len < 2) return;
-    sort_cmp = cmp ? cmp : strcmp;
-    qsort(v->items, v->len, sizeof *v->items, sort_trampoline);
+    char **tmp = sh_xcalloc(v->len, sizeof *tmp);
+    merge_sort(v->items, tmp, v->len, cmp ? cmp : strcmp);
+    free(tmp);
 }
 
 void sh_strv_clear(sh_strv *v) {

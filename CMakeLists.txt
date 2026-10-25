@@ -98,6 +98,7 @@ add_library(skillhub_core STATIC
     src/core/sh_lock.c
     src/core/sh_path.c src/core/sh_path.h
     src/core/sh_proc.c src/core/sh_proc.h
+    src/core/sh_rpc.c src/core/sh_rpc.h
     src/core/sh_store.c src/core/sh_store.h
     src/core/sh_str.c src/core/sh_str.h
     src/core/sh_thread.c src/core/sh_thread.h
@@ -115,8 +116,23 @@ if(WIN32)
     target_link_libraries(skillhub_core PUBLIC shell32 ole32 uuid)
 endif()
 
+# `skillhub serve` (src/serve): the backend the window talks to. The only part that needs libuv, so it is linked into the
+# command-line programs and nowhere else.
+include(cmake/Libuv.cmake)
+add_library(skillhub_serve STATIC
+    src/serve/jobs.c
+    src/serve/serve.c src/serve/serve.h src/serve/sh_serve.h
+    src/serve/state.c
+    src/serve/watch.c)
+target_include_directories(skillhub_serve PUBLIC src/serve)
+target_compile_options(skillhub_serve PRIVATE ${SKILLHUB_C_WARNINGS})
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    target_compile_definitions(skillhub_serve PRIVATE _DEFAULT_SOURCE)  # libuv's headers use POSIX types
+endif()
+target_link_libraries(skillhub_serve PUBLIC skillhub_core skillhub::uv)
+
 function(skillhub_cli_target target exe)
-    target_link_libraries(${target} PRIVATE skillhub_core)
+    target_link_libraries(${target} PRIVATE skillhub_serve)
     target_compile_options(${target} PRIVATE ${SKILLHUB_C_WARNINGS})
     set_target_properties(${target} PROPERTIES OUTPUT_NAME ${exe})
     if(WIN32)
@@ -148,7 +164,7 @@ if(UNIX AND NOT APPLE)
 endif()
 
 if(SKILLHUB_FUZZ)
-    foreach(target frontmatter import source lock)
+    foreach(target frontmatter import source lock rpc)
         add_executable(fuzz_${target} tests/fuzz/fuzz_${target}.c)
         target_link_libraries(fuzz_${target} PRIVATE skillhub_core)
         target_link_options(fuzz_${target} PRIVATE -fsanitize=fuzzer)
@@ -159,7 +175,8 @@ option(SKILLHUB_TESTS "Build the C unit tests (ctest)" ON)
 if(SKILLHUB_TESTS)
     enable_testing()
     add_executable(skillhub_unit_tests tests/unit/test_main.c tests/unit/test.h tests/unit/test_text.c tests/unit/test_paths.c
-                                       tests/unit/test_frontmatter.c tests/unit/test_lock.c tests/unit/test_git.c)
+                                       tests/unit/test_frontmatter.c tests/unit/test_lock.c tests/unit/test_git.c
+                                       tests/unit/test_store.c)
     target_link_libraries(skillhub_unit_tests PRIVATE skillhub_core)
     target_compile_options(skillhub_unit_tests PRIVATE ${SKILLHUB_C_WARNINGS})
     target_compile_definitions(skillhub_unit_tests PRIVATE SKILLHUB_SOURCE_DIR="${CMAKE_SOURCE_DIR}")

@@ -335,7 +335,7 @@ Skill Hub 1.x knows nothing about parked skills: run `skillhub enable --all-park
 |---|---|
 | `mutate.lock` | held by any process that changes skills, links, lock files or config (advisory: `flock`, or `LockFileEx` on a file used only for locking, never on the JSON files themselves, because Windows locks are mandatory and would block `npx`) |
 | `<cache>/repos/<key>.lock` | held while a clone is made or brought up to date and its tree is listed, by checks too (two processes would otherwise race on git's own `shallow.lock`). Objects are then read by id without it (section 5) |
-| `journal/<job>.json` | intent journal written before each swap; recovery reads it at start |
+| `journal/<name>-<pid>-<n>.json` | intent journal of one swap that replaces a skill folder; recovery reads it |
 
 - The command line takes `mutate.lock` for the commands that change something: `adopt`, `update`, `remove`, `track`,
   `import`, `uninstall`, `add` with `--all` or `--skill`, `doctor --fix`, `providers enable|disable|add|remove`, and
@@ -343,10 +343,14 @@ Skill Hub 1.x knows nothing about parked skills: run `skillhub enable --all-park
   waits up to 60 s (`--wait SECONDS`, accepted anywhere after the command); then it prints "another Skill Hub operation
   is still running; try again later" and exits with code 75. The watcher's run (`adopt --notify`) exits at once, quietly
   and with code 0, when the lock is taken: the running operation rescans when it ends.
-- Journal entry: `{ "version": 1, "job": "...", "steps": [ { "op": "swap", "name": "...", "stage": "...",
-  "backup": "...", "dest": "...", "state": "planned|backed-up|placed" } ] }`. On start, a swap left at `backed-up` is
-  rolled back from its backup; one left at `planned` has its stage folder removed. Stale stage folders and git `*.lock`
-  files in repositories whose `<key>.lock` is free are cleaned up.
+- Journal entry: `{ "version": 1, "name": "...", "dest": "...", "backup": "...", "stage": "..." }`, written before the
+  installed folder is moved aside for its replacement and removed once the new folder is in place. A fresh install needs
+  none: its one step is a rename. If placing the new folder fails, the old one is moved back at once.
+- Recovery runs whenever the mutation lock is taken: by every changing command, by `skillhub serve` at start, and at the
+  start of each of its changing jobs. For each journal entry whose `dest` is missing and whose `backup` exists, the
+  backup is moved back; the entry's stage folder is removed. Paths outside the shared, backup and stage folders are never
+  touched. Staging folders and git `*.lock` files in cache clones whose `<key>.lock` is free are removed once they are
+  more than ten minutes old: a Skill Hub 1.x still installed takes neither lock, and a younger one may be its.
 
 ## 9. Export file (`skillhub-export`)
 

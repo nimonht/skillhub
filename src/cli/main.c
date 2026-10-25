@@ -16,6 +16,7 @@
 #include "sh_fs.h"
 #include "sh_json.h"
 #include "sh_path.h"
+#include "sh_serve.h"
 #include "sh_store.h"
 #include "sh_str.h"
 #include "sh_utf.h"
@@ -109,7 +110,8 @@ static void usage(void) {
         "  skillhub providers enable|disable ID    manage (or stop managing) an agent\n"
         "  skillhub providers add LABEL DIR [--shared] | remove ID   your own agent (--shared: it reads the shared folder)\n"
         "  skillhub uninstall [--dry-run] [--yes] [--keep-cache]\n"
-        "                                  remove units, installed files below $HOME and the cache (keeps your skills)\n");
+        "                                  remove units, installed files below $HOME and the cache (keeps your skills)\n"
+        "  skillhub serve --stdio          the window's background service (JSON-RPC on standard input and output)\n");
     fflush(stdout);
 }
 
@@ -727,6 +729,13 @@ static lock_outcome take_mutation_lock(const char *cmd, const args_t *a, int wai
 }
 
 static int run_cli(int argc, char **argv) {
+    if (argc > 1 && strcmp(argv[1], "serve") == 0) {  // the window's backend: its own process, no store of the command line's
+        if (argc != 3 || strcmp(argv[2], "--stdio") != 0) {
+            errf("usage: skillhub serve --stdio\n");
+            return 2;
+        }
+        return sh_serve_stdio();
+    }
     // --wait SECONDS (how long a changing command waits for another one to finish) is taken out before the commands see
     // their arguments
     int wait_s = 60;
@@ -752,6 +761,7 @@ static int run_cli(int argc, char **argv) {
         free(args);
         return got == LOCK_BUSY ? EXIT_BUSY : 0;
     }
+    if (lock) sh_store_recover(&st, true);  // a process that died while changing skills may have left work half done
     int rc;
     if (strcmp(cmd, "list") == 0) rc = cmd_list(&st, &a);
     else if (strcmp(cmd, "doctor") == 0) rc = cmd_doctor(&st, &a);

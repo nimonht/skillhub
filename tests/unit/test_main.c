@@ -5,7 +5,7 @@
 int sh_test_failures = 0;
 const char *sh_test_current = "";
 
-static const sh_test_case *const suites[] = {sh_tests_text, sh_tests_paths, sh_tests_frontmatter, sh_tests_lock, sh_tests_git};
+static const sh_test_case *const suites[] = {sh_tests_text, sh_tests_paths, sh_tests_frontmatter, sh_tests_lock, sh_tests_git, sh_tests_store};
 
 int main(int argc, char **argv) {
     const char *filter = argc > 1 ? argv[1] : "";

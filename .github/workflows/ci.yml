@@ -24,7 +24,7 @@ jobs:
       - name: System libraries
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends build-essential cmake git libgl1-mesa-dev libxkbcommon-dev libegl1 libfontconfig1 fonts-dejavu-core
+          sudo apt-get install -y --no-install-recommends build-essential cmake git pkg-config libuv1-dev libgl1-mesa-dev libxkbcommon-dev libegl1 libfontconfig1 fonts-dejavu-core
       - name: Build
         run: |
           cmake -B build -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR" -DSKILLHUB_WERROR=ON
@@ -39,6 +39,8 @@ jobs:
         run: sh tests/smoke.sh build/skillhub
       - name: Portable CLI test (detection, links, git install/update, export/import)
         run: python3 tests/portable_smoke.py build/skillhub
+      - name: Backend protocol (skillhub serve --stdio)
+        run: python3 tests/rpc_smoke.py build/skillhub
       - name: Install / uninstall round trip (must not remove shared directories)
         run: CMAKE_PREFIX_PATH="$QT_ROOT_DIR" sh tests/install-roundtrip.sh
       - name: GUI renders headless (both themes, three sizes) with no QML errors
@@ -64,7 +66,7 @@ jobs:
       - name: Build tools and Qt 6.4 from Debian
         run: |
           apt-get update -qq
-          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends build-essential cmake git python3 ca-certificates \
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends build-essential cmake git python3 ca-certificates pkg-config libuv1-dev \
             qt6-base-dev qt6-declarative-dev libgl-dev qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-templates \
             qml6-module-qtquick-shapes qml6-module-qtquick-window qml6-module-qtqml-workerscript qml6-module-qtquick-dialogs fonts-dejavu-core
       - uses: actions/checkout@v4
@@ -78,6 +80,8 @@ jobs:
         run: sh tests/smoke.sh build/skillhub
       - name: Portable CLI test
         run: python3 tests/portable_smoke.py build/skillhub
+      - name: Backend protocol
+        run: python3 tests/rpc_smoke.py build/skillhub
       - name: GUI renders headless on Qt 6.4
         run: sh tests/gui-smoke.sh build/skillhub "$RUNNER_TEMP/screens-qt64"
 
@@ -89,7 +93,7 @@ jobs:
       - name: Tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends clang cmake git python3
+          sudo apt-get install -y --no-install-recommends clang cmake git python3 pkg-config libuv1-dev
       - name: Build the command line with sanitizers (no window)
         run: |
           CC=clang cmake -B build-asan -DSKILLHUB_GUI=OFF -DSKILLHUB_SANITIZE=ON -DCMAKE_BUILD_TYPE=Debug -DSKILLHUB_WERROR=ON
@@ -99,6 +103,7 @@ jobs:
           ctest --test-dir build-asan --output-on-failure
           sh tests/smoke.sh build-asan/skillhub
           python3 tests/portable_smoke.py build-asan/skillhub
+          python3 tests/rpc_smoke.py build-asan/skillhub
       - name: The parallel engine under ThreadSanitizer
         run: |
           sudo sysctl vm.mmap_rnd_bits=28  # TSan cannot map its shadow memory with the runner's default ASLR entropy
@@ -108,12 +113,13 @@ jobs:
           export TSAN_OPTIONS=halt_on_error=1
           ctest --test-dir build-tsan --output-on-failure
           python3 tests/portable_smoke.py build-tsan/skillhub
+          python3 tests/rpc_smoke.py build-tsan/skillhub
           python3 bench/bench.py build-tsan/skillhub --repos 30 --skills 5 --install-mode all
       - name: Fuzz every parser of untrusted input for a minute
         run: |
           CC=clang cmake -B build-fuzz -DSKILLHUB_GUI=OFF -DSKILLHUB_FUZZ=ON -DSKILLHUB_TESTS=OFF -DCMAKE_BUILD_TYPE=RelWithDebInfo
           cmake --build build-fuzz -j"$(nproc)"
-          for t in frontmatter import source lock; do
+          for t in frontmatter import source lock rpc; do
             mkdir -p "$RUNNER_TEMP/corpus-$t"
             build-fuzz/fuzz_$t -max_total_time=60 "$RUNNER_TEMP/corpus-$t" tests/fuzz/corpus/$t
           done
@@ -139,6 +145,8 @@ jobs:
         run: ctest --test-dir build --output-on-failure
       - name: Portable CLI test
         run: python3 tests/portable_smoke.py build/skillhub-gui.app/Contents/MacOS/skillhub
+      - name: Backend protocol
+        run: python3 tests/rpc_smoke.py build/skillhub-gui.app/Contents/MacOS/skillhub
       - name: GUI renders headless
         run: python3 tests/gui_launch.py build/skillhub-gui.app/Contents/MacOS/skillhub "$RUNNER_TEMP/screens"
       - uses: actions/upload-artifact@v4
@@ -180,6 +188,9 @@ jobs:
         env:
           SKILLHUB_NO_SYMLINKS: "1"
         run: python3 tests/portable_smoke.py build/skillhub-cli.exe
+      - name: Backend protocol, through the program without a console that the window starts
+        shell: bash
+        run: python3 tests/rpc_smoke.py build/skillhubw.exe
       - name: GUI renders headless
         shell: bash
         run: python3 tests/gui_launch.py build/skillhub-cli.exe "$RUNNER_TEMP/screens"

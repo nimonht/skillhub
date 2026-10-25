@@ -30,6 +30,7 @@ void sh_store_init(sh_store *st, sh_log_fn log, void *user) {
     sh_lock_paths_for(st->home, &st->lock_path, &st->lock_other);
     st->backup = sh_path_join(st->home, ".agents/.backup");
     st->cache = sh_cache_dir();
+    st->state = sh_state_dir();
     st->log_lock = sh_mutex_new();
     sh_git_program();  // found once here, before any worker thread asks for it
     sh_store_reload_providers(st);
@@ -42,6 +43,7 @@ void sh_store_free(sh_store *st) {
     free(st->lock_other);
     free(st->backup);
     free(st->cache);
+    free(st->state);
     for (size_t i = 0; i < st->n_providers; ++i) {
         sh_agent *a = &st->providers[i];
         free(a->id); free(a->label); free(a->mode); free(a->dir); free(a->config_file); free(a->detected_by);
@@ -472,6 +474,28 @@ static char *backup_dir_for(const sh_store *st, const char *name) {
     return bk;
 }
 
+// The swap journal: one file per swap that replaces a folder, written before the folder is moved aside and removed once
+// the new one is in place. A fresh install needs none: its only step is one rename.
+static char *journal_write(const sh_store *st, const char *name, const char *dest, const char *backup, const char *stage) {
+    static long counter;  // shared by every thread
+    char *path = sh_strfmt("%s/journal/%s-%ld-%ld.json", st->state, name, sh_process_id(), sh_atomic_inc(&counter));
+    yyjson_mut_doc *d = yyjson_mut_doc_new(NULL);
+    yyjson_mut_val *root = yyjson_mut_obj(d);
+    yyjson_mut_doc_set_root(d, root);
+    sh_json_set_int(d, root, "version", 1);
+    sh_json_set_str(d, root, "name", name);
+    sh_json_set_str(d, root, "dest", dest);
+    sh_json_set_str(d, root, "backup", backup);
+    sh_json_set_str(d, root, "stage", stage);
+    const bool ok = sh_json_write(path, d, true, true);
+    yyjson_mut_doc_free(d);
+    if (!ok) {
+        free(path);
+        return NULL;
+    }
+    return path;
+}
+
 bool sh_store_place(sh_store *st, const char *name, const char *stage) {
     char *md = sh_path_join(stage, "SKILL.md");
     sh_frontmatter fm;
@@ -480,14 +504,16 @@ bool sh_store_place(sh_store *st, const char *name, const char *stage) {
     sh_fm_free(&fm);
     free(md);
     if (!ok) sh_store_log(st, "refusing %s: upstream folder has no valid SKILL.md", name);
-    char *dest = sh_path_join(st->central, name);
+    char *dest = sh_path_join(st->central, name), *bk = NULL, *journal = NULL;
+    bool moved_aside = false;
     if (ok && sh_exists(dest)) {
-        char *bk = backup_dir_for(st, name);
-        if (!sh_move_dir(dest, bk)) {
+        bk = backup_dir_for(st, name);
+        journal = journal_write(st, name, dest, bk, stage);
+        moved_aside = journal && sh_move_dir(dest, bk);
+        if (!moved_aside) {
             sh_store_log(st, "cannot back up %s", dest);
             ok = false;
         }
-        free(bk);
     }
     if (ok) {
         sh_mkpath(st->central);
@@ -498,9 +524,100 @@ bool sh_store_place(sh_store *st, const char *name, const char *stage) {
             prune_backups(st->backup, name, 3);
         }
     }
+    if (!ok && moved_aside && !sh_lexists(dest)) sh_move_dir(bk, dest);  // the old version goes straight back
     if (!ok) sh_remove_tree(stage);
+    if (journal && sh_exists(dest)) sh_remove_file(journal);  // otherwise recovery puts the backup back later
+    free(journal);
+    free(bk);
     free(dest);
     return ok;
+}
+
+// a path from a journal that may be touched: inside the folder it belongs to
+static bool inside(const char *path, const char *dir) {
+    char *with_slash = sh_strfmt("%s/", dir);
+    const bool yes = *path && sh_path_within(path, with_slash) && !strstr(path, "/../");
+    free(with_slash);
+    return yes;
+}
+
+static int recover_swaps(sh_store *st) {
+    char *dir = sh_path_join(st->state, "journal");
+    sh_strv files = SH_STRV_INIT;
+    sh_list_dir(dir, SH_LIST_ALL | SH_SORT_NAME, &files);
+    char *stage_root = sh_path_join(st->cache, "stage");
+    int put_back = 0;
+    for (size_t i = 0; i < files.len; ++i) {
+        char *path = sh_path_join(dir, files.items[i]);
+        yyjson_doc *doc = NULL;
+        if (sh_ends_with(files.items[i], ".json") && sh_json_read(path, 64 * 1024, &doc) == SH_JSON_OK) {
+            yyjson_val *root = yyjson_doc_get_root(doc);
+            const char *dest = sh_json_str(root, "dest"), *backup = sh_json_str(root, "backup"), *stage = sh_json_str(root, "stage");
+            if (inside(dest, st->central) && inside(backup, st->backup) && !sh_lexists(dest) && sh_is_dir(backup) &&
+                sh_move_dir(backup, dest)) {
+                sh_store_log(st, "recovered %s: put back the version an interrupted update had moved aside", sh_json_str(root, "name"));
+                ++put_back;
+            }
+            if (inside(stage, stage_root)) sh_remove_tree(stage);
+        }
+        yyjson_doc_free(doc);
+        sh_remove_file(path);
+        free(path);
+    }
+    sh_strv_free(&files);
+    free(stage_root);
+    free(dir);
+    return put_back;
+}
+
+#define STALE_MS (10 * 60 * 1000)  // older leftovers are stale; younger ones may belong to a running 1.x, which takes no lock
+
+static bool stale(const char *path) { return sh_now_ms() - sh_mtime_ms(path) > STALE_MS; }
+
+// git lock files that a killed git left in a cache clone nobody uses now
+static void remove_git_locks(const sh_store *st) {
+    char *repos = sh_path_join(st->cache, "repos");
+    sh_strv names = SH_STRV_INIT;
+    sh_list_dir(repos, SH_LIST_DIRS | SH_LIST_NO_SYMLINKS, &names);
+    for (size_t i = 0; i < names.len; ++i) {
+        char *clone = sh_path_join(repos, names.items[i]);
+        char *lock_path = sh_strfmt("%s.lock", clone);
+        sh_flock *idle = sh_flock_take(lock_path, 0);
+        if (idle) {
+            char *dotgit = sh_path_join(clone, ".git");
+            sh_strv entries = SH_STRV_INIT;
+            sh_list_dir(dotgit, SH_LIST_ALL, &entries);
+            for (size_t k = 0; k < entries.len; ++k) {
+                if (!sh_ends_with(entries.items[k], ".lock")) continue;
+                char *f = sh_path_join(dotgit, entries.items[k]);
+                if (stale(f)) sh_remove_file(f);
+                free(f);
+            }
+            sh_strv_free(&entries);
+            free(dotgit);
+            sh_flock_release(idle);
+        }
+        free(lock_path);
+        free(clone);
+    }
+    sh_strv_free(&names);
+    free(repos);
+}
+
+int sh_store_recover(sh_store *st, bool git_locks) {
+    const int put_back = recover_swaps(st);
+    char *stage_root = sh_path_join(st->cache, "stage");  // the mutation lock is ours: an old stage belongs to nobody
+    sh_strv stages = SH_STRV_INIT;
+    sh_list_dir(stage_root, SH_LIST_ALL, &stages);
+    for (size_t i = 0; i < stages.len; ++i) {
+        char *p = sh_path_join(stage_root, stages.items[i]);
+        if (stale(p)) sh_remove_tree(p);
+        free(p);
+    }
+    sh_strv_free(&stages);
+    free(stage_root);
+    if (git_locks) remove_git_locks(st);
+    return put_back;
 }
 
 bool sh_store_remove_skill(sh_store *st, const char *name) {

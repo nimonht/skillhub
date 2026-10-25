@@ -50,6 +50,8 @@ int sh_cpu_count(void) {
 }
 
 long sh_atomic_inc(long *v) { return InterlockedIncrement((volatile LONG *)v); }  // long and LONG are both 32 bits here
+long sh_atomic_add(long *v, long n) { return InterlockedExchangeAdd((volatile LONG *)v, n) + n; }
+long sh_atomic_get(long *v) { return InterlockedCompareExchange((volatile LONG *)v, 0, 0); }
 
 #else
 
@@ -99,6 +101,8 @@ int sh_cpu_count(void) {
 }
 
 long sh_atomic_inc(long *v) { return __atomic_add_fetch(v, 1, __ATOMIC_SEQ_CST); }
+long sh_atomic_add(long *v, long n) { return __atomic_add_fetch(v, n, __ATOMIC_SEQ_CST); }
+long sh_atomic_get(long *v) { return __atomic_load_n(v, __ATOMIC_SEQ_CST); }
 
 #endif
 
@@ -173,6 +177,60 @@ void sh_parallel_for(size_t n, int workers, void (*fn)(size_t, void *), void *ct
     free(threads);
     sh_cond_free(s.done);
     sh_mutex_free(s.m);
+}
+
+// ---- threads of their own ----
+
+struct sh_thread {
+    void (*fn)(void *);
+    void *arg;
+#ifdef _WIN32
+    HANDLE h;
+#else
+    pthread_t t;
+#endif
+};
+
+#ifdef _WIN32
+static DWORD WINAPI thread_main(void *p) {
+    sh_thread *t = p;
+    t->fn(t->arg);
+    return 0;
+}
+#else
+static void *thread_main(void *p) {
+    sh_thread *t = p;
+    t->fn(t->arg);
+    return NULL;
+}
+#endif
+
+sh_thread *sh_thread_start(void (*fn)(void *arg), void *arg) {
+    sh_thread *t = sh_xcalloc(1, sizeof *t);
+    t->fn = fn;
+    t->arg = arg;
+#ifdef _WIN32
+    t->h = CreateThread(NULL, 0, thread_main, t, 0, NULL);
+    const bool ok = t->h != NULL;
+#else
+    const bool ok = pthread_create(&t->t, NULL, thread_main, t) == 0;
+#endif
+    if (!ok) {
+        free(t);
+        return NULL;
+    }
+    return t;
+}
+
+void sh_thread_join(sh_thread *t) {
+    if (!t) return;
+#ifdef _WIN32
+    WaitForSingleObject(t->h, INFINITE);
+    CloseHandle(t->h);
+#else
+    pthread_join(t->t, NULL);
+#endif
+    free(t);
 }
 
 // ---- per-host limits ----
