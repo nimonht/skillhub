@@ -12,6 +12,7 @@
 
 #include "sh_link.h"
 #include "sh_path.h"
+#include "sh_thread.h"
 #include "sh_time.h"
 #include "sh_utf.h"
 
@@ -150,11 +151,11 @@ bool sh_write_atomic(const char *path_in, const void *data, size_t n) {
         return false;
     }
     free(dir);
-    static unsigned counter;
+    static long counter;  // shared by every thread
 #ifdef _WIN32
-    char *tmp = sh_strfmt("%s.tmp-%lu-%u", path, (unsigned long)GetCurrentProcessId(), ++counter);
+    char *tmp = sh_strfmt("%s.tmp-%lu-%ld", path, (unsigned long)GetCurrentProcessId(), sh_atomic_inc(&counter));
 #else
-    char *tmp = sh_strfmt("%s.tmp-%ld-%u", path, (long)getpid(), ++counter);
+    char *tmp = sh_strfmt("%s.tmp-%ld-%ld", path, (long)getpid(), sh_atomic_inc(&counter));
 #endif
     bool ok = false;
 #ifdef _WIN32

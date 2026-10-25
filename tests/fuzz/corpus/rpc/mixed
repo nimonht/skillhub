@@ -1,0 +1,5 @@
+{"jsonrpc":"2.0","method":"x"}
+{"jsonrpc":"1.0","id":"a","method":"y"}
+[1,2]
+{"id":{},"jsonrpc":"2.0"}
+not json

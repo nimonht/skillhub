@@ -27,6 +27,11 @@ void sh_cond_broadcast(sh_cond *c);
 // thread runs idle(ctx) at least every `idle_ms` milliseconds (the engine commits finished work to the lock file there).
 void sh_parallel_for(size_t n, int workers, void (*fn)(size_t i, void *ctx), void *ctx, void (*idle)(void *ctx), int idle_ms);
 
+// A thread of its own (a job of `skillhub serve`); sh_thread_join waits for it and frees it.
+typedef struct sh_thread sh_thread;
+sh_thread *sh_thread_start(void (*fn)(void *arg), void *arg);  // NULL when the system refused
+void sh_thread_join(sh_thread *t);
+
 // At most `per_host` holders per host name at a time.
 typedef struct sh_limiter sh_limiter;
 sh_limiter *sh_limiter_new(int per_host);
@@ -36,6 +41,8 @@ void sh_limiter_release(sh_limiter *l, const char *host);
 
 int sh_cpu_count(void);
 long sh_atomic_inc(long *v);  // ++*v from any thread; returns the new value
+long sh_atomic_add(long *v, long n);  // *v += n from any thread; returns the new value
+long sh_atomic_get(long *v);  // *v, read so that a write from another thread is seen whole
 
 #ifdef __cplusplus
 }

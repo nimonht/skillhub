@@ -17,6 +17,15 @@ typedef struct sh_engine sh_engine;
 sh_engine *sh_engine_new(sh_store *st);
 void sh_engine_free(sh_engine *e);
 
+// Stops the job at its next safe point: no further repository is started and no further skill is swapped in. Skills
+// swapped in already stay, and their lock entries are committed. Callable from any thread.
+void sh_engine_cancel(sh_engine *e);
+bool sh_engine_cancelled(sh_engine *e);
+// Called from the worker threads each time a repository is done: `done` of `total` skills are through, `current` is the
+// repository that just finished.
+typedef void (*sh_engine_progress)(void *user, size_t done, size_t total, const char *current);
+void sh_engine_on_progress(sh_engine *e, sh_engine_progress fn, void *user);
+
 // Sets the update state of every tracked skill (`only`: just these names; NULL or empty: all). Returns how many have an
 // update.
 int sh_engine_check(sh_engine *e, sh_skills *skills, const sh_strv *only);

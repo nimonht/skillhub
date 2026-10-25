@@ -51,7 +51,18 @@ struct sh_engine {
     pending_entry *pending;
     size_t n_pending, cap_pending;
     int64_t last_commit;
+    long cancelled;  // read and written through sh_atomic_*
+    sh_engine_progress progress;
+    void *progress_user;
 };
+
+void sh_engine_cancel(sh_engine *e) { sh_atomic_inc(&e->cancelled); }
+bool sh_engine_cancelled(sh_engine *e) { return sh_atomic_get(&e->cancelled) > 0; }
+
+void sh_engine_on_progress(sh_engine *e, sh_engine_progress fn, void *user) {
+    e->progress = fn;
+    e->progress_user = user;
+}
 
 sh_engine *sh_engine_new(sh_store *st) {
     sh_engine *e = sh_xcalloc(1, sizeof *e);
@@ -334,17 +345,23 @@ struct job {
     groups g;
     void (*task)(job *j, repo_slot *s, const group *gr);
     void *items;
+    long done;   // skills through, for progress (sh_atomic_*)
+    long total;
 };
 
 static void run_task(size_t i, void *arg) {
     job *j = arg;
     const group *gr = &j->g.groups[i];
+    if (sh_engine_cancelled(j->e)) return;  // a safe point: nothing of this repository has been touched yet
     j->task(j, &j->e->slots[gr->slot], gr);
+    const long done = sh_atomic_add(&j->done, (long)gr->n);
+    if (j->e->progress) j->e->progress(j->e->progress_user, (size_t)done, (size_t)j->total, j->e->slots[gr->slot].slug);
 }
 
 static void on_idle(void *arg) { maybe_commit(((job *)arg)->e); }
 
 static void run_job(job *j) {
+    for (size_t i = 0; i < j->g.n; ++i) j->total += (long)j->g.groups[i].n;
     const int workers = j->g.n < WORKERS ? (int)j->g.n : WORKERS;
     sh_parallel_for(j->g.n, workers, run_task, j, on_idle, 250);
     commit_pending(j->e);
@@ -398,7 +415,7 @@ static char *source_url(const sh_source *s) {
 }
 
 int sh_engine_check(sh_engine *e, sh_skills *skills, const sh_strv *only) {
-    job j = {e, {NULL, 0}, check_task, skills->items};
+    job j = {e, {NULL, 0}, check_task, skills->items, 0, 0};
     for (size_t i = 0; i < skills->len; ++i) {
         sh_skill *s = &skills->items[i];
         if (only && only->len > 0 && !sh_strv_contains(only, s->name)) continue;
@@ -450,7 +467,9 @@ static void place_all(sh_engine *e, repo_slot *s, placement *p, size_t n) {
     sh_repo_extract(&s->repo, x, k);
     for (size_t m = 0; m < k; ++m) {
         placement *pl = &p[which[m]];
-        if (!x[m].ok) {
+        if (sh_engine_cancelled(e)) {  // a safe point: between two swaps
+            sh_remove_tree(pl->stage);
+        } else if (!x[m].ok) {
             sh_store_log(e->st, "extract failed for %s: %s", pl->name, x[m].err ? x[m].err : "");
             sh_remove_tree(pl->stage);
         } else {
@@ -529,7 +548,7 @@ static void update_task(job *j, repo_slot *s, const group *gr) {
 
 int sh_engine_update(sh_engine *e, sh_skill *const *todo, size_t n, bool *done) {
     update_items it = {todo, done};
-    job j = {e, {NULL, 0}, update_task, &it};
+    job j = {e, {NULL, 0}, update_task, &it, 0, 0};
     for (size_t i = 0; i < n; ++i) {
         done[i] = false;
         if (!sh_source_tracked(&todo[i]->src)) continue;
@@ -577,7 +596,7 @@ static void candidates_of(const repo_slot *s, sh_discovery *d) {
 }
 
 void sh_engine_discover(sh_engine *e, const char *const *inputs, size_t n, sh_discovery *out) {
-    job j = {e, {NULL, 0}, discover_task, NULL};
+    job j = {e, {NULL, 0}, discover_task, NULL, 0, 0};
     size_t *slot_of = sh_xcalloc(n + 1, sizeof *slot_of);
     for (size_t i = 0; i < n; ++i) {
         memset(&out[i], 0, sizeof out[i]);
@@ -668,7 +687,7 @@ static void install_task(job *j, repo_slot *s, const group *gr) {
 }
 
 static int install_items(sh_engine *e, install_item *items, const char *const *slugs, const char *const *urls, size_t n) {
-    job j = {e, {NULL, 0}, install_task, items};
+    job j = {e, {NULL, 0}, install_task, items, 0, 0};
     for (size_t i = 0; i < n; ++i) group_add(&j.g, slot_for(e, slugs[i], urls[i]), i);
     run_job(&j);
     groups_free(&j.g);

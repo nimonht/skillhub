@@ -109,6 +109,7 @@ typedef struct sh_store {
     char *lock_other;     // a second lock file that also exists (docs/formats.md, section 2), or NULL
     char *backup;
     char *cache;
+    char *state;          // durable internal state: the mutation lock, the swap journal
     sh_agent *providers;  // every agent in the catalog plus the user's own, with the detection result
     size_t n_providers;
     sh_agent **agents;    // the managed ones (detected, or switched on), pointing into `providers`
@@ -172,6 +173,10 @@ char *sh_store_stage_dir(const sh_store *st, const char *label);
 // Checks a staged skill folder (a SKILL.md with a description) and swaps it in as skill `name`, keeping the folder it
 // replaces as a backup. The stage is gone afterwards either way. Safe from worker threads for different names.
 bool sh_store_place(sh_store *st, const char *name, const char *stage);
+// Cleans up after a process that died while changing skills (docs/formats.md, section 8): puts back a folder an
+// interrupted swap had moved aside, removes staging folders, and (`git_locks`) removes git lock files older than ten
+// minutes from cache clones nobody is using. Only call it while holding the mutation lock. Returns the folders put back.
+int sh_store_recover(sh_store *st, bool git_locks);
 
 void sh_skills_free(sh_skills *s);
 void sh_strays_free(sh_strays *s);

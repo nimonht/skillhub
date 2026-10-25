@@ -11,6 +11,8 @@ BuildRequires:  gcc
 BuildRequires:  gcc-c++
 BuildRequires:  make
 BuildRequires:  git-core
+BuildRequires:  libuv-devel
+BuildRequires:  pkgconfig
 BuildRequires:  python3
 BuildRequires:  qt6-qtbase-devel
 BuildRequires:  qt6-qtdeclarative-devel
