@@ -12,6 +12,7 @@
 
 #include "sh_link.h"
 #include "sh_path.h"
+#include "sh_time.h"
 #include "sh_utf.h"
 
 #ifdef _WIN32
@@ -19,6 +20,7 @@
 #else
 #include <dirent.h>
 #include <fcntl.h>
+#include <sys/file.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -579,4 +581,104 @@ int64_t sh_newest_mtime_ms(const char *dir) {
     int64_t t = sh_mtime_ms(dir);
     newest(dir, &t);
     return t;
+}
+
+// ---- files written in pieces ----
+
+struct sh_file {
+    FILE *f;
+    bool failed;
+};
+
+sh_file *sh_file_create(const char *path) {
+#ifdef _WIN32
+    wchar_t *w = sh_wide_path(path);
+    FILE *f = _wfopen(w, L"wb");
+    free(w);
+#else
+    FILE *f = fopen(path, "wb" FOPEN_CLOEXEC);
+#endif
+    if (!f) return NULL;
+    sh_file *file = sh_xcalloc(1, sizeof *file);
+    file->f = f;
+    return file;
+}
+
+bool sh_file_write(sh_file *f, const void *data, size_t n) {
+    if (!f->failed && n > 0 && fwrite(data, 1, n, f->f) != n) f->failed = true;
+    return !f->failed;
+}
+
+bool sh_file_close(sh_file *f) {
+    if (!f) return false;
+    const bool ok = fclose(f->f) == 0 && !f->failed;
+    free(f);
+    return ok;
+}
+
+// ---- lock files ----
+
+struct sh_flock {
+#ifdef _WIN32
+    HANDLE h;
+#else
+    int fd;
+#endif
+};
+
+sh_flock *sh_flock_take(const char *path, int timeout_ms) {
+    char *parent = sh_path_parent(path);
+    if (*parent) sh_mkpath(parent);
+    free(parent);
+    const int64_t until = timeout_ms > 0 ? sh_mono_ms() + timeout_ms : 0;
+#ifdef _WIN32
+    wchar_t *w = sh_wide_path(path);
+    HANDLE h = CreateFileW(w, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL,
+                           OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    free(w);
+    if (h == INVALID_HANDLE_VALUE) return NULL;
+    for (;;) {
+        OVERLAPPED ov;
+        memset(&ov, 0, sizeof ov);
+        const DWORD flags = LOCKFILE_EXCLUSIVE_LOCK | (timeout_ms < 0 ? 0 : LOCKFILE_FAIL_IMMEDIATELY);
+        if (LockFileEx(h, flags, 0, 1, 0, &ov)) break;
+        if (timeout_ms < 0 || GetLastError() != ERROR_LOCK_VIOLATION || sh_mono_ms() >= until) {
+            CloseHandle(h);
+            return NULL;
+        }
+        sh_sleep_ms(50);
+    }
+    sh_flock *l = sh_xcalloc(1, sizeof *l);
+    l->h = h;
+    return l;
+#else
+    const int fd = open(path, O_RDWR | O_CREAT | O_CLOEXEC, 0644);
+    if (fd < 0) return NULL;
+    for (;;) {
+        if (flock(fd, timeout_ms < 0 ? LOCK_EX : LOCK_EX | LOCK_NB) == 0) break;
+        if (errno == EINTR) continue;
+        if (timeout_ms < 0 || errno != EWOULDBLOCK || sh_mono_ms() >= until) {
+            close(fd);
+            return NULL;
+        }
+        sh_sleep_ms(50);
+    }
+    sh_flock *l = sh_xcalloc(1, sizeof *l);
+    l->fd = fd;
+    return l;
+#endif
+}
+
+void sh_flock_release(sh_flock *l) {
+    if (!l) return;
+#ifdef _WIN32
+    OVERLAPPED ov;
+    memset(&ov, 0, sizeof ov);
+    UnlockFileEx(l->h, 0, 1, 0, &ov);
+    CloseHandle(l->h);
+#else
+    flock(l->fd, LOCK_UN);
+    close(l->fd);
+#endif
+    free(l);
 }

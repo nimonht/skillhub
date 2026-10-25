@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "sh_engine.h"
 #include "sh_frontmatter.h"
 #include "sh_fs.h"
 #include "sh_hash.h"
@@ -380,65 +381,17 @@ void sh_store_read_export_data(const sh_store *st, const char *data, size_t n, s
     yyjson_doc_free(doc);
 }
 
-static bool fail(sh_store *st, const sh_import_item *it, char **err, char *msg) {
+static bool fail(sh_store *st, const sh_import_item *it, char *msg) {
     sh_store_log(st, "FAILED to import %s: %s", it->name, msg);
-    if (err) *err = msg;
-    else free(msg);
+    free(msg);
     return false;
 }
 
-bool sh_store_import_item(sh_store *st, const sh_import_item *it, char **err) {
-    if (*it->problem || !valid_name(it->name)) return fail(st, it, err, sh_strdup(*it->problem ? it->problem : "invalid skill"));
-    char *dest = sh_path_join(st->central, it->name);
-    const bool exists = sh_exists(dest);
-    if (exists) {
-        free(dest);
-        return fail(st, it, err, sh_strdup("already installed (not overwritten)"));
-    }
-    if (!it->local) {
-        free(dest);
-        char *url = NULL;
-        char *slug = sh_slug_from_input(it->source, &url);
-        if (!slug || strcmp(slug, it->source) != 0 || !valid_rel(it->skill_path)) {
-            free(slug);
-            free(url);
-            return fail(st, it, err, sh_strdup("unsafe source"));
-        }
-        char *repo = NULL, *e = NULL;
-        bool ok;
-        if (!sh_store_ensure_repo(st, slug, url, &repo, &e)) {
-            ok = fail(st, it, err, e && *e ? sh_strdup(e) : sh_strfmt("cannot reach %s", slug));
-        } else {
-            char *dir = sh_dir_of(it->skill_path);
-            char *hash = sh_store_tree_hash(repo, dir);
-            bool found = *hash != '\0';
-            if (!found) {  // upstream moved the folder: find it by name
-                char *moved = sh_store_find_skill_path(repo, it->name);
-                if (moved) {
-                    free(dir);
-                    dir = sh_dir_of(moved);
-                    found = true;
-                }
-                free(moved);
-            }
-            if (!found) {
-                ok = fail(st, it, err, sh_strfmt("not found in %s any more", slug));
-            } else {
-                sh_candidate c = {it->name, it->description, dir, slug, url};
-                ok = sh_store_install(st, &c) || fail(st, it, err, sh_strfmt("could not install from %s", slug));
-            }
-            free(hash);
-            free(dir);
-        }
-        free(e);
-        free(repo);
-        free(slug);
-        free(url);
-        return ok;
-    }
-    // a local skill: written into a staging folder first, then moved into place
-    static unsigned counter;
-    char *stage = sh_strfmt("%s/stage/import-%s-%ld-%u", st->cache, it->name, (long)(sh_now_ms() % 100000000), ++counter);
+// a skill embedded in the file: written into a staging folder first, then moved into place
+static bool import_local(sh_store *st, const sh_import_item *it) {
+    char *label = sh_strfmt("import-%s", it->name);
+    char *stage = sh_store_stage_dir(st, label);
+    free(label);
     sh_remove_tree(stage);
     for (size_t i = 0; i < it->n_files; ++i) {
         const sh_import_file *f = &it->files[i];
@@ -452,16 +405,71 @@ bool sh_store_import_item(sh_store *st, const sh_import_item *it, char **err) {
         if (!written) {
             sh_remove_tree(stage);
             free(stage);
-            free(dest);
-            return fail(st, it, err, sh_strfmt("cannot write %s", f->path));
+            return fail(st, it, sh_strfmt("cannot write %s", f->path));
         }
     }
+    char *dest = sh_path_join(st->central, it->name);
     sh_mkpath(st->central);
     const bool placed = sh_move_dir(stage, dest);  // a rename, or a copy when the cache is on another disk
     if (!placed) sh_remove_tree(stage);
     free(stage);
     free(dest);
-    if (!placed) return fail(st, it, err, sh_strdup("cannot place the skill in the shared folder"));
+    if (!placed) return fail(st, it, sh_strdup("cannot place the skill in the shared folder"));
     sh_store_log(st, "imported local skill %s (%zu files)", it->name, it->n_files);
     return true;
+}
+
+// a skill from GitHub that may be installed: a plain owner/repo source and a sane path inside it
+static bool remote_ok(const sh_import_item *it) {
+    char *url = NULL;
+    char *slug = sh_slug_from_input(it->source, &url);
+    const bool ok = slug && strcmp(slug, it->source) == 0 && valid_rel(it->skill_path);
+    free(slug);
+    free(url);
+    return ok;
+}
+
+void sh_store_import_items(sh_store *st, const sh_import_item *const *items, size_t n, int *ok, int *failed) {
+    *ok = *failed = 0;
+    sh_strv taken = SH_STRV_INIT;  // names installed earlier in this run count as installed
+    const sh_import_item **remote = sh_xcalloc(n + 1, sizeof *remote);
+    size_t n_remote = 0;
+    for (size_t i = 0; i < n; ++i) {
+        const sh_import_item *it = items[i];
+        char *dest = sh_path_join(st->central, it->name);
+        bool go;
+        if (*it->problem || !valid_name(it->name)) go = fail(st, it, sh_strdup(*it->problem ? it->problem : "invalid skill"));
+        else if (sh_exists(dest) || sh_strv_contains(&taken, it->name)) go = fail(st, it, sh_strdup("already installed (not overwritten)"));
+        else if (!it->local && !remote_ok(it)) go = fail(st, it, sh_strdup("unsafe source"));
+        else go = true;
+        free(dest);
+        if (!go) {
+            ++*failed;
+            continue;
+        }
+        sh_strv_push(&taken, it->name);
+        if (!it->local) remote[n_remote++] = it;
+        else if (import_local(st, it)) ++*ok;
+        else ++*failed;
+    }
+    bool *done = sh_xcalloc(n_remote + 1, sizeof *done);
+    sh_import_why *why = sh_xcalloc(n_remote + 1, sizeof *why);
+    char **errs = sh_xcalloc(n_remote + 1, sizeof *errs);
+    sh_engine *e = sh_engine_new(st);
+    *ok += sh_engine_import(e, remote, n_remote, done, why, errs);
+    sh_engine_free(e);
+    for (size_t i = 0; i < n_remote; ++i) {
+        if (done[i]) continue;
+        ++*failed;
+        const char *src = remote[i]->source;
+        if (why[i] == SH_IMPORT_UNREACHABLE) fail(st, remote[i], errs[i] ? sh_strdup(errs[i]) : sh_strfmt("cannot reach %s", src));
+        else if (why[i] == SH_IMPORT_GONE) fail(st, remote[i], sh_strfmt("not found in %s any more", src));
+        else fail(st, remote[i], sh_strfmt("could not install from %s", src));
+        free(errs[i]);
+    }
+    free(errs);
+    free(why);
+    free(done);
+    free(remote);
+    sh_strv_free(&taken);
 }

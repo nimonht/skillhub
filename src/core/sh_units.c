@@ -54,7 +54,7 @@ static char *unit_dir(const sh_store *st) { return sh_path_join(st->home, ".conf
 
 static bool systemctl(const char *a, const char *b, const char *c, char **out, int timeout_ms) {
     const char *argv[] = {"systemctl", "--user", a, b, c, NULL};
-    const sh_proc_opts o = {NULL, NULL, NULL, 0, timeout_ms ? timeout_ms : 60000};
+    const sh_proc_opts o = {NULL, NULL, NULL, 0, timeout_ms ? timeout_ms : 60000, NULL, NULL};
     sh_proc_result r;
     const bool ok = sh_proc_run(argv, &o, &r);
     if (out) *out = sh_trimmed(sh_buf_str(&r.out), r.out.len);
@@ -76,7 +76,7 @@ char *sh_store_unit_state(const sh_store *st, const char *unit) {
     (void)st;
     char *out = NULL;
     const char *argv[] = {"systemctl", "--user", "is-enabled", unit, NULL};
-    const sh_proc_opts o = {NULL, NULL, NULL, 0, 8000};
+    const sh_proc_opts o = {NULL, NULL, NULL, 0, 8000, NULL, NULL};
     sh_proc_result r;
     sh_proc_run(argv, &o, &r);
     out = sh_trimmed(sh_buf_str(&r.out), r.out.len);

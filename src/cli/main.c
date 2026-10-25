@@ -11,7 +11,9 @@
 #include <string.h>
 #include <time.h>
 
+#include "sh_engine.h"
 #include "sh_exe.h"
+#include "sh_fs.h"
 #include "sh_json.h"
 #include "sh_path.h"
 #include "sh_store.h"
@@ -372,12 +374,7 @@ static int cmd_import(sh_store *st, const args_t *a) {
         }
         if (go) {
             int ok = 0, failed = 0;
-            for (size_t i = 0; i < n_todo; ++i) {
-                char *e = NULL;
-                if (sh_store_import_item(st, todo[i], &e)) ++ok;
-                else ++failed;
-                free(e);
-            }
+            sh_store_import_items(st, (const sh_import_item *const *)todo, n_todo, &ok, &failed);
             sh_store_relink(st);
             outf("%d installed, %d failed\n", ok, failed);
             rc = failed ? 1 : 0;
@@ -502,9 +499,10 @@ static int cmd_check_update(sh_store *st, const args_t *a, bool do_update) {
     }
     if (do_update && has(a, "--auto")) sh_store_adopt(st);  // housekeeping before the update run
     const sh_strv none = SH_STRV_INIT;
-    const int avail = sh_store_check_updates(st, &sk, do_update && !all ? &names : &none);
-    int updated = 0, failed = 0;
-    sh_strv changed = SH_STRV_INIT;
+    sh_engine *engine = sh_engine_new(st);
+    const int avail = sh_engine_check(engine, &sk, do_update && !all ? &names : &none);
+    sh_skill **todo = sh_xcalloc(sk.len + 1, sizeof *todo);
+    size_t n_todo = 0;
     for (size_t i = 0; i < sk.len; ++i) {
         sh_skill *s = &sk.items[i];
         if (names.len > 0 && !all && !sh_strv_contains(&names, s->name)) continue;
@@ -514,15 +512,18 @@ static int cmd_check_update(sh_store *st, const args_t *a, bool do_update) {
             if (*s->note) outf(" (%s)", s->note);
             out("\n");
         }
-        if (do_update && s->update == SH_UPDATE_AVAILABLE) {
-            if (sh_store_apply_update(st, s)) {
-                ++updated;
-                sh_strv_push(&changed, s->name);
-            } else {
-                ++failed;
-            }
-        }
+        if (do_update && s->update == SH_UPDATE_AVAILABLE) todo[n_todo++] = s;
     }
+    fflush(stdout);
+    bool *done = sh_xcalloc(n_todo + 1, sizeof *done);
+    const int updated = n_todo ? sh_engine_update(engine, todo, n_todo, done) : 0;
+    const int failed = (int)n_todo - updated;
+    sh_strv changed = SH_STRV_INIT;
+    for (size_t i = 0; i < n_todo; ++i)
+        if (done[i]) sh_strv_push(&changed, todo[i]->name);
+    free(done);
+    free(todo);
+    sh_engine_free(engine);
     int rc;
     if (!do_update) {
         outf("%d update(s) available\n", avail);
@@ -548,8 +549,31 @@ static int cmd_check_update(sh_store *st, const args_t *a, bool do_update) {
     return rc;
 }
 
-// skillhub add OWNER/REPO... [--skill a,b | --all]: one repository behaves exactly as in 1.x; several are read and installed
-// in one run (the engine fetches them in parallel)
+// The chosen candidates of every repository, one per name: when two repositories offer the same name, the one named
+// last on the command line wins, as if they had been added one after the other.
+static size_t chosen(sh_store *st, const sh_discovery *found, size_t n, bool all, const sh_strv *want, const sh_candidate **pick) {
+    size_t k = 0;
+    for (size_t r = 0; r < n; ++r) {
+        for (size_t i = 0; i < found[r].cands.len; ++i) {
+            const sh_candidate *c = &found[r].cands.items[i];
+            if (!all && !sh_strv_contains(want, c->name)) continue;
+            for (size_t j = 0; j < k; ++j) {
+                if (pick[j] && strcmp(pick[j]->name, c->name) == 0) {
+                    sh_store_log(st, "skipping %s from %s: %s has a skill of that name too", c->name, pick[j]->slug, c->slug);
+                    pick[j] = NULL;
+                }
+            }
+            pick[k++] = c;
+        }
+    }
+    size_t kept = 0;
+    for (size_t j = 0; j < k; ++j)
+        if (pick[j]) pick[kept++] = pick[j];
+    return kept;
+}
+
+// skillhub add OWNER/REPO... [--skill a,b | --all]: one repository behaves exactly as in 1.x; several are read, then
+// installed, all at once
 static int cmd_add(sh_store *st, const args_t *a) {
     sh_strv repos = SH_STRV_INIT;
     for (int i = 0; i < a->n; ++i) {
@@ -568,29 +592,35 @@ static int cmd_add(sh_store *st, const args_t *a) {
     comma_list(after(a, "--skill"), &want);
     const bool all = has(a, "--all");
     const bool listing = !all && want.len == 0;
-    int ok = 0, failed_repos = 0;
+    sh_engine *engine = sh_engine_new(st);
+    sh_discovery *found = sh_xcalloc(repos.len, sizeof *found);
+    sh_engine_discover(engine, (const char *const *)repos.items, repos.len, found);
+    int failed_repos = 0;
+    size_t n_cands = 0;
     for (size_t r = 0; r < repos.len; ++r) {
-        char *e = NULL;
-        sh_candidates cands;
-        sh_store_discover(st, repos.items[r], &cands, &e);
-        if (cands.len == 0) {
-            errf("%s\n", e ? e : "");
+        n_cands += found[r].cands.len;
+        if (found[r].cands.len == 0) {
+            errf("%s\n", found[r].err ? found[r].err : "");
             ++failed_repos;
         } else if (listing) {
             outf("skills in %s:\n", repos.items[r]);
-            for (size_t i = 0; i < cands.len; ++i) {
-                char *desc = sh_left_utf16(cands.items[i].description, 80);
+            for (size_t i = 0; i < found[r].cands.len; ++i) {
+                char *desc = sh_left_utf16(found[r].cands.items[i].description, 80);
                 out("  ");
-                padded(cands.items[i].name, 30);
+                padded(found[r].cands.items[i].name, 30);
                 outf("%s\n", desc);
                 free(desc);
             }
-        } else {
-            for (size_t i = 0; i < cands.len; ++i)
-                if ((all || sh_strv_contains(&want, cands.items[i].name)) && sh_store_install(st, &cands.items[i])) ++ok;
         }
-        free(e);
-        sh_candidates_free(&cands);
+    }
+    int ok = 0;
+    if (!listing) {
+        const sh_candidate **pick = sh_xcalloc(n_cands + 1, sizeof *pick);
+        const size_t n_pick = chosen(st, found, repos.len, all, &want, pick);
+        bool *done = sh_xcalloc(n_pick + 1, sizeof *done);
+        ok = n_pick ? sh_engine_install(engine, pick, n_pick, done) : 0;
+        free(done);
+        free(pick);
     }
     int rc;
     if (listing) {
@@ -600,6 +630,9 @@ static int cmd_add(sh_store *st, const args_t *a) {
         if (failed_repos < (int)repos.len) outf("%d installed\n", ok);
         rc = ok && !failed_repos ? 0 : 1;
     }
+    for (size_t r = 0; r < repos.len; ++r) sh_discovery_free(&found[r]);
+    free(found);
+    sh_engine_free(engine);
     sh_strv_free(&want);
     sh_strv_free(&repos);
     return rc;
@@ -644,11 +677,81 @@ static int cmd_automation(sh_store *st, const char *cmd, const args_t *a) {
     return 0;
 }
 
+// ---- one change at a time ----
+
+#define EXIT_BUSY 75
+
+static bool is_any(const char *s, const char *const *words) {
+    for (; *words; ++words)
+        if (strcmp(s, *words) == 0) return true;
+    return false;
+}
+
+// commands that change skills, links, lock files or config
+static bool mutates(const char *cmd, const args_t *a) {
+    static const char *const always[] = {"adopt", "update", "remove", "track", "import", "uninstall", NULL};
+    static const char *const provider_changes[] = {"enable", "disable", "add", "remove", NULL};
+    static const char *const switches[] = {"on", "off", NULL};
+    if (is_any(cmd, always)) return true;
+    if (strcmp(cmd, "add") == 0) return has(a, "--all") || has(a, "--skill");  // listing what a repository offers changes nothing
+    if (strcmp(cmd, "doctor") == 0) return has(a, "--fix");
+    if (strcmp(cmd, "providers") == 0) return a->n > 0 && is_any(a->v[0], provider_changes);
+    if (strcmp(cmd, "autoupdate") == 0 || strcmp(cmd, "watch") == 0) return a->n > 0 && is_any(a->v[0], switches);
+    return false;
+}
+
+typedef enum { LOCK_HELD, LOCK_BUSY, LOCK_STEP_ASIDE } lock_outcome;
+
+// Changing commands hold <state>/mutate.lock, so two Skill Hub processes never change things at the same time
+// (docs/formats.md, section 8). The watcher's own run (`adopt --notify`) steps aside at once and quietly: the operation
+// that holds the lock rescans when it ends.
+static lock_outcome take_mutation_lock(const char *cmd, const args_t *a, int wait_s, sh_flock **held) {
+    *held = NULL;
+    char *state = sh_state_dir();
+    if (!*state) {  // SKILLHUB_STATE set but empty: there is no state folder to lock in
+        free(state);
+        return LOCK_HELD;
+    }
+    char *path = sh_path_join(state, "mutate.lock");
+    free(state);
+    *held = sh_flock_take(path, 0);
+    const bool watcher = strcmp(cmd, "adopt") == 0 && has(a, "--notify");
+    if (!*held && !watcher) {
+        errf("waiting for another Skill Hub operation\xe2\x80\xa6\n");
+        *held = sh_flock_take(path, wait_s * 1000);
+        if (!*held) errf("another Skill Hub operation is still running; try again later\n");
+    }
+    free(path);
+    if (*held) return LOCK_HELD;
+    return watcher ? LOCK_STEP_ASIDE : LOCK_BUSY;
+}
+
 static int run_cli(int argc, char **argv) {
+    // --wait SECONDS (how long a changing command waits for another one to finish) is taken out before the commands see
+    // their arguments
+    int wait_s = 60;
+    char **args = sh_xcalloc((size_t)argc + 1, sizeof *args);
+    int n_args = 0;
+    for (int i = 0; i < argc; ++i) {
+        if (i >= 2 && strcmp(argv[i], "--wait") == 0 && i + 1 < argc) {
+            wait_s = atoi(argv[++i]);
+            continue;
+        }
+        args[n_args++] = argv[i];
+    }
+    argc = n_args;
+    argv = args;
     sh_store st;
     sh_store_init(&st, log_line, NULL);
     const char *cmd = argc > 1 ? argv[1] : "";
     const args_t a = {argv + 2, argc > 2 ? argc - 2 : 0};
+    sh_flock *lock = NULL;
+    const lock_outcome got = mutates(cmd, &a) ? take_mutation_lock(cmd, &a, wait_s, &lock) : LOCK_HELD;
+    if (got != LOCK_HELD) {
+        sh_store_free(&st);
+        free(args);
+        return got == LOCK_BUSY ? EXIT_BUSY : 0;
+    }
     int rc;
     if (strcmp(cmd, "list") == 0) rc = cmd_list(&st, &a);
     else if (strcmp(cmd, "doctor") == 0) rc = cmd_doctor(&st, &a);
@@ -683,7 +786,9 @@ static int run_cli(int argc, char **argv) {
         rc = !*cmd || strcmp(cmd, "help") == 0 || strcmp(cmd, "--help") == 0 ? 0 : 2;
     }
     fflush(stdout);
+    sh_flock_release(lock);
     sh_store_free(&st);
+    free(args);
     return rc;
 }
 

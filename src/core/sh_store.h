@@ -100,6 +100,7 @@ typedef struct sh_import_item {
 typedef struct { sh_import_item *items; size_t len; } sh_import_items;
 
 typedef void (*sh_log_fn)(void *user, const char *line);
+struct sh_mutex;
 
 typedef struct sh_store {
     char *home;
@@ -112,9 +113,9 @@ typedef struct sh_store {
     size_t n_providers;
     sh_agent **agents;    // the managed ones (detected, or switched on), pointing into `providers`
     size_t n_agents;
-    sh_strv fetched;      // repositories already fetched by this process
-    sh_log_fn log;
+    sh_log_fn log;        // called from the engine's worker threads too, one line at a time
     void *log_user;
+    struct sh_mutex *log_lock;
 } sh_store;
 
 void sh_store_init(sh_store *st, sh_log_fn log, void *user);
@@ -147,29 +148,30 @@ bool sh_lock_migrate(sh_store *st, char **err);
 // ensured, or NULL with *err set when the lock file cannot be used.
 yyjson_mut_doc *sh_lock_load(const sh_store *st, char **err);
 void sh_source_from_json(yyjson_val *entry, sh_source *out);
+void sh_source_from_mut_json(yyjson_mut_val *entry, sh_source *out);
 void sh_source_free(sh_source *s);
 void sh_source_copy(const sh_source *from, sh_source *to);
 bool sh_source_tracked(const sh_source *s);
 // Sets (src non-NULL) or removes the entry `name`, re-reading and merging so other tools' entries survive.
 bool sh_lock_put(sh_store *st, const char *name, const sh_source *src);
+// The same for many entries at once: each lock file is read and written once (the engine's group commits).
+bool sh_lock_put_many(sh_store *st, const char *const *names, const sh_source *const *srcs, size_t n);
 
 // ---- skills (sh_store.c) ----
 void sh_store_scan(const sh_store *st, sh_skills *out);
 void sh_store_strays(const sh_store *st, sh_strays *out);
 int sh_store_adopt(sh_store *st);   // pull stray skills out of agent folders into the shared folder
 int sh_store_relink(sh_store *st);  // point every link-mode agent at the shared folder, drop dead links
-int sh_store_check_updates(sh_store *st, sh_skills *skills, const sh_strv *only);
-bool sh_store_apply_update(sh_store *st, sh_skill *skill);
-bool sh_store_discover(sh_store *st, const char *repo_input, sh_candidates *out, char **err);
-bool sh_store_install(sh_store *st, const sh_candidate *c);
 bool sh_store_remove_skill(sh_store *st, const char *name);
+// Set the upstream of a local skill (sh_engine.c: it reads the repository to find the skill by name).
 bool sh_store_track(sh_store *st, const char *name, const char *repo_input, const char *path, char **err);
 char *sh_slug_from_input(const char *in, char **url);  // "owner/repo" from owner/repo or a github.com URL, else NULL
-// shared with sh_transfer.c: fetch a repository into the cache, a folder's tree id, a skill found by name
-bool sh_store_ensure_repo(sh_store *st, const char *slug, const char *url, char **dir_out, char **err);
-char *sh_store_tree_hash(const char *repo, const char *dir);
-char *sh_store_find_skill_path(const char *repo, const char *name);
 char *sh_dir_of(const char *skill_md_path);
+// A fresh staging folder name for `label`, unique across threads and processes (the folder is not created).
+char *sh_store_stage_dir(const sh_store *st, const char *label);
+// Checks a staged skill folder (a SKILL.md with a description) and swaps it in as skill `name`, keeping the folder it
+// replaces as a backup. The stage is gone afterwards either way. Safe from worker threads for different names.
+bool sh_store_place(sh_store *st, const char *name, const char *stage);
 
 void sh_skills_free(sh_skills *s);
 void sh_strays_free(sh_strays *s);
@@ -181,7 +183,9 @@ bool sh_store_write_export(sh_store *st, const char *path, bool include_local, i
                            char **err);
 void sh_store_read_export(const sh_store *st, const char *path, sh_import_items *out, char **err);  // validates, never writes
 void sh_store_read_export_data(const sh_store *st, const char *data, size_t n, sh_import_items *out, char **err);
-bool sh_store_import_item(sh_store *st, const sh_import_item *item, char **err);
+// Installs the chosen skills of an export file: embedded ones from the file, GitHub ones all at once through the engine.
+// A skill of a name that is installed already is skipped, never overwritten.
+void sh_store_import_items(sh_store *st, const sh_import_item *const *items, size_t n, int *ok, int *failed);
 void sh_import_items_free(sh_import_items *items);
 
 // ---- automation and uninstall (sh_units.c) ----

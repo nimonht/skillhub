@@ -53,6 +53,20 @@ bool sh_copy_tree(const char *from, const char *to);  // links are skipped
 bool sh_set_executable(const char *path, bool exec);  // rw-r--r-- or rwxr-xr-x
 int64_t sh_newest_mtime_ms(const char *dir);          // newest modification time of the folder and anything below it
 
+// A file written in pieces, as git streams a skill folder: created or truncated; false from sh_file_close when any write
+// failed.
+typedef struct sh_file sh_file;
+sh_file *sh_file_create(const char *path);
+bool sh_file_write(sh_file *f, const void *data, size_t n);
+bool sh_file_close(sh_file *f);
+
+// An exclusive lock on the file `path` (created when missing), held against other processes and other threads alike.
+// timeout_ms 0: try once; -1: wait as long as it takes. NULL when it was not free in time. Only lock files are locked this
+// way, never data files: Windows locks are mandatory and would block other tools.
+typedef struct sh_flock sh_flock;
+sh_flock *sh_flock_take(const char *path, int timeout_ms);
+void sh_flock_release(sh_flock *l);
+
 #ifdef _WIN32
 #include <wchar.h>
 wchar_t *sh_wide(const char *utf8);       // plain conversion

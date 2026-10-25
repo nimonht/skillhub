@@ -115,6 +115,14 @@ const char *sh_git_program(void) {
     return git;
 }
 
+long sh_process_id(void) {
+#ifdef _WIN32
+    return (long)GetCurrentProcessId();
+#else
+    return (long)getpid();
+#endif
+}
+
 #ifdef _WIN32
 
 // A path for CreateProcess: backslashes, but no \\?\ prefix. The child would inherit it in its own program path and
@@ -209,6 +217,8 @@ typedef struct {
     const void *data;
     size_t len;
     sh_buf *sink;
+    const sh_proc_opts *opts;  // stdout only: its on_out callback, when set
+    HANDLE process;            // killed when on_out returns false
 } pipe_job;
 
 static DWORD WINAPI writer(void *arg) {
@@ -229,7 +239,17 @@ static DWORD WINAPI reader(void *arg) {
     pipe_job *j = arg;
     char buf[65536];
     DWORD n = 0;
-    while (ReadFile(j->h, buf, sizeof buf, &n, NULL) && n > 0) sh_buf_append(j->sink, buf, n);
+    bool wanted = true;
+    while (ReadFile(j->h, buf, sizeof buf, &n, NULL) && n > 0) {
+        if (j->opts && j->opts->on_out) {
+            if (wanted && !j->opts->on_out(j->opts->on_out_user, buf, n)) {
+                wanted = false;
+                TerminateProcess(j->process, 1);
+            }
+        } else {
+            sh_buf_append(j->sink, buf, n);
+        }
+    }
     return 0;
 }
 
@@ -299,7 +319,8 @@ bool sh_proc_run(const char *const *argv, const sh_proc_opts *opts, sh_proc_resu
     r->started = true;
     CloseHandle(pi.hThread);
 
-    pipe_job wj = {in_w, o->input, o->input_len, NULL}, ej = {err_r, NULL, 0, &r->err}, oj = {out_r, NULL, 0, &r->out};
+    pipe_job wj = {in_w, o->input, o->input_len, NULL, NULL, NULL}, ej = {err_r, NULL, 0, &r->err, NULL, NULL},
+             oj = {out_r, NULL, 0, &r->out, o, pi.hProcess};
     HANDLE wt = in_w ? CreateThread(NULL, 0, writer, &wj, 0, NULL) : NULL;
     HANDLE et = CreateThread(NULL, 0, reader, &ej, 0, NULL);
     HANDLE ot = CreateThread(NULL, 0, reader, &oj, 0, NULL);
@@ -462,6 +483,7 @@ bool sh_proc_run(const char *const *argv, const sh_proc_opts *opts, sh_proc_resu
     set_nonblock(out[0]);
     set_nonblock(err[0]);
     const int64_t deadline = o->timeout_ms > 0 ? now_ms() + o->timeout_ms : 0;
+    bool wanted = true;  // on_out still takes output
     char buf[65536];
     while (out[0] >= 0 || err[0] >= 0) {
         struct pollfd fds[3];
@@ -492,13 +514,19 @@ bool sh_proc_run(const char *const *argv, const sh_proc_opts *opts, sh_proc_resu
         }
         if (io >= 0 && (fds[io].revents & (POLLIN | POLLHUP | POLLERR))) {
             const ssize_t m = read(out[0], buf, sizeof buf);
-            if (m > 0) sh_buf_append(&r->out, buf, (size_t)m);
-            else if (m == 0 || (errno != EAGAIN && errno != EINTR)) close_quietly(&out[0]);
+            if (m > 0 && !o->on_out) {
+                sh_buf_append(&r->out, buf, (size_t)m);
+            } else if (m > 0 && wanted && !o->on_out(o->on_out_user, buf, (size_t)m)) {
+                wanted = false;
+                kill(pid, SIGKILL);
+            } else if (m == 0 || (m < 0 && errno != EAGAIN && errno != EINTR)) {
+                close_quietly(&out[0]);
+            }
         }
         if (ie >= 0 && (fds[ie].revents & (POLLIN | POLLHUP | POLLERR))) {
             const ssize_t m = read(err[0], buf, sizeof buf);
             if (m > 0) sh_buf_append(&r->err, buf, (size_t)m);
-            else if (m == 0 || (errno != EAGAIN && errno != EINTR)) close_quietly(&err[0]);
+            else if (m == 0 || (m < 0 && errno != EAGAIN && errno != EINTR)) close_quietly(&err[0]);
         }
     }
     close_quietly(&in[1]);

@@ -1,4 +1,4 @@
-# Benchmark baseline: Skill Hub 1.0.1
+# Benchmark baseline: Skill Hub 1.0.1, and the 2.0 engine
 
 `python3 bench/bench.py BINARY --repos N --skills 20` on 2026-10-25. Machine: Intel Core i7-7700HQ (4 cores, 8 threads), 16 GB,
 CachyOS, git 2.56, local repositories over `file://` (no network). Every skill is also linked for Claude Code.
@@ -35,4 +35,30 @@ Same machine, same fixture, 10,000 skills (500 repositories × 20):
 | `skillhub list`, 137 skills | 65 MB | under 8 MB |
 | Window: longest UI-thread stall during a 10,000-skill update | n/a | 20 ms or less |
 
-A small run against real GitHub repositories and a Windows run are recorded in M1, once the new engine exists.
+## 2.0 engine (milestone M1b)
+
+`python3 bench/bench.py build/skillhub --repos N --skills 20 --install-mode all`, same machine and fixture. Install is one
+`skillhub add` with every repository. The engine handles each repository as one task on 16 worker threads, with at most
+8 clones or fetches per host at a time.
+
+| Skills | Install | Check (nothing changed) | Check (10 % changed) | Update all | Peak RSS | git processes (install / check / update) |
+|---:|---:|---:|---:|---:|---:|---|
+| 100 | 0.05 s | 0.02 s | 0.04 s | 0.03 s | 3 MB | 25 / 15 / 20 |
+| 500 | 0.22 s | 0.08 s | 0.20 s | 0.13 s | 5 MB | 125 / 75 / 100 |
+| 1,000 | 0.44 s | 0.18 s | 0.39 s | 0.24 s | 7 MB | 250 / 150 / 200 |
+| 10,000 | 5.30 s | 1.61 s | 3.94 s | 2.48 s | 52 MB | 2,500 / 1,500 / 2,000 |
+
+Against the targets at 10,000 skills: install 5.3 s (under 60 s), check 1.6 s (under 2 s), update 2.5 s (under 60 s),
+peak 52 MB (under 100 MB). `skillhub list` on the real 137-skill library peaks at 3 MB.
+
+Where the time goes now:
+
+- **git processes per repository, not per skill.** A check with nothing changed runs three per repository: `rev-parse`
+  for the clone's own HEAD, `ls-remote` to compare with upstream, `ls-tree` for every folder's tree id at once. A changed
+  repository adds `fetch` and `update-ref`. Install and update add one `cat-file --batch` that streams every needed folder
+  to disk.
+- **The lock file is written once per 200 entries**, through a lookup table instead of a walk through every entry.
+  Before that table, `list` took 1.3 s at 10,000 skills and `install` 8.7 s.
+- **Of the 1.6 s check, about 0.35 s is reading the shared folder** (every SKILL.md and every link), as `list` does.
+
+A small run against real GitHub repositories and a Windows run are still to be recorded.

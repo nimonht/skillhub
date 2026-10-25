@@ -66,6 +66,15 @@ void sh_source_copy(const sh_source *from, sh_source *to) {
 
 bool sh_source_tracked(const sh_source *s) { return s->source && *s->source; }
 
+void sh_source_from_mut_json(yyjson_mut_val *o, sh_source *out) {
+    out->source = sh_strdup(sh_json_mut_str(o, "source"));
+    out->url = sh_strdup(sh_json_mut_str(o, "sourceUrl"));
+    out->skill_path = sh_strdup(sh_json_mut_str(o, "skillPath"));
+    out->hash = sh_strdup(sh_json_mut_str(o, "skillFolderHash"));
+    out->installed_at = sh_strdup(sh_json_mut_str(o, "installedAt"));
+    out->updated_at = sh_strdup(sh_json_mut_str(o, "updatedAt"));
+}
+
 void sh_source_from_json(yyjson_val *o, sh_source *out) {
     out->source = sh_strdup(sh_json_str(o, "source"));
     out->url = sh_strdup(sh_json_str(o, "sourceUrl"));
@@ -126,23 +135,28 @@ yyjson_mut_doc *sh_lock_load(const sh_store *st, char **err) {
     yyjson_mut_doc *other = load_file(st->lock_other, NULL);  // the second file only adds to the view; a broken one is skipped
     if (!other) return view;
     yyjson_mut_val *mine = skills_of(view);
+    sh_json_index *ix = sh_json_index_new(mine);
     size_t i, n;
     yyjson_mut_val *key, *val;
     yyjson_mut_obj_foreach(skills_of(other), i, n, key, val) {
         const char *name = yyjson_mut_get_str(key);
-        yyjson_mut_val *have = yyjson_mut_obj_get(mine, name);
+        yyjson_mut_val *have = sh_json_index_get(ix, name);
         // an entry in both files: the newer one counts (ISO timestamps compare as text)
-        if (!have || strcmp(updated_at(val), updated_at(have)) > 0)
-            sh_json_set_val(view, mine, name, yyjson_mut_val_mut_copy(view, val));
+        if (!have) yyjson_mut_obj_add(mine, yyjson_mut_strcpy(view, name), yyjson_mut_val_mut_copy(view, val));
+        else if (strcmp(updated_at(val), updated_at(have)) > 0) sh_json_set_val(view, mine, name, yyjson_mut_val_mut_copy(view, val));
     }
+    sh_json_index_free(ix);
     yyjson_mut_doc_free(other);
     return view;
 }
 
-static void set_entry(yyjson_mut_doc *m, const char *name, const sh_source *src) {
+// `entry`: the current entry of that name, or NULL when the file has none
+static void set_entry(yyjson_mut_doc *m, const char *name, yyjson_mut_val *entry, const sh_source *src) {
     yyjson_mut_val *skills = skills_of(m);
-    yyjson_mut_val *entry = yyjson_mut_obj_get(skills, name);
-    if (!yyjson_mut_is_obj(entry)) {
+    if (!entry) {
+        entry = yyjson_mut_obj(m);
+        yyjson_mut_obj_add(skills, yyjson_mut_strcpy(m, name), entry);
+    } else if (!yyjson_mut_is_obj(entry)) {  // something else under that name: replaced
         entry = yyjson_mut_obj(m);
         sh_json_set_val(m, skills, name, entry);
     }
@@ -162,41 +176,76 @@ static bool write_lock(sh_store *st, const char *path, yyjson_mut_doc *m) {
     return ok;
 }
 
-bool sh_lock_put(sh_store *st, const char *name, const sh_source *src) {
+typedef struct {
+    const char *name;
+    size_t pos;
+} named;
+
+static int cmp_named(const void *x, const void *y) {
+    const named *a = x, *b = y;
+    const int c = strcmp(a->name, b->name);
+    return c ? c : (a->pos < b->pos ? -1 : a->pos > b->pos);
+}
+
+// which entries of a batch count: of a name given twice, only the last
+static bool *last_of_each_name(const char *const *names, size_t n) {
+    named *sorted = sh_xcalloc(n, sizeof *sorted);
+    for (size_t i = 0; i < n; ++i) sorted[i] = (named){names[i], i};
+    qsort(sorted, n, sizeof *sorted, cmp_named);
+    bool *keep = sh_xcalloc(n, sizeof *keep);
+    for (size_t i = 0; i < n; ++i) keep[sorted[i].pos] = i + 1 == n || strcmp(sorted[i].name, sorted[i + 1].name) != 0;
+    free(sorted);
+    return keep;
+}
+
+bool sh_lock_put_many(sh_store *st, const char *const *names, const sh_source *const *srcs, size_t n) {
+    if (n == 0) return true;
     char *err = NULL;
     yyjson_mut_doc *primary = load_file(st->lock_path, &err);
     if (!primary) {
-        sh_store_log(st, "FAILED to record %s: %s", name, err);
+        for (size_t i = 0; i < n; ++i) sh_store_log(st, "FAILED to record %s: %s", names[i], err);
         free(err);
         return false;
     }
     yyjson_mut_doc *other = st->lock_other ? load_file(st->lock_other, NULL) : NULL;
-    const bool in_primary = yyjson_mut_obj_get(skills_of(primary), name) != NULL;
-    const bool in_other = other && yyjson_mut_obj_get(skills_of(other), name) != NULL;
-    bool ok = true;
-    if (!src) {  // removed: gone from both files
-        if (in_primary) {
-            yyjson_mut_obj_remove_str(skills_of(primary), name);
-            ok = write_lock(st, st->lock_path, primary) && ok;
+    sh_json_index *ip = sh_json_index_new(skills_of(primary)), *io = sh_json_index_new(other ? skills_of(other) : NULL);
+    bool *keep = last_of_each_name(names, n);  // the tables stay exact: each name is looked up and changed once
+    bool primary_changed = false, other_changed = false;
+    for (size_t i = 0; i < n; ++i) {
+        if (!keep[i]) continue;
+        yyjson_mut_val *in_primary = sh_json_index_get(ip, names[i]), *in_other = sh_json_index_get(io, names[i]);
+        if (!srcs[i]) {  // removed: gone from both files
+            if (in_primary) yyjson_mut_obj_remove_str(skills_of(primary), names[i]);
+            if (in_other) yyjson_mut_obj_remove_str(skills_of(other), names[i]);
+            primary_changed |= in_primary != NULL;
+            other_changed |= in_other != NULL;
+            continue;
         }
-        if (in_other) {
-            yyjson_mut_obj_remove_str(skills_of(other), name);
-            ok = write_lock(st, st->lock_other, other) && ok;
-        }
-    } else {
         // the files that hold the entry get the change; a new entry goes to the primary file
         if (in_primary || !in_other) {
-            set_entry(primary, name, src);
-            ok = write_lock(st, st->lock_path, primary) && ok;
+            set_entry(primary, names[i], in_primary, srcs[i]);
+            primary_changed = true;
         }
         if (in_other) {
-            set_entry(other, name, src);
-            ok = write_lock(st, st->lock_other, other) && ok;
+            set_entry(other, names[i], in_other, srcs[i]);
+            other_changed = true;
         }
     }
+    bool ok = true;
+    if (primary_changed) ok = write_lock(st, st->lock_path, primary) && ok;
+    if (other_changed) ok = write_lock(st, st->lock_other, other) && ok;
+    free(keep);
+    sh_json_index_free(ip);
+    sh_json_index_free(io);
     yyjson_mut_doc_free(primary);
     yyjson_mut_doc_free(other);
     return ok;
+}
+
+bool sh_lock_put(sh_store *st, const char *name, const sh_source *src) {
+    const char *const names[] = {name};
+    const sh_source *const srcs[] = {src};
+    return sh_lock_put_many(st, names, srcs, 1);
 }
 
 bool sh_lock_split(const sh_store *st, size_t *only_other) {

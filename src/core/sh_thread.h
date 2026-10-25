@@ -35,6 +35,7 @@ void sh_limiter_acquire(sh_limiter *l, const char *host);
 void sh_limiter_release(sh_limiter *l, const char *host);
 
 int sh_cpu_count(void);
+long sh_atomic_inc(long *v);  // ++*v from any thread; returns the new value
 
 #ifdef __cplusplus
 }

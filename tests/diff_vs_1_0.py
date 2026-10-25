@@ -190,18 +190,30 @@ def snapshot(home, upstream):
                 mode = "x" if (not WIN and os.access(full, os.X_OK)) else "-"
                 out[rel] = "file %s %s" % (mode, hashlib.sha256(data).hexdigest()[:16])
         dirnames[:] = [d for d in dirnames if not os.path.islink(os.path.join(dirpath, d))]
+    # 2.0's lock file for changing commands (docs/formats.md, section 8) holds no data, and 1.0.1 has none
+    out.pop("state/skillhub/mutate.lock", None)
+    for d in ("state/skillhub", "state"):
+        if d in out and not any(k.startswith(d + "/") for k in out):
+            del out[d]
     return out
+
+
+# Commands that work on many repositories at once. 2.0 handles the repositories in parallel, so the order of their lines is
+# not part of the contract: they are compared as sorted lists.
+JOB_COMMANDS = {"add", "check", "update", "import"}
 
 
 def run(binary, env, args, home, upstream):
     p = subprocess.run([binary, *args], env=env, capture_output=True, text=True, encoding="utf-8", errors="replace",
                        timeout=180, stdin=subprocess.DEVNULL)
-    out = norm_text(p.stdout, home, upstream)
+    out, err = norm_text(p.stdout, home, upstream), norm_text(p.stderr, home, upstream)
+    if args and args[0] in JOB_COMMANDS:
+        out, err = "\n".join(sorted(out.splitlines())), "\n".join(sorted(err.splitlines()))
     try:  # JSON output is compared by meaning: key order and indentation are not part of the contract
         out = "json " + json.dumps(norm_json(json.loads(p.stdout), home, upstream), sort_keys=True)
     except ValueError:
         pass
-    return {"exit": p.returncode, "out": out, "err": norm_text(p.stderr, home, upstream)}
+    return {"exit": p.returncode, "out": out, "err": err}
 
 
 # ---- the scenario ---------------------------------------------------------------------------------------------------------
