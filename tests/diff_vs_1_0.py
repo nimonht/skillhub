@@ -24,6 +24,7 @@ WIN = os.name == "nt"
 # (command, reason): output that may differ on purpose
 KNOWN_DIFFERENCES = {
     "--version": "the version number",
+    "frobnicate": "the usage text lists the commands of 2.0 (add takes several repositories)",
 }
 
 
