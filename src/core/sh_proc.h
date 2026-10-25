@@ -18,6 +18,10 @@ typedef struct {
     const void *input;             // written to the program's stdin, which is then closed; NULL: stdin is empty
     size_t input_len;
     int timeout_ms;                // 0: wait as long as it takes
+    // When set, stdout goes here in pieces as it arrives instead of into the result (git cat-file streams whole skill
+    // folders). Returning false stops the program: it is killed and its remaining output is dropped.
+    bool (*on_out)(void *user, const char *data, size_t n);
+    void *on_out_user;
 } sh_proc_opts;
 
 typedef struct {
@@ -43,6 +47,8 @@ void sh_path_dirs(sh_strv *out);  // the folders listed in PATH
 
 // "git", or its full path where the desktop PATH is too short to find it (1.x platform::gitProgram).
 const char *sh_git_program(void);
+
+long sh_process_id(void);  // this process
 
 #ifdef __cplusplus
 }

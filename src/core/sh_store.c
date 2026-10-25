@@ -13,6 +13,7 @@
 #include "sh_link.h"
 #include "sh_path.h"
 #include "sh_proc.h"
+#include "sh_thread.h"
 #include "sh_time.h"
 #include "sh_utf.h"
 
@@ -29,6 +30,8 @@ void sh_store_init(sh_store *st, sh_log_fn log, void *user) {
     sh_lock_paths_for(st->home, &st->lock_path, &st->lock_other);
     st->backup = sh_path_join(st->home, ".agents/.backup");
     st->cache = sh_cache_dir();
+    st->log_lock = sh_mutex_new();
+    sh_git_program();  // found once here, before any worker thread asks for it
     sh_store_reload_providers(st);
 }
 
@@ -46,7 +49,7 @@ void sh_store_free(sh_store *st) {
     }
     free(st->providers);
     free(st->agents);
-    sh_strv_free(&st->fetched);
+    sh_mutex_free(st->log_lock);
     memset(st, 0, sizeof *st);
 }
 
@@ -56,7 +59,11 @@ void sh_store_log(sh_store *st, const char *fmt, ...) {
     va_start(ap, fmt);
     sh_buf_vprintf(&b, fmt, ap);
     va_end(ap);
-    if (st->log) st->log(st->log_user, sh_buf_str(&b));
+    if (st->log) {
+        sh_mutex_lock(st->log_lock);
+        st->log(st->log_user, sh_buf_str(&b));
+        sh_mutex_unlock(st->log_lock);
+    }
     sh_buf_free(&b);
 }
 
@@ -138,6 +145,7 @@ void sh_store_scan(const sh_store *st, sh_skills *out) {
     memset(out, 0, sizeof *out);
     yyjson_mut_doc *lock = sh_lock_load(st, NULL);  // unreadable: nothing counts as tracked, and nothing is written
     yyjson_mut_val *lock_skills = lock ? yyjson_mut_obj_get(yyjson_mut_doc_get_root(lock), "skills") : NULL;
+    sh_json_index *entries = sh_json_index_new(lock_skills);
     sh_strv names = SH_STRV_INIT;
     sh_list_dir(st->central, SH_LIST_DIRS | SH_LIST_NO_SYMLINKS | SH_SORT_NAME_CI, &names);
     out->items = sh_xcalloc(names.len + 1, sizeof *out->items);
@@ -160,14 +168,9 @@ void sh_store_scan(const sh_store *st, sh_skills *out) {
         s->description = sh_strdup(sh_fm_value(&fm, "description"));
         sh_fm_free(&fm);
         free(md);
-        yyjson_mut_val *entry = lock_skills ? yyjson_mut_obj_get(lock_skills, name) : NULL;
-        if (yyjson_mut_is_obj(entry)) {
-            yyjson_doc *one = yyjson_mut_val_imut_copy(entry, NULL);
-            sh_source_from_json(yyjson_doc_get_root(one), &s->src);
-            yyjson_doc_free(one);
-        } else {
-            sh_source_from_json(NULL, &s->src);
-        }
+        yyjson_mut_val *entry = sh_json_index_get(entries, name);
+        if (yyjson_mut_is_obj(entry)) sh_source_from_mut_json(entry, &s->src);
+        else sh_source_from_json(NULL, &s->src);
         s->update = sh_source_tracked(&s->src) ? SH_UPDATE_UNKNOWN : SH_UPDATE_UNTRACKED;
         s->new_hash = sh_strdup("");
         s->new_path = sh_strdup("");
@@ -175,6 +178,7 @@ void sh_store_scan(const sh_store *st, sh_skills *out) {
         fill_links(st, s);
     }
     sh_strv_free(&names);
+    sh_json_index_free(entries);
     yyjson_mut_doc_free(lock);
 }
 
@@ -392,199 +396,7 @@ int sh_store_relink(sh_store *st) {
     return changes;
 }
 
-// ---- git ----
-
-typedef struct {
-    bool ok;
-    sh_buf out;
-    char *err;  // trimmed stderr, or why git could not run
-} git_result;
-
-static void git_result_free(git_result *r) {
-    sh_buf_free(&r->out);
-    free(r->err);
-}
-
-static git_result run_git(const char *const *args, const char *work_dir, int timeout_ms) {
-    git_result r = {0};
-    const char *argv[64];
-    size_t n = 0;
-    argv[n++] = sh_git_program();
-    argv[n++] = "-c";
-    argv[n++] = "core.longpaths=true";  // some skill repositories nest deeper than the 260 characters Windows allows by default
-    for (size_t i = 0; args[i] && n < 63; ++i) argv[n++] = args[i];
-    argv[n] = NULL;
-    static const char *const env[] = {"GIT_TERMINAL_PROMPT=0", NULL};
-    const sh_proc_opts o = {work_dir, env, NULL, 0, timeout_ms ? timeout_ms : 180000};
-    sh_proc_result p;
-    sh_proc_run(argv, &o, &p);
-    if (!p.started) {
-        r.err = sh_strdup("git was not found: install Git (https://git-scm.com) and make sure it is on your PATH");
-    } else if (p.timed_out) {
-        r.err = sh_strdup("git timed out");
-    } else {
-        r.ok = p.exit_code == 0;
-        r.err = sh_trimmed(sh_buf_str(&p.err), p.err.len);
-    }
-    r.out = p.out;
-    p.out = (sh_buf)SH_BUF_INIT;
-    sh_proc_result_free(&p);
-    return r;
-}
-
-static char *left_text(const char *s, size_t units) { return sh_left_utf16(s, units); }
-
-static char *repo_dir_for(const sh_store *st, const char *slug) {
-    char *key = sh_strdup(slug);
-    sh_buf k = SH_BUF_INIT;
-    for (const char *c = key; *c; ++c) {
-        if (*c == '/') sh_buf_puts(&k, "__");
-        else sh_buf_putc(&k, *c);
-    }
-    free(key);
-    char *dir = sh_strfmt("%s/repos/%s", st->cache, sh_buf_str(&k));
-    sh_buf_free(&k);
-    return dir;
-}
-
-bool sh_store_ensure_repo(sh_store *st, const char *slug, const char *url, char **dir_out, char **err) {
-    char *dir = repo_dir_for(st, slug);
-    if (dir_out) *dir_out = sh_strdup(dir);
-    if (sh_strv_contains(&st->fetched, slug)) {
-        free(dir);
-        return true;
-    }
-    char *dotgit = sh_path_join(dir, ".git");
-    git_result r;
-    if (!sh_exists(dotgit)) {
-        char *repos = sh_path_join(st->cache, "repos");
-        sh_mkpath(repos);
-        free(repos);
-        sh_remove_tree(dir);
-        sh_store_log(st, "cloning %s ...", slug);
-        const char *args[] = {"clone", "--depth", "1", "--quiet", "--", url, dir, NULL};
-        r = run_git(args, NULL, 0);
-    } else {
-        const char *fetch[] = {"fetch", "--depth", "1", "--quiet", "origin", "HEAD", NULL};
-        r = run_git(fetch, dir, 0);
-        if (r.ok) {
-            git_result_free(&r);
-            const char *checkout[] = {"checkout", "--quiet", "--force", "FETCH_HEAD", NULL};
-            r = run_git(checkout, dir, 0);
-        }
-    }
-    free(dotgit);
-    const bool ok = r.ok;
-    if (!ok) {
-        char *short_err = left_text(r.err ? r.err : "", 200);
-        if (err) *err = left_text(r.err ? r.err : "", 300);
-        sh_store_log(st, "git failed for %s: %s", slug, short_err);
-        free(short_err);
-    } else {
-        sh_strv_push(&st->fetched, slug);
-    }
-    git_result_free(&r);
-    free(dir);
-    return ok;
-}
-
-char *sh_store_tree_hash(const char *repo, const char *dir) {
-    char *spec = *dir ? sh_strfmt("HEAD:%s", dir) : sh_strdup("HEAD^{tree}");
-    const char *args[] = {"rev-parse", "--verify", "--quiet", spec, NULL};
-    git_result r = run_git(args, repo, 0);
-    char *out = r.ok ? sh_trimmed(sh_buf_str(&r.out), r.out.len) : sh_strdup("");
-    git_result_free(&r);
-    free(spec);
-    return out;
-}
-
-// rank a SKILL.md location inside a repository; lower is better, NEVER = not a real skill
-#define NEVER (1 << 30)
-
-static int path_rank(const char *p) {
-    static const char *const bad[] = {"tests", "test", "evals", "eval", "fixtures", "node_modules", "oracle", "examples", "example"};
-    sh_strv seg = SH_STRV_INIT;
-    sh_split(p, strlen(p), '/', false, &seg);
-    int rank = (int)sh_utf16_len(p);
-    for (size_t i = 0; i + 1 < seg.len; ++i) {
-        for (size_t b = 0; b < sizeof bad / sizeof bad[0]; ++b) {
-            if (strcmp(seg.items[i], bad[b]) == 0) {
-                sh_strv_free(&seg);
-                return NEVER;
-            }
-        }
-        if (seg.items[i][0] == '.') rank += 1000;
-    }
-    if (seg.len >= 3 && strcmp(seg.items[seg.len - 3], "skills") == 0) rank -= 200;
-    sh_strv_free(&seg);
-    return rank;
-}
-
-typedef struct {
-    int rank;
-    const char *path;
-} ranked_path;
-
-static int cmp_ranked(const void *a, const void *b) {
-    const ranked_path *x = a, *y = b;
-    if (x->rank != y->rank) return x->rank < y->rank ? -1 : 1;
-    return strcmp(x->path, y->path);
-}
-
-static void skill_paths_in_repo(const char *repo, sh_strv *out) {
-    const char *args[] = {"ls-tree", "-r", "-z", "--name-only", "HEAD", NULL};  // -z: paths with any characters come unquoted
-    git_result r = run_git(args, repo, 0);
-    sh_strv names = SH_STRV_INIT;
-    sh_split(sh_buf_str(&r.out), r.out.len, '\0', true, &names);
-    ranked_path *ranked = sh_xcalloc(names.len + 1, sizeof *ranked);
-    size_t n = 0;
-    for (size_t i = 0; i < names.len; ++i) {
-        const char *p = names.items[i];
-        if (strcmp(p, "SKILL.md") != 0 && !sh_ends_with(p, "/SKILL.md")) continue;
-        const int rank = path_rank(p);
-        if (rank != NEVER) ranked[n++] = (ranked_path){rank, p};
-    }
-    qsort(ranked, n, sizeof *ranked, cmp_ranked);
-    for (size_t i = 0; i < n; ++i) sh_strv_push(out, ranked[i].path);
-    free(ranked);
-    sh_strv_free(&names);
-    git_result_free(&r);
-}
-
-static void show_frontmatter(const char *repo, const char *path, sh_frontmatter *fm) {
-    char *spec = sh_strfmt("HEAD:%s", path);
-    const char *args[] = {"show", spec, NULL};
-    git_result r = run_git(args, repo, 20000);
-    if (r.ok) sh_fm_parse(sh_buf_str(&r.out), r.out.len < 64 * 1024 ? r.out.len : 64 * 1024, fm);
-    else memset(fm, 0, sizeof *fm);
-    git_result_free(&r);
-    free(spec);
-}
-
-static bool name_matches(const sh_frontmatter *fm, const char *path, const char *name) {
-    const char *nm = sh_fm_value(fm, "name");
-    if (strcmp(nm, name) == 0) return true;
-    if (*nm) return false;
-    char *dir = sh_dir_of(path);
-    const bool same = strcmp(sh_path_name(dir), name) == 0;
-    free(dir);
-    return same;
-}
-
-// the SKILL.md of the skill called `name`, wherever upstream keeps it
-char *sh_store_find_skill_path(const char *repo, const char *name) {
-    sh_strv paths = SH_STRV_INIT;
-    skill_paths_in_repo(repo, &paths);
-    char *found = NULL;
-    for (size_t i = 0; !found && i < paths.len; ++i) {
-        sh_frontmatter fm;
-        show_frontmatter(repo, paths.items[i], &fm);
-        if (name_matches(&fm, paths.items[i], name)) found = sh_strdup(paths.items[i]);
-        sh_fm_free(&fm);
-    }
-    sh_strv_free(&paths);
-    return found;
-}
+// ---- sources ----
 
 static bool word_char(char c) {
     return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '.' || c == '-';
@@ -641,215 +453,41 @@ char *sh_slug_from_input(const char *in, char **url) {
     return slug;
 }
 
-bool sh_store_discover(sh_store *st, const char *repo_input, sh_candidates *out, char **err) {
-    memset(out, 0, sizeof *out);
-    char *url = NULL;
-    char *slug = sh_slug_from_input(repo_input, &url);
-    if (!slug) {
-        if (err) *err = sh_strdup("expected owner/repo or a github.com URL");
-        return false;
-    }
-    char *repo = NULL;
-    if (!sh_store_ensure_repo(st, slug, url, &repo, err)) {
-        free(repo);
-        free(slug);
-        free(url);
-        return false;
-    }
-    sh_strv paths = SH_STRV_INIT, seen = SH_STRV_INIT;
-    skill_paths_in_repo(repo, &paths);
-    out->items = sh_xcalloc(paths.len + 1, sizeof *out->items);
-    int budget = 400;
-    for (size_t i = 0; i < paths.len; ++i) {
-        if (--budget < 0) break;
-        const char *p = paths.items[i];
-        sh_frontmatter fm;
-        show_frontmatter(repo, p, &fm);
-        char *dir = sh_dir_of(p);
-        char *name = sh_strdup(*sh_fm_value(&fm, "name") ? sh_fm_value(&fm, "name") : sh_path_name(dir));
-        // skill names become folder names: refuse anything path-like
-        if (!*name || sh_strv_contains(&seen, name) || strchr(name, '/') || name[0] == '.' || strstr(name, "..")) {
-            free(name);
-            free(dir);
-            sh_fm_free(&fm);
-            continue;
-        }
-        sh_strv_push(&seen, name);
-        sh_candidate *c = &out->items[out->len++];
-        c->name = name;
-        c->description = sh_strdup(sh_fm_value(&fm, "description"));
-        c->dir = dir;
-        c->slug = sh_strdup(slug);
-        c->url = sh_strdup(url);
-        sh_fm_free(&fm);
-    }
-    if (out->len == 0 && err) *err = sh_strfmt("no SKILL.md found in %s", slug);
-    sh_strv_free(&paths);
-    sh_strv_free(&seen);
-    free(repo);
-    free(slug);
-    free(url);
-    return out->len > 0;
+// ---- staging and swapping ----
+
+char *sh_store_stage_dir(const sh_store *st, const char *label) {
+    static long counter;  // shared by every thread; the process id keeps other processes' stages apart
+    return sh_strfmt("%s/stage/%s-%ld-%ld", st->cache, label, sh_process_id(), sh_atomic_inc(&counter));
 }
 
-// Write the plain files of a git tree into `dest`. Links and submodules are skipped, paths are checked, sizes are capped.
-static bool path_is_safe(const char *path) {
-    if (!*path || path[0] == '/' || strchr(path, '\\')) return false;
-    sh_strv seg = SH_STRV_INIT;
-    sh_split(path, strlen(path), '/', false, &seg);
-    bool sane = true;
-    for (size_t i = 0; sane && i < seg.len; ++i) {
-        const char *part = seg.items[i];
-        if (!*part || strcmp(part, "..") == 0 || strcmp(part, ".") == 0) sane = false;
-#ifdef _WIN32
-        else if (_stricmp(part, ".git") == 0) sane = false;  // no folder named .git anywhere, in any letter case
-#else
-        else if (strcasecmp(part, ".git") == 0) sane = false;
-#endif
+// the backup folder for `name`: the time, plus a counter when that second is taken already
+static char *backup_dir_for(const sh_store *st, const char *name) {
+    char *stamp = sh_stamp();
+    char *bk = sh_strfmt("%s/%s/%s", st->backup, name, stamp);
+    for (int i = 2; sh_lexists(bk) && i < 1000; ++i) {
+        free(bk);
+        bk = sh_strfmt("%s/%s/%s-%d", st->backup, name, stamp, i);
     }
-    sh_strv_free(&seg);
-    return sane;
+    free(stamp);
+    return bk;
 }
 
-typedef struct {
-    char *path;
-    char *sha;
-    bool exec;
-} tree_entry;
-
-static bool extract_tree(const char *repo, const char *spec, const char *dest, char **err) {
-    const char *ls_args[] = {"ls-tree", "-r", "-z", spec, NULL};
-    git_result ls = run_git(ls_args, repo, 60000);
-    if (!ls.ok) {
-        if (err) *err = left_text(ls.err ? ls.err : "", 200);
-        git_result_free(&ls);
-        return false;
-    }
-    sh_strv recs = SH_STRV_INIT;
-    sh_split(sh_buf_str(&ls.out), ls.out.len, '\0', true, &recs);
-    tree_entry *files = sh_xcalloc(recs.len + 1, sizeof *files);
-    size_t n = 0;
-    for (size_t i = 0; i < recs.len; ++i) {
-        const char *rec = recs.items[i];
-        const char *tab = strchr(rec, '\t');
-        if (!tab) continue;
-        sh_strv head = SH_STRV_INIT;
-        sh_split(rec, (size_t)(tab - rec), ' ', false, &head);
-        const bool blob = head.len == 3 && strcmp(head.items[1], "blob") == 0;     // not submodules (commit) or trees
-        const bool plain = blob && (strcmp(head.items[0], "100644") == 0 || strcmp(head.items[0], "100755") == 0);  // 120000 is a link: never recreated
-        if (plain && path_is_safe(tab + 1)) {
-            files[n].path = sh_strdup(tab + 1);
-            files[n].sha = sh_strdup(head.items[2]);
-            files[n].exec = strcmp(head.items[0], "100755") == 0;
-            ++n;
-        }
-        sh_strv_free(&head);
-    }
-    sh_strv_free(&recs);
-    git_result_free(&ls);
-    bool ok = true;
-    if (n > 5000) {
-        if (err) *err = sh_strdup("more than 5000 files");
-        ok = false;
-    }
-    if (ok && n > 0) {
-        sh_buf input = SH_BUF_INIT;
-        for (size_t i = 0; i < n; ++i) sh_buf_printf(&input, "%s\n", files[i].sha);
-        const char *argv[] = {sh_git_program(), "cat-file", "--batch", NULL};
-        const sh_proc_opts o = {repo, NULL, input.data, input.len, 120000};
-        sh_proc_result p;
-        const bool ran = sh_proc_run(argv, &o, &p);
-        sh_buf_free(&input);
-        if (!ran) {
-            if (err) *err = sh_strdup(p.started ? "git cat-file failed" : "cannot start git");
-            ok = false;
-        }
-        size_t pos = 0;
-        long long total = 0;
-        if (ok) sh_mkpath(dest);
-        for (size_t i = 0; ok && i < n; ++i) {
-            const char *all = sh_buf_str(&p.out);
-            const char *nl = memchr(all + pos, '\n', p.out.len - pos);
-            long long size = -1;
-            if (nl) {
-                sh_strv h = SH_STRV_INIT;
-                sh_split(all + pos, (size_t)(nl - (all + pos)), ' ', false, &h);
-                if (h.len == 3 && strcmp(h.items[1], "blob") == 0) size = atoll(h.items[2]);
-                sh_strv_free(&h);
-            }
-            const size_t body = nl ? (size_t)(nl - all) + 1 : 0;
-            if (size < 0 || body + (size_t)size > p.out.len) {
-                if (err) *err = sh_strfmt("unexpected git output for %s", files[i].path);
-                ok = false;
-                break;
-            }
-            total += size;
-            if (total > 128LL * 1024 * 1024) {
-                if (err) *err = sh_strdup("more than 128 MB");
-                ok = false;
-                break;
-            }
-            char *to = sh_path_join(dest, files[i].path);
-            char *parent = sh_path_parent(to);
-            sh_mkpath(parent);
-            free(parent);
-            if (!sh_write_file(to, all + body, (size_t)size)) {
-                if (err) *err = sh_strfmt("cannot write %s", files[i].path);
-                ok = false;
-            } else {
-                sh_set_executable(to, files[i].exec);
-            }
-            free(to);
-            pos = body + (size_t)size + 1;
-        }
-        sh_proc_result_free(&p);
-    }
-    for (size_t i = 0; i < n; ++i) {
-        free(files[i].path);
-        free(files[i].sha);
-    }
-    free(files);
-    return ok;
-}
-
-// extract repo:dir into a staging folder, check it, and swap it into the shared folder, keeping a backup
-static bool stage_and_swap(sh_store *st, const char *name, const char *repo, const char *dir) {
-    static unsigned counter;
-    char *stage = sh_strfmt("%s/stage/%s-%ld-%u", st->cache, name, (long)(sh_now_ms() % 100000000), ++counter);
-    sh_remove_tree(stage);
-    sh_mkpath(stage);
-    char *spec = *dir ? sh_strfmt("HEAD:%s", dir) : sh_strdup("HEAD");
-    char *xerr = NULL;
-    bool ok = extract_tree(repo, spec, stage, &xerr);
-    free(spec);
-    if (!ok) {
-        sh_store_log(st, "extract failed for %s: %s", name, xerr ? xerr : "");
-        sh_remove_tree(stage);
-    }
-    free(xerr);
-    char *md = ok ? sh_path_join(stage, "SKILL.md") : NULL;
-    if (ok) {
-        sh_frontmatter fm;
-        sh_fm_read(md, &fm);
-        if (!sh_exists(md) || !*sh_fm_value(&fm, "description")) {
-            sh_store_log(st, "refusing %s: upstream folder has no valid SKILL.md", name);
-            sh_remove_tree(stage);
-            ok = false;
-        }
-        sh_fm_free(&fm);
-    }
+bool sh_store_place(sh_store *st, const char *name, const char *stage) {
+    char *md = sh_path_join(stage, "SKILL.md");
+    sh_frontmatter fm;
+    sh_fm_read(md, &fm);
+    bool ok = sh_exists(md) && *sh_fm_value(&fm, "description");
+    sh_fm_free(&fm);
     free(md);
+    if (!ok) sh_store_log(st, "refusing %s: upstream folder has no valid SKILL.md", name);
     char *dest = sh_path_join(st->central, name);
     if (ok && sh_exists(dest)) {
-        char *stamp = sh_stamp();
-        char *bk = sh_strfmt("%s/%s/%s", st->backup, name, stamp);
+        char *bk = backup_dir_for(st, name);
         if (!sh_move_dir(dest, bk)) {
             sh_store_log(st, "cannot back up %s", dest);
-            sh_remove_tree(stage);
             ok = false;
         }
         free(bk);
-        free(stamp);
     }
     if (ok) {
         sh_mkpath(st->central);
@@ -860,160 +498,8 @@ static bool stage_and_swap(sh_store *st, const char *name, const char *repo, con
             prune_backups(st->backup, name, 3);
         }
     }
+    if (!ok) sh_remove_tree(stage);
     free(dest);
-    free(stage);
-    return ok;
-}
-
-// ---- updates ----
-
-static char *source_url(const sh_source *s) {
-    return *s->url ? sh_strdup(s->url) : sh_strfmt("https://github.com/%s.git", s->source);
-}
-
-static void set_str(char **field, const char *value) {
-    free(*field);
-    *field = sh_strdup(value ? value : "");
-}
-
-int sh_store_check_updates(sh_store *st, sh_skills *skills, const sh_strv *only) {
-    int available = 0;
-    for (size_t i = 0; i < skills->len; ++i) {
-        sh_skill *s = &skills->items[i];
-        if (only && only->len > 0 && !sh_strv_contains(only, s->name)) continue;
-        set_str(&s->new_hash, "");
-        set_str(&s->new_path, "");
-        set_str(&s->note, "");
-        if (!sh_source_tracked(&s->src)) {
-            s->update = SH_UPDATE_UNTRACKED;
-            continue;
-        }
-        char *url = source_url(&s->src);
-        char *repo = NULL, *err = NULL;
-        if (!sh_store_ensure_repo(st, s->src.source, url, &repo, &err)) {
-            s->update = SH_UPDATE_ERROR;
-            set_str(&s->note, err);
-            free(err);
-            free(repo);
-            free(url);
-            continue;
-        }
-        char *dir = sh_dir_of(s->src.skill_path);
-        char *h = *s->src.skill_path ? sh_store_tree_hash(repo, dir) : sh_strdup("");
-        bool exists = false;
-        if (*h) {
-            char *spec = sh_strfmt("HEAD:%s", s->src.skill_path);
-            const char *args[] = {"cat-file", "-e", spec, NULL};
-            git_result r = run_git(args, repo, 0);
-            exists = r.ok;
-            git_result_free(&r);
-            free(spec);
-        }
-        bool failed = false;
-        if (!exists) {  // upstream moved the folder: look it up by skill name
-            char *found = sh_store_find_skill_path(repo, s->name);
-            if (!found) {
-                s->update = SH_UPDATE_ERROR;
-                set_str(&s->note, "not found upstream");
-                failed = true;
-            } else {
-                set_str(&s->new_path, found);
-                free(dir);
-                dir = sh_dir_of(found);
-                free(h);
-                h = sh_store_tree_hash(repo, dir);
-                free(found);
-            }
-        }
-        if (!failed) {
-            set_str(&s->new_hash, h);
-            if (strcmp(h, s->src.hash) == 0 && !*s->new_path) {
-                s->update = SH_UPDATE_CURRENT;
-            } else {
-                s->update = SH_UPDATE_AVAILABLE;
-                ++available;
-            }
-        }
-        free(h);
-        free(dir);
-        free(repo);
-        free(url);
-    }
-    return available;
-}
-
-bool sh_store_apply_update(sh_store *st, sh_skill *s) {
-    if (!sh_source_tracked(&s->src)) return false;
-    char *url = source_url(&s->src);
-    char *repo = NULL, *err = NULL;
-    if (!sh_store_ensure_repo(st, s->src.source, url, &repo, &err)) {
-        free(err);
-        free(repo);
-        free(url);
-        return false;
-    }
-    free(err);
-    const char *skill_md = *s->new_path ? s->new_path : s->src.skill_path;
-    char *dir = sh_dir_of(skill_md);
-    char *hash = *s->new_hash ? sh_strdup(s->new_hash) : sh_store_tree_hash(repo, dir);
-    bool ok = *hash && stage_and_swap(st, s->name, repo, dir);
-    if (ok) {
-        sh_source src;
-        sh_source_copy(&s->src, &src);
-        set_str(&src.url, url);
-        set_str(&src.skill_path, skill_md);
-        set_str(&src.hash, hash);
-        char *now = sh_now_iso();
-        if (!*src.installed_at) set_str(&src.installed_at, now);
-        set_str(&src.updated_at, now);
-        free(now);
-        sh_lock_put(st, s->name, &src);
-        sh_source_free(&s->src);
-        s->src = src;
-        s->update = SH_UPDATE_CURRENT;
-        set_str(&s->new_hash, "");
-        set_str(&s->new_path, "");
-        char *md = sh_strfmt("%s/%s/SKILL.md", st->central, s->name);
-        sh_frontmatter fm;
-        sh_fm_read(md, &fm);
-        set_str(&s->description, sh_fm_value(&fm, "description"));
-        sh_fm_free(&fm);
-        free(md);
-        sh_store_log(st, "updated %s -> %.8s", s->name, hash);
-        sh_store_relink(st);
-    }
-    free(hash);
-    free(dir);
-    free(repo);
-    free(url);
-    return ok;
-}
-
-bool sh_store_install(sh_store *st, const sh_candidate *c) {
-    char *repo = NULL, *err = NULL;
-    if (!sh_store_ensure_repo(st, c->slug, c->url, &repo, &err)) {
-        free(err);
-        free(repo);
-        return false;
-    }
-    free(err);
-    char *hash = sh_store_tree_hash(repo, c->dir);
-    bool ok = *hash && stage_and_swap(st, c->name, repo, c->dir);
-    if (ok) {
-        sh_source src = {0};
-        src.source = sh_strdup(c->slug);
-        src.url = sh_strdup(c->url);
-        src.skill_path = *c->dir ? sh_strfmt("%s/SKILL.md", c->dir) : sh_strdup("SKILL.md");
-        src.hash = sh_strdup(hash);
-        src.installed_at = sh_now_iso();
-        src.updated_at = sh_strdup(src.installed_at);
-        sh_lock_put(st, c->name, &src);
-        sh_source_free(&src);
-        sh_store_log(st, "installed %s from %s", c->name, c->slug);
-        sh_store_relink(st);
-    }
-    free(hash);
-    free(repo);
     return ok;
 }
 
@@ -1039,69 +525,4 @@ bool sh_store_remove_skill(sh_store *st, const char *name) {
     sh_lock_put(st, name, NULL);
     sh_store_log(st, "removed %s (backup in %s/_removed)", name, st->backup);
     return true;
-}
-
-bool sh_store_track(sh_store *st, const char *name, const char *repo_input, const char *path, char **err) {
-    char *url = NULL;
-    char *slug = sh_slug_from_input(repo_input, &url);
-    if (!slug) {
-        if (err) *err = sh_strdup("expected owner/repo or a github.com URL");
-        return false;
-    }
-    char *md = sh_strfmt("%s/%s/SKILL.md", st->central, name);
-    const bool have = sh_exists(md);
-    free(md);
-    if (!have) {
-        if (err) *err = sh_strfmt("no such skill: %s", name);
-        free(slug);
-        free(url);
-        return false;
-    }
-    char *repo = NULL;
-    if (!sh_store_ensure_repo(st, slug, url, &repo, err)) {
-        free(repo);
-        free(slug);
-        free(url);
-        return false;
-    }
-    char *skill_md = sh_strdup(path ? path : "");
-    if (!*skill_md) {
-        sh_strv paths = SH_STRV_INIT;
-        skill_paths_in_repo(repo, &paths);
-        for (size_t i = 0; i < paths.len; ++i) {
-            sh_frontmatter fm;
-            show_frontmatter(repo, paths.items[i], &fm);
-            const bool match = name_matches(&fm, paths.items[i], name);
-            sh_fm_free(&fm);
-            if (match) {
-                set_str(&skill_md, paths.items[i]);
-                break;
-            }
-        }
-        sh_strv_free(&paths);
-    } else if (!sh_ends_with(skill_md, "SKILL.md")) {
-        char *with = sh_strfmt("%s/SKILL.md", skill_md);
-        free(skill_md);
-        skill_md = with;
-    }
-    bool ok = *skill_md != '\0';
-    if (!ok) {
-        if (err) *err = sh_strfmt("skill %s not found in %s", name, slug);
-    } else {
-        sh_source src = {0};
-        src.source = sh_strdup(slug);
-        src.url = sh_strdup(url);
-        src.skill_path = sh_strdup(skill_md);
-        src.hash = sh_strdup("");  // the content of the local copy is unknown: the first update syncs it
-        src.installed_at = sh_now_iso();
-        src.updated_at = sh_strdup(src.installed_at);
-        sh_lock_put(st, name, &src);
-        sh_source_free(&src);
-        sh_store_log(st, "tracking %s <- %s (%s)", name, slug, skill_md);
-    }
-    free(skill_md);
-    free(repo);
-    free(slug);
-    free(url);
-    return ok;
 }

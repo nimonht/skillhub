@@ -87,9 +87,11 @@ add_custom_command(
 
 add_library(skillhub_core STATIC
     src/core/sh_catalog.c
+    src/core/sh_engine.c src/core/sh_engine.h
     src/core/sh_exe.c src/core/sh_exe.h
     src/core/sh_frontmatter.c src/core/sh_frontmatter.h
     src/core/sh_fs.c src/core/sh_fs.h
+    src/core/sh_git.c src/core/sh_git.h
     src/core/sh_hash.c src/core/sh_hash.h
     src/core/sh_json.c src/core/sh_json.h
     src/core/sh_link.c src/core/sh_link.h
@@ -157,7 +159,7 @@ option(SKILLHUB_TESTS "Build the C unit tests (ctest)" ON)
 if(SKILLHUB_TESTS)
     enable_testing()
     add_executable(skillhub_unit_tests tests/unit/test_main.c tests/unit/test.h tests/unit/test_text.c tests/unit/test_paths.c
-                                       tests/unit/test_frontmatter.c tests/unit/test_lock.c)
+                                       tests/unit/test_frontmatter.c tests/unit/test_lock.c tests/unit/test_git.c)
     target_link_libraries(skillhub_unit_tests PRIVATE skillhub_core)
     target_compile_options(skillhub_unit_tests PRIVATE ${SKILLHUB_C_WARNINGS})
     target_compile_definitions(skillhub_unit_tests PRIVATE SKILLHUB_SOURCE_DIR="${CMAKE_SOURCE_DIR}")

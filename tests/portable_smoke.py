@@ -208,6 +208,27 @@ try:
         fail("update kept no backup of the old version")
     run(env, "check", expect=0)
 
+    # several repositories in one add, read and installed in parallel; of two skills with one name, the repository named
+    # last wins, as if they had been added one after the other
+    upstream2 = os.path.join(home, "upstream2")
+    skill(os.path.join(upstream2, "skills", "three"), "three", "third skill")
+    skill(os.path.join(upstream2, "skills", "two"), "two", "the other two")
+    git(upstream2, "init", "-q")
+    git(upstream2, "add", "-A")
+    git(upstream2, "commit", "-q", "-m", "first")
+    git(home, "clone", "-q", "--depth", "1", "file://" + upstream2.replace("\\", "/") if WIN else upstream2,
+        os.path.join(env["SKILLHUB_CACHE"], "repos", "acme__more"))
+    p = run(env, "add", "acme/skills", "acme/more", "--all")
+    if "3 installed" not in p.stdout or "skipping two from acme/skills: acme/more has a skill of that name too" not in p.stdout:
+        fail("add with two repositories: " + p.stdout)
+    lock = json.load(open(os.path.join(home, ".agents", ".skill-lock.json"), encoding="utf-8"))["skills"]
+    if lock["two"]["source"] != "acme/more" or lock["three"]["source"] != "acme/more" or lock["one"]["source"] != "acme/skills":
+        fail("lock file after add with two repositories: %s" % lock)
+    if "the other two" not in open(os.path.join(central, "two", "SKILL.md"), encoding="utf-8").read():
+        fail("the skill of the repository named last did not win")
+    if states(env)["three"].get("claude-code") != "link":
+        fail("a skill added with several repositories is not linked")
+
     # automation exists only where there are systemd user units
     if not LINUX:
         p = run(env, "autoupdate", "status", expect=1)

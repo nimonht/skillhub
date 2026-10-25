@@ -41,6 +41,15 @@ void sh_json_set_int(yyjson_mut_doc *d, yyjson_mut_val *obj, const char *key, lo
 void sh_json_set_bool(yyjson_mut_doc *d, yyjson_mut_val *obj, const char *key, bool value);
 void sh_json_set_val(yyjson_mut_doc *d, yyjson_mut_val *obj, const char *key, yyjson_mut_val *value);
 yyjson_mut_val *sh_json_get_or_add_obj(yyjson_mut_doc *d, yyjson_mut_val *obj, const char *key);
+const char *sh_json_mut_str(yyjson_mut_val *obj, const char *key);  // "" when missing or not a string
+
+// A lookup table for the members of a big object (the lock file holds one entry per skill): built once, then each lookup
+// is a binary search instead of a walk through every member. Like yyjson_mut_obj_get, a repeated key finds its first
+// member. The table goes stale when members are added or removed.
+typedef struct sh_json_index sh_json_index;
+sh_json_index *sh_json_index_new(yyjson_mut_val *obj);  // obj may be NULL: an empty table
+yyjson_mut_val *sh_json_index_get(const sh_json_index *ix, const char *key);  // NULL when absent
+void sh_json_index_free(sh_json_index *ix);
 
 #ifdef __cplusplus
 }

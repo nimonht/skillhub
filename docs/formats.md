@@ -106,6 +106,10 @@ Entries of a type Skill Hub does not run are listed as "managed by npx": never f
   atomically: a temporary file in the same folder, `fsync`, then rename over the target. A symlinked lock file is
   resolved first, so the link survives.
 - A failed write is reported to the caller (1.x ignored it).
+- Jobs over many skills commit their entries in groups: every 200 entries or 5 seconds, whichever comes first, and at
+  the end of the job. Each group reads and writes each file once (1.x rewrote the file after every skill). If the process
+  is killed between two commits, the folders swapped since the last one have no lock entry yet and show as local skills
+  until they are tracked again. The swap journal (section 8) closes that gap.
 
 ## 3. Project lock file (`<project>/skills-lock.json`)
 
@@ -180,12 +184,21 @@ Written exactly like `npx skills` `src/local-lock.ts`, because it is committed a
 | `repos/owner__repo/` | github.com repositories without a ref (the 1.x key, kept so existing clones are reused) |
 | `repos/<host>/<path>-<h8>/` | every other repository; `<path>` has `/` replaced by `__` and characters outside `[A-Za-z0-9._-]` by `_`; `<h8>` is the first 8 hex digits of SHA-1 over `<normalized url>#<ref>` |
 | `repos/<key>.lock` | per-repository lock (section 8) |
-| `stage/<job>-<random>/` | staging folders, unique per job (1.x named them after the skill, so two processes could delete each other's) |
+| `stage/<label>-<pid>-<n>/` | staging folders: the skill name (`import-<name>` for embedded skills), the process id and a counter, so no two threads or processes share one (1.x named them after the skill, so two processes could delete each other's) |
 | `sources.json` | derived update data, safe to delete |
 
 - Normalized URL: lowercase scheme and host, no trailing `/` or `.git`; `git@host:path` becomes `ssh://git@host/path`.
 - Clones made by 1.x are full working trees, sometimes with a local path as `origin` (the tests seed one). They are used as
-  they are. New clones are made with `--no-checkout`.
+  they are. New clones are made with `--depth 1 --no-checkout`: everything is read from the object store (`ls-tree`,
+  `cat-file --batch`), never from a working tree.
+- Bringing a clone up to date: `git ls-remote origin HEAD` is compared with the clone's own `HEAD`. When they match,
+  nothing is downloaded. Otherwise `git fetch --depth 1 origin HEAD` runs and `HEAD` is moved to `FETCH_HEAD` with
+  `git update-ref --no-deref` (a 1.x clone's working tree is left as it was). The clone's `HEAD` is the only record of
+  what the cache holds; `sources.json` never decides whether to fetch, because a separate record could run ahead of the
+  clone after a crash.
+- Every git command runs with `-c core.longpaths=true -c gc.auto=0 -c maintenance.auto=false -c core.fsmonitor=false`,
+  `GIT_TERMINAL_PROMPT=0` and `GCM_INTERACTIVE=never`. Skill Hub never runs garbage collection in the cache, so objects
+  read by id stay valid while other threads and processes fetch.
 - Staging folders are created on the same volume as the shared folder when the cache is on a different one, so the
   final move is a rename.
 
@@ -321,12 +334,15 @@ Skill Hub 1.x knows nothing about parked skills: run `skillhub enable --all-park
 | Path | What |
 |---|---|
 | `mutate.lock` | held by any process that changes skills, links, lock files or config (advisory: `flock`, or `LockFileEx` on a file used only for locking, never on the JSON files themselves, because Windows locks are mandatory and would block `npx`) |
-| `<cache>/repos/<key>.lock` | held around every git command in that repository, including checks (two processes would otherwise race on git's own `shallow.lock`) |
+| `<cache>/repos/<key>.lock` | held while a clone is made or brought up to date and its tree is listed, by checks too (two processes would otherwise race on git's own `shallow.lock`). Objects are then read by id without it (section 5) |
 | `journal/<job>.json` | intent journal written before each swap; recovery reads it at start |
 
-- The command line takes `mutate.lock` with a timeout (default 60 s, `--wait SECONDS`). When it cannot, it prints
-  "waiting for another Skill Hub operation…" and exits with code 75. Watcher runs exit at once and quietly when the lock
-  is taken: the running operation rescans when it ends.
+- The command line takes `mutate.lock` for the commands that change something: `adopt`, `update`, `remove`, `track`,
+  `import`, `uninstall`, `add` with `--all` or `--skill`, `doctor --fix`, `providers enable|disable|add|remove`, and
+  `autoupdate|watch on|off`. When the lock is taken it prints "waiting for another Skill Hub operation…" to stderr and
+  waits up to 60 s (`--wait SECONDS`, accepted anywhere after the command); then it prints "another Skill Hub operation
+  is still running; try again later" and exits with code 75. The watcher's run (`adopt --notify`) exits at once, quietly
+  and with code 0, when the lock is taken: the running operation rescans when it ends.
 - Journal entry: `{ "version": 1, "job": "...", "steps": [ { "op": "swap", "name": "...", "stage": "...",
   "backup": "...", "dest": "...", "state": "planned|backed-up|placed" } ] }`. On start, a swap left at `backed-up` is
   rolled back from its backup; one left at `planned` has its stage folder removed. Stale stage folders and git `*.lock`
@@ -398,6 +414,17 @@ Exit codes:
 
 `check NAME` checks every tracked skill and its exit code counts all of them, as in 1.x. Kept on purpose: scripts may rely
 on it.
+
+Commands that work on many repositories (`add`, `check`, `update`, `import`) handle them in parallel:
+
+- Progress lines (`cloning …`, `git failed for …`, `installed …`, `updated …`, `linked …`, `FAILED to import …`) come in
+  the order the work finishes, which is not fixed. The status lines of `check` and `update` and the closing summary line
+  keep their 1.x order and place.
+- A repository that cannot be reached is reported once (`git failed for owner/repo: …`), not once per skill; each of its
+  skills still shows the error in its own status line.
+- `add` with several repositories reads all of them first, then installs. When two of them offer a skill of the same
+  name, the repository named last wins, as if they had been added one after the other, and the line
+  `skipping NAME from OWNER/REPO: OTHER/REPO has a skill of that name too` says so.
 
 ## 12. Environment variables
 

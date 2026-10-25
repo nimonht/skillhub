@@ -82,7 +82,7 @@ jobs:
         run: sh tests/gui-smoke.sh build/skillhub "$RUNNER_TEMP/screens-qt64"
 
   sanitizers:
-    name: C core under ASan and UBSan, and fuzzing
+    name: C core under ASan, UBSan and TSan, and fuzzing
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -99,6 +99,16 @@ jobs:
           ctest --test-dir build-asan --output-on-failure
           sh tests/smoke.sh build-asan/skillhub
           python3 tests/portable_smoke.py build-asan/skillhub
+      - name: The parallel engine under ThreadSanitizer
+        run: |
+          sudo sysctl vm.mmap_rnd_bits=28  # TSan cannot map its shadow memory with the runner's default ASLR entropy
+          CC=clang cmake -B build-tsan -DSKILLHUB_GUI=OFF -DCMAKE_BUILD_TYPE=RelWithDebInfo -DSKILLHUB_WERROR=ON \
+            -DCMAKE_C_FLAGS="-fsanitize=thread" -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=thread"
+          cmake --build build-tsan -j"$(nproc)"
+          export TSAN_OPTIONS=halt_on_error=1
+          ctest --test-dir build-tsan --output-on-failure
+          python3 tests/portable_smoke.py build-tsan/skillhub
+          python3 bench/bench.py build-tsan/skillhub --repos 30 --skills 5 --install-mode all
       - name: Fuzz every parser of untrusted input for a minute
         run: |
           CC=clang cmake -B build-fuzz -DSKILLHUB_GUI=OFF -DSKILLHUB_FUZZ=ON -DSKILLHUB_TESTS=OFF -DCMAKE_BUILD_TYPE=RelWithDebInfo

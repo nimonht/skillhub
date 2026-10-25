@@ -50,3 +50,4 @@ extern const sh_test_case sh_tests_text[];
 extern const sh_test_case sh_tests_paths[];
 extern const sh_test_case sh_tests_frontmatter[];
 extern const sh_test_case sh_tests_lock[];
+extern const sh_test_case sh_tests_git[];

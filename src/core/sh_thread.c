@@ -49,6 +49,8 @@ int sh_cpu_count(void) {
     return si.dwNumberOfProcessors > 0 ? (int)si.dwNumberOfProcessors : 1;
 }
 
+long sh_atomic_inc(long *v) { return InterlockedIncrement((volatile LONG *)v); }  // long and LONG are both 32 bits here
+
 #else
 
 struct sh_mutex { pthread_mutex_t lock; };
@@ -95,6 +97,8 @@ int sh_cpu_count(void) {
     const long n = sysconf(_SC_NPROCESSORS_ONLN);
     return n > 0 ? (int)n : 1;
 }
+
+long sh_atomic_inc(long *v) { return __atomic_add_fetch(v, 1, __ATOMIC_SEQ_CST); }
 
 #endif
 

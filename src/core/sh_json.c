@@ -123,3 +123,65 @@ yyjson_mut_val *sh_json_get_or_add_obj(yyjson_mut_doc *d, yyjson_mut_val *obj, c
     sh_json_set_val(d, obj, key, v);
     return v;
 }
+
+const char *sh_json_mut_str(yyjson_mut_val *obj, const char *key) {
+    const char *s = yyjson_mut_get_str(yyjson_mut_obj_get(obj, key));
+    return s ? s : "";
+}
+
+// ---- lookup tables ----
+
+typedef struct {
+    const char *key;
+    size_t len;
+    size_t pos;  // order in the object: the first of repeated keys wins
+    yyjson_mut_val *val;
+} member;
+
+struct sh_json_index {
+    member *m;
+    size_t n;
+};
+
+static int cmp_key(const char *a, size_t alen, const char *b, size_t blen) {
+    const int c = memcmp(a, b, alen < blen ? alen : blen);
+    return c ? c : (alen < blen ? -1 : alen > blen);
+}
+
+static int cmp_member(const void *x, const void *y) {
+    const member *a = x, *b = y;
+    const int c = cmp_key(a->key, a->len, b->key, b->len);
+    return c ? c : (a->pos < b->pos ? -1 : a->pos > b->pos);
+}
+
+sh_json_index *sh_json_index_new(yyjson_mut_val *obj) {
+    sh_json_index *ix = sh_xcalloc(1, sizeof *ix);
+    const size_t n = yyjson_mut_is_obj(obj) ? yyjson_mut_obj_size(obj) : 0;
+    ix->m = sh_xcalloc(n + 1, sizeof *ix->m);
+    if (n == 0) return ix;
+    size_t i, max;
+    yyjson_mut_val *key, *val;
+    yyjson_mut_obj_foreach(obj, i, max, key, val) {
+        ix->m[ix->n] = (member){yyjson_mut_get_str(key), yyjson_mut_get_len(key), ix->n, val};
+        ++ix->n;
+    }
+    qsort(ix->m, ix->n, sizeof *ix->m, cmp_member);
+    return ix;
+}
+
+yyjson_mut_val *sh_json_index_get(const sh_json_index *ix, const char *key) {
+    const size_t len = strlen(key);
+    size_t lo = 0, hi = ix->n;
+    while (lo < hi) {  // the first member not below key
+        const size_t mid = lo + (hi - lo) / 2;
+        if (cmp_key(ix->m[mid].key, ix->m[mid].len, key, len) < 0) lo = mid + 1;
+        else hi = mid;
+    }
+    return lo < ix->n && cmp_key(ix->m[lo].key, ix->m[lo].len, key, len) == 0 ? ix->m[lo].val : NULL;
+}
+
+void sh_json_index_free(sh_json_index *ix) {
+    if (!ix) return;
+    free(ix->m);
+    free(ix);
+}
