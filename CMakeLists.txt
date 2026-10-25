@@ -18,6 +18,16 @@ set(SKILLHUB_VERSION "${PROJECT_VERSION}${SKILLHUB_VERSION_SUFFIX}")
 
 option(SKILLHUB_GUI "Build the window (skillhub-gui), which needs Qt 6.4 or newer" ON)
 option(SKILLHUB_WERROR "Treat compiler warnings as errors (CI)" OFF)
+option(SKILLHUB_SANITIZE "Build with AddressSanitizer and UndefinedBehaviorSanitizer (CI, debugging)" OFF)
+option(SKILLHUB_FUZZ "Build the libFuzzer targets in tests/fuzz (clang only)" OFF)
+if(SKILLHUB_FUZZ)
+    add_compile_options(-fsanitize=fuzzer-no-link,address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=undefined)
+    add_link_options(-fsanitize=address,undefined)
+elseif(SKILLHUB_SANITIZE AND NOT MSVC)
+    add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=undefined)
+    add_link_options(-fsanitize=address,undefined)
+endif()
+
 if(UNIX AND NOT APPLE AND CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
     set(CMAKE_INSTALL_PREFIX "$ENV{HOME}/.local" CACHE PATH "Install prefix" FORCE)
 endif()
@@ -32,6 +42,10 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+if(MINGW)
+    add_compile_definitions(__USE_MINGW_ANSI_STDIO=1)  # C99 printf (%zu, %lld) instead of the old msvcrt one
+endif()
 
 if(MSVC)
     # the C runtime's "use the _s variant" warnings are not useful in portable code that checks its own bounds
@@ -58,11 +72,44 @@ endfunction()
 
 # ---- C core and command line --------------------------------------------------------------------------------------------
 
+# yyjson (third_party/yyjson, MIT): built as it comes, without our warning flags
+add_library(skillhub_yyjson STATIC third_party/yyjson/yyjson.c third_party/yyjson/yyjson.h)
+target_include_directories(skillhub_yyjson PUBLIC third_party/yyjson)
+
+# the agent catalog is compiled into the program (1.x read it from a Qt resource)
+add_custom_command(
+    OUTPUT ${CMAKE_BINARY_DIR}/providers_json.c
+    COMMAND ${CMAKE_COMMAND} -DINPUT=${CMAKE_SOURCE_DIR}/data/providers.json -DOUTPUT=${CMAKE_BINARY_DIR}/providers_json.c
+            -DNAME=sh_providers_json -P ${CMAKE_SOURCE_DIR}/cmake/EmbedFile.cmake
+    DEPENDS ${CMAKE_SOURCE_DIR}/data/providers.json ${CMAKE_SOURCE_DIR}/cmake/EmbedFile.cmake
+    COMMENT "Embedding the agent catalog"
+    VERBATIM)
+
 add_library(skillhub_core STATIC
-    src/core/sh_exe.c src/core/sh_exe.h)
+    src/core/sh_catalog.c
+    src/core/sh_exe.c src/core/sh_exe.h
+    src/core/sh_frontmatter.c src/core/sh_frontmatter.h
+    src/core/sh_fs.c src/core/sh_fs.h
+    src/core/sh_hash.c src/core/sh_hash.h
+    src/core/sh_json.c src/core/sh_json.h
+    src/core/sh_link.c src/core/sh_link.h
+    src/core/sh_lock.c
+    src/core/sh_path.c src/core/sh_path.h
+    src/core/sh_proc.c src/core/sh_proc.h
+    src/core/sh_store.c src/core/sh_store.h
+    src/core/sh_str.c src/core/sh_str.h
+    src/core/sh_time.c src/core/sh_time.h
+    src/core/sh_transfer.c
+    src/core/sh_units.c
+    src/core/sh_utf.c src/core/sh_utf.h src/core/sh_unicode_tables.h
+    ${CMAKE_BINARY_DIR}/providers_json.c)
 target_include_directories(skillhub_core PUBLIC src/core)
 target_compile_options(skillhub_core PRIVATE ${SKILLHUB_C_WARNINGS})
 target_compile_definitions(skillhub_core PUBLIC SKILLHUB_VERSION="${SKILLHUB_VERSION}")
+target_link_libraries(skillhub_core PUBLIC skillhub_yyjson)
+if(WIN32)
+    target_link_libraries(skillhub_core PUBLIC shell32 ole32 uuid)
+endif()
 
 function(skillhub_cli_target target exe)
     target_link_libraries(${target} PRIVATE skillhub_core)
@@ -94,6 +141,25 @@ endif()
 
 if(UNIX AND NOT APPLE)
     install(TARGETS skillhub_cli RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif()
+
+if(SKILLHUB_FUZZ)
+    foreach(target frontmatter import source lock)
+        add_executable(fuzz_${target} tests/fuzz/fuzz_${target}.c)
+        target_link_libraries(fuzz_${target} PRIVATE skillhub_core)
+        target_link_options(fuzz_${target} PRIVATE -fsanitize=fuzzer)
+    endforeach()
+endif()
+
+option(SKILLHUB_TESTS "Build the C unit tests (ctest)" ON)
+if(SKILLHUB_TESTS)
+    enable_testing()
+    add_executable(skillhub_unit_tests tests/unit/test_main.c tests/unit/test.h tests/unit/test_text.c tests/unit/test_paths.c
+                                       tests/unit/test_frontmatter.c tests/unit/test_lock.c)
+    target_link_libraries(skillhub_unit_tests PRIVATE skillhub_core)
+    target_compile_options(skillhub_unit_tests PRIVATE ${SKILLHUB_C_WARNINGS})
+    target_compile_definitions(skillhub_unit_tests PRIVATE SKILLHUB_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+    add_test(NAME unit COMMAND skillhub_unit_tests)
 endif()
 
 # ---- window -------------------------------------------------------------------------------------------------------------
