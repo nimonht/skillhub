@@ -8,7 +8,7 @@
 #include "sh_fs.h"
 #include "sh_str.h"
 
-static const yyjson_read_flag READ_FLAGS = YYJSON_READ_ALLOW_INVALID_UNICODE;
+#define READ_FLAGS YYJSON_READ_ALLOW_INVALID_UNICODE  // yyjson flags are const variables: MSVC rejects them in static initializers
 
 yyjson_doc *sh_json_parse(const char *data, size_t n) {
     yyjson_doc *doc = yyjson_read(data, n, READ_FLAGS);
