@@ -19,4 +19,4 @@ If you are an owner and want a mark removed or changed, open an issue; deleting 
 is all it takes (the agent then shows a two-letter tile).
 
 The visual language of the interface is inspired by the MIT-licensed
-[`endfield-design`](https://github.com/Statrue/endfield-design-skill) skill; no *Arknights: Endfield* material is included.
+[`endfield-design`](https://github.com/Statrue/endfield-design-skill) skill.
