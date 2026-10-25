@@ -100,14 +100,16 @@ renamed its Qt libraries (`libqt6core6t64`); installing the wrong one just fails
 
 ### Build from source
 
-Needs CMake 3.22 or newer, Qt 6.4 or newer (Qt Quick, Quick Controls 2), `git`, and C17 / C++17 compilers.
+Needs CMake 3.22 or newer, Qt 6.4 or newer (Qt Quick, Quick Controls 2), `git`, C17 / C++17 compilers and, on Linux, libuv
+1.44 or newer with `pkg-config`. macOS and Windows builds download and compile libuv 1.51.0 by themselves (offline:
+`-DSKILLHUB_LIBUV_TARBALL=PATH` to a downloaded copy of its release archive).
 
 ```sh
 # Arch / CachyOS / Manjaro
-sudo pacman -S --needed cmake qt6-base qt6-declarative git base-devel
-# Fedora:  sudo dnf install cmake qt6-qtbase-devel qt6-qtdeclarative-devel git-core gcc gcc-c++ make
+sudo pacman -S --needed cmake qt6-base qt6-declarative git base-devel libuv
+# Fedora:  sudo dnf install cmake qt6-qtbase-devel qt6-qtdeclarative-devel git-core gcc gcc-c++ make libuv-devel pkgconfig
 # Debian / Ubuntu:
-#   sudo apt install cmake qt6-base-dev qt6-declarative-dev git build-essential libgl-dev \
+#   sudo apt install cmake qt6-base-dev qt6-declarative-dev git build-essential libgl-dev libuv1-dev pkg-config \
 #        qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-templates qml6-module-qtquick-shapes \
 #        qml6-module-qtquick-window qml6-module-qtqml-workerscript qml6-module-qtquick-dialogs
 # macOS:   CMake and Qt from https://www.qt.io or Homebrew (brew install cmake qt), Xcode command line tools

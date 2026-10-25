@@ -508,8 +508,9 @@ bool sh_store_place(sh_store *st, const char *name, const char *stage) {
     bool moved_aside = false;
     if (ok && sh_exists(dest)) {
         bk = backup_dir_for(st, name);
-        journal = journal_write(st, name, dest, bk, stage);
-        moved_aside = journal && sh_move_dir(dest, bk);
+        // SKILLHUB_STATE set but empty: there is no folder to keep a journal in, so the swap goes ahead without one
+        const bool journaled = !*st->state || (journal = journal_write(st, name, dest, bk, stage)) != NULL;
+        moved_aside = journaled && sh_move_dir(dest, bk);
         if (!moved_aside) {
             sh_store_log(st, "cannot back up %s", dest);
             ok = false;
@@ -542,6 +543,7 @@ static bool inside(const char *path, const char *dir) {
 }
 
 static int recover_swaps(sh_store *st) {
+    if (!*st->state) return 0;  // no state folder, so no journal either
     char *dir = sh_path_join(st->state, "journal");
     sh_strv files = SH_STRV_INIT;
     sh_list_dir(dir, SH_LIST_ALL | SH_SORT_NAME, &files);
