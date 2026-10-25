@@ -5,3 +5,5 @@
 *.icns binary
 *.ttf binary
 *.webp binary
+# fuzz seeds are byte-exact inputs (one tests Windows line ends)
+tests/fuzz/corpus/** binary

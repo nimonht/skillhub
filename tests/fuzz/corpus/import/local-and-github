@@ -1,0 +1,1 @@
+{"format":"skillhub-export","version":1,"skills":[{"name":"a","local":true,"files":[{"path":"SKILL.md","data":"LS0tCmRlc2NyaXB0aW9uOiB4Ci0tLQo=","exec":false},{"path":"sub/b.txt","data":"eA=="}]},{"name":"b","source":"owner/repo","path":"skills/b/SKILL.md"}]}

@@ -31,6 +31,8 @@ jobs:
           cmake --build build -j"$(nproc)"
       - name: Version
         run: ./build/skillhub --version
+      - name: C unit tests
+        run: ctest --test-dir build --output-on-failure
       - name: Design token contrast (WCAG)
         run: python3 tests/contrast.py
       - name: Smoke test (offline, throw-away HOME)
@@ -70,12 +72,41 @@ jobs:
         run: |
           cmake -B build -DSKILLHUB_WERROR=ON
           cmake --build build -j"$(nproc)"
+      - name: C unit tests
+        run: ctest --test-dir build --output-on-failure
       - name: Smoke test
         run: sh tests/smoke.sh build/skillhub
       - name: Portable CLI test
         run: python3 tests/portable_smoke.py build/skillhub
       - name: GUI renders headless on Qt 6.4
         run: sh tests/gui-smoke.sh build/skillhub "$RUNNER_TEMP/screens-qt64"
+
+  sanitizers:
+    name: C core under ASan and UBSan, and fuzzing
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang cmake git python3
+      - name: Build the command line with sanitizers (no window)
+        run: |
+          CC=clang cmake -B build-asan -DSKILLHUB_GUI=OFF -DSKILLHUB_SANITIZE=ON -DCMAKE_BUILD_TYPE=Debug -DSKILLHUB_WERROR=ON
+          cmake --build build-asan -j"$(nproc)"
+      - name: Unit tests, smoke test and portable test under sanitizers
+        run: |
+          ctest --test-dir build-asan --output-on-failure
+          sh tests/smoke.sh build-asan/skillhub
+          python3 tests/portable_smoke.py build-asan/skillhub
+      - name: Fuzz every parser of untrusted input for a minute
+        run: |
+          CC=clang cmake -B build-fuzz -DSKILLHUB_GUI=OFF -DSKILLHUB_FUZZ=ON -DSKILLHUB_TESTS=OFF -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          cmake --build build-fuzz -j"$(nproc)"
+          for t in frontmatter import source lock; do
+            mkdir -p "$RUNNER_TEMP/corpus-$t"
+            build-fuzz/fuzz_$t -max_total_time=60 "$RUNNER_TEMP/corpus-$t" tests/fuzz/corpus/$t
+          done
 
   macos:
     name: macOS (universal)
@@ -94,6 +125,8 @@ jobs:
           lipo -archs build/skillhub-gui.app/Contents/MacOS/skillhub
       - name: Version
         run: ./build/skillhub-gui.app/Contents/MacOS/skillhub --version
+      - name: C unit tests
+        run: ctest --test-dir build --output-on-failure
       - name: Portable CLI test
         run: python3 tests/portable_smoke.py build/skillhub-gui.app/Contents/MacOS/skillhub
       - name: GUI renders headless
@@ -123,6 +156,9 @@ jobs:
           dir build\*.exe
       - name: Version
         run: ./build/skillhub-cli.exe --version
+        shell: bash
+      - name: C unit tests
+        run: ctest --test-dir build --output-on-failure
         shell: bash
       - name: Portable CLI test
         shell: bash
