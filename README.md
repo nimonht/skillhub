@@ -221,13 +221,6 @@ manager or `sudo make uninstall`; both remove only files this project installed.
 - An import file is treated as untrusted: names and paths are validated, symlinks are never created, sizes are capped, sources must be GitHub repositories, nothing is executed and installed skills are never overwritten. Skills still run with your agents' permissions, so import only files you trust. GitHub skills arrive at their latest upstream version, not necessarily the one on the other machine.
 - Updates use plain `git` (HTTPS clones into `~/.cache/skillhub`); there is no telemetry and no account.
 
-## Design
-
-The interface is a working tool first; its visual language is inspired by *Arknights: Endfield* (smoked charcoal and paper
-materials, chamfered action shapes, circles for instruments, selection by corner hooks) without using
-any game asset. Colour has jobs (mint = lit/selected, amber = needs action, lime = just updated, red = broken) and every
-state also carries an icon or a word. No outlined controls, no pill badges: tone steps do that job. See [DESIGN.md](DESIGN.md) for tokens and rules.
-
 ## Status and limits
 
 - Linux is the home platform. **macOS and Windows** run the same program (window and CLI); the daily update timer and the stray watcher are systemd units, so they exist on Linux only for now. The macOS and Windows builds are tested by CI (build, command line, window rendering) but have not been used on real hardware by the author: please report what you find.
@@ -242,9 +235,7 @@ state also carries an icon or a word. No outlined controls, no pill badges: tone
 - [ ] Per-agent enable/disable for a skill
 - [ ] Project-level skills (`.claude/skills` in a repository), not only user-level ones
 - [ ] GitLab / arbitrary git URLs and local-path sources
-- [ ] Flatpak / AppImage, Homebrew cask and winget
 - [ ] Daily update and stray watcher on macOS (launchd) and Windows (Task Scheduler)
-- [ ] Signed macOS and Windows builds
 
 ## Contributing
 
