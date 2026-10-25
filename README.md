@@ -100,24 +100,28 @@ renamed its Qt libraries (`libqt6core6t64`); installing the wrong one just fails
 
 ### Build from source
 
-Needs Qt 6.4 or newer (Qt Quick, Quick Controls 2), `git` and a C++17 compiler.
+Needs CMake 3.22 or newer, Qt 6.4 or newer (Qt Quick, Quick Controls 2), `git`, and C17 / C++17 compilers.
 
 ```sh
 # Arch / CachyOS / Manjaro
-sudo pacman -S --needed qt6-base qt6-declarative git base-devel
-# Fedora:  sudo dnf install qt6-qtbase-devel qt6-qtdeclarative-devel git-core gcc-c++ make
+sudo pacman -S --needed cmake qt6-base qt6-declarative git base-devel
+# Fedora:  sudo dnf install cmake qt6-qtbase-devel qt6-qtdeclarative-devel git-core gcc gcc-c++ make
 # Debian / Ubuntu:
-#   sudo apt install qt6-base-dev qt6-declarative-dev git build-essential libgl-dev \
+#   sudo apt install cmake qt6-base-dev qt6-declarative-dev git build-essential libgl-dev \
 #        qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-templates qml6-module-qtquick-shapes \
 #        qml6-module-qtquick-window qml6-module-qtqml-workerscript qml6-module-qtquick-dialogs
-# macOS:   Qt from https://www.qt.io or Homebrew (brew install qt), Xcode command line tools
-# Windows: Qt for MSVC 2022 and Visual Studio build tools, then use "x64 Native Tools Command Prompt": qmake ..\skillhub.pro && nmake
+# macOS:   CMake and Qt from https://www.qt.io or Homebrew (brew install cmake qt), Xcode command line tools
+# Windows: CMake, Qt for MSVC 2022 and Visual Studio build tools; in the "x64 Native Tools Command Prompt":
+#          cmake -B build -G "NMake Makefiles" -DCMAKE_PREFIX_PATH=C:\Qt\6.8.3\msvc2022_64 && cmake --build build
 
 git clone https://github.com/nimonht/skillhub.git
 cd skillhub
-qmake6 && make -j"$(nproc)"
-make install            # Linux: installs to ~/.local  (use: qmake6 PREFIX=/usr  for a system-wide install)
+cmake -B build && cmake --build build -j"$(nproc)"
+cmake --install build   # Linux: installs to ~/.local  (add -DCMAKE_INSTALL_PREFIX=/usr to the first command for a system-wide install)
 ```
+
+The build makes two programs: `skillhub`, the command line, and `skillhub-gui`, the window (`skillhub.exe` on Windows, next to
+`skillhub-cli.exe`). Run `skillhub` without a command to open the window.
 
 The packages are built by [`packaging/`](packaging) (a Debian `debian/` directory, an RPM spec, an Inno Setup script and a
 disk-image script) and by [`.github/workflows/release.yml`](.github/workflows/release.yml); each Linux package is installed in a
@@ -209,7 +213,7 @@ skillhub uninstall               # asks first; --yes skips the prompt, --keep-ca
 This removes the systemd units, the files `make install` put below your home directory (binary, launcher, icons) and the
 git cache. It **never** touches your skills: `~/.agents/skills`, the lock file, the agent symlinks, the Antigravity entry
 and `~/.agents/.backup` all stay (delete them by hand if you want them gone). For a system-wide install use your package
-manager or `sudo make uninstall`; both remove only files this project installed.
+manager or `sudo cmake --build build --target uninstall`; both remove only files this project installed.
 
 ## Safety
 

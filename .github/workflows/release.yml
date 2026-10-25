@@ -85,14 +85,14 @@ jobs:
           cache: true
       - name: Build
         run: |
-          mkdir build && cd build
-          qmake ../skillhub.pro CONFIG+=release
-          make -j"$(sysctl -n hw.ncpu)"
-          lipo -archs skillhub.app/Contents/MacOS/skillhub
+          cmake -B build -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR" -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64"
+          cmake --build build -j"$(sysctl -n hw.ncpu)"
+          lipo -archs build/skillhub-gui.app/Contents/MacOS/skillhub-gui
+          lipo -archs build/skillhub-gui.app/Contents/MacOS/skillhub
       - name: Disk image
         id: dmg
         run: |
-          V=$(sed -n 's/^VERSION = //p' skillhub.pro)
+          V=$(sed -n 's/^project(skillhub VERSION \([0-9][0-9.]*\).*/\1/p' CMakeLists.txt)
           echo "version=$V" >> "$GITHUB_OUTPUT"
           echo "bin=$(packaging/macos/make-dmg.sh build "$V" | tail -1)" >> "$GITHUB_OUTPUT"
           ls -la dist
@@ -125,20 +125,17 @@ jobs:
       - name: Build
         shell: cmd
         run: |
-          mkdir build
-          cd build
-          qmake ..\skillhub.pro CONFIG+=release
-          nmake
+          cmake -B build -G "NMake Makefiles" -DCMAKE_PREFIX_PATH="%QT_ROOT_DIR%"
+          cmake --build build
       - name: Deploy Qt next to the program
         shell: bash
         run: |
-          V=$(sed -n 's/^VERSION = //p' skillhub.pro)
+          V=$(sed -n 's/^project(skillhub VERSION \([0-9][0-9.]*\).*/\1/p' CMakeLists.txt)
           echo "VERSION=$V" >> "$GITHUB_ENV"
           D=dist/SkillHub
           mkdir -p "$D"
-          cp build/release/skillhub.exe "$D/skillhub.exe"
-          cp "$D/skillhub.exe" "$D/skillhub-cli.exe"
-          python3 tools/exe-subsystem.py "$D/skillhub-cli.exe" console
+          # the window, the command line, and the command line without a console (scheduled tasks, background service)
+          cp build/skillhub.exe build/skillhub-cli.exe build/skillhubw.exe "$D/"
           windeployqt --release --no-translations --no-system-d3d-compiler --qmldir qml "$D/skillhub.exe"
           # the Visual C++ runtime, so the zip runs on a machine that never installed it
           for f in "$VCToolsRedistDir"x64/Microsoft.VC*.CRT/*.dll; do cp "$f" "$D/"; done

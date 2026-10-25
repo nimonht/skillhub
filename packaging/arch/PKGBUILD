@@ -1,33 +1,32 @@
 # Maintainer: nimonht
 pkgname=skillhub
-pkgver=1.0.1
+pkgver=2.0.0
 pkgrel=1
-pkgdesc='One skills folder for every coding agent: native Qt6 manager and CLI'
+pkgdesc='One skills folder for every coding agent: a C command line and a native Qt6 window'
 arch=('x86_64' 'aarch64')
 url='https://github.com/nimonht/skillhub'
 license=('MIT')
 depends=('qt6-base' 'qt6-declarative' 'git')
-makedepends=('python')
+makedepends=('cmake' 'python')
 options=('!debug')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('5383db7230867601c70435a400a6a9c1577ae18832194d2715c5627c4148e0f9')
+sha256sums=('SKIP')  # filled in after the v2.0.0 tag, like every release
 
 build() {
-  cd "$pkgname-$pkgver"
-  qmake6 PREFIX=/usr skillhub.pro
-  make
+  cmake -B build -S "$pkgname-$pkgver" -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE=None -Wno-dev
+  cmake --build build
 }
 
 check() {
   cd "$pkgname-$pkgver"
-  sh tests/smoke.sh ./skillhub
-  python tests/portable_smoke.py ./skillhub
+  sh tests/smoke.sh ../build/skillhub
+  python tests/portable_smoke.py ../build/skillhub
   python3 tests/contrast.py
 }
 
 package() {
+  DESTDIR="$pkgdir" cmake --install build
   cd "$pkgname-$pkgver"
-  make INSTALL_ROOT="$pkgdir" install
   install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
   install -Dm644 NOTICE.md "$pkgdir/usr/share/licenses/$pkgname/NOTICE.md"
   for f in data/LICENSE-vercel-labs-skills data/LICENSE-lobe-icons data/LICENSE-simple-icons fonts/OFL.txt; do

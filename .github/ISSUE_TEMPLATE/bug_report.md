@@ -13,6 +13,6 @@ labels: bug
 
 **Environment**
 - Distro / desktop:
-- Qt version (`qmake6 --version`):
+- Qt version (`qtpaths6 --qt-version`, or your package manager):
 - `skillhub --version`:
 - Output of `skillhub doctor`:

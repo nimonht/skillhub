@@ -26,7 +26,8 @@ def fail(msg):
 
 def make_home():
     home = os.path.realpath(tempfile.mkdtemp(prefix="skillhub-test-"))  # long names: Windows temp dirs come as 8.3 short names
-    env = dict(os.environ, HOME=home, USERPROFILE=home, SKILLHUB_HOME=home, XDG_CONFIG_HOME=home + "/.config", XDG_CACHE_HOME=home + "/.cache")
+    env = dict(os.environ, HOME=home, USERPROFILE=home, SKILLHUB_HOME=home, XDG_CONFIG_HOME=home + "/.config", XDG_CACHE_HOME=home + "/.cache",
+               XDG_STATE_HOME=home + "/.local/state", XDG_DATA_HOME=home + "/.local/share")
     stubs = os.path.join(home, "provbin")
     os.makedirs(stubs)
     name, body = ("codex.cmd", "@exit /b 0\r\n") if WIN else ("codex", "#!/bin/sh\nexit 0\n")
