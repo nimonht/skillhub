@@ -1,4 +1,6 @@
-#if !defined(_WIN32) && !defined(__APPLE__)
+#if defined(__linux__)
+#define _GNU_SOURCE  // pipe2, posix_spawn_file_actions_addchdir_np
+#elif !defined(_WIN32) && !defined(__APPLE__)
 #define _DEFAULT_SOURCE
 #endif
 
@@ -17,6 +19,7 @@
 #include <fcntl.h>
 #include <poll.h>
 #include <signal.h>
+#include <spawn.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <time.h>
@@ -113,6 +116,15 @@ const char *sh_git_program(void) {
 }
 
 #ifdef _WIN32
+
+// A path for CreateProcess: backslashes, but no \\?\ prefix. The child would inherit it in its own program path and
+// folder, and git then fails to find its configuration ("unknown error occurred while reading the configuration files").
+static wchar_t *process_path(const char *path) {
+    wchar_t *w = sh_wide(path);
+    for (wchar_t *c = w; *c; ++c)
+        if (*c == L'/') *c = L'\\';
+    return w;
+}
 
 static wchar_t *append_quoted(wchar_t *out, const wchar_t *arg) {
     if (*arg && !wcspbrk(arg, L" \t\n\v\"")) {
@@ -247,17 +259,29 @@ bool sh_proc_run(const char *const *argv, const sh_proc_opts *opts, sh_proc_resu
         in_r = CreateFileW(L"NUL", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, &sa, OPEN_EXISTING, 0, NULL);
     }
 
-    STARTUPINFOW si;
+    // only these three handles are inherited: inheritable pipes that other threads made for their own children stay out
+    HANDLE inherit[3] = {in_r, out_w, err_w};
+    SIZE_T attr_size = 0;
+    InitializeProcThreadAttributeList(NULL, 1, 0, &attr_size);
+    LPPROC_THREAD_ATTRIBUTE_LIST attrs = sh_xmalloc(attr_size);
+    InitializeProcThreadAttributeList(attrs, 1, 0, &attr_size);
+    UpdateProcThreadAttribute(attrs, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST, inherit, sizeof inherit, NULL, NULL);
+    STARTUPINFOEXW si;
     memset(&si, 0, sizeof si);
-    si.cb = sizeof si;
-    si.dwFlags = STARTF_USESTDHANDLES;
-    si.hStdInput = in_r;
-    si.hStdOutput = out_w;
-    si.hStdError = err_w;
+    si.StartupInfo.cb = sizeof si;
+    si.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
+    si.StartupInfo.hStdInput = in_r;
+    si.StartupInfo.hStdOutput = out_w;
+    si.StartupInfo.hStdError = err_w;
+    si.lpAttributeList = attrs;
     PROCESS_INFORMATION pi;
-    wchar_t *wprog = sh_wide_path(program), *cmd = command_line(argv), *env = environment(o->env);
-    wchar_t *wcwd = o->cwd ? sh_wide_path(o->cwd) : NULL;
-    const BOOL ok = CreateProcessW(wprog, cmd, NULL, NULL, TRUE, CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT, env, wcwd, &si, &pi);
+    wchar_t *wprog = process_path(program), *cmd = command_line(argv), *env = environment(o->env);
+    wchar_t *wcwd = o->cwd ? process_path(o->cwd) : NULL;
+    const BOOL ok = CreateProcessW(wprog, cmd, NULL, NULL, TRUE,
+                                   CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT | EXTENDED_STARTUPINFO_PRESENT, env, wcwd,
+                                   &si.StartupInfo, &pi);
+    DeleteProcThreadAttributeList(attrs);
+    free(attrs);
     free(wprog);
     free(cmd);
     free(env);
@@ -308,7 +332,7 @@ bool sh_proc_detach(const char *const *argv) {
     memset(&si, 0, sizeof si);
     si.cb = sizeof si;
     PROCESS_INFORMATION pi;
-    wchar_t *wprog = sh_wide_path(program), *cmd = command_line(argv);
+    wchar_t *wprog = process_path(program), *cmd = command_line(argv);
     const BOOL ok = CreateProcessW(wprog, cmd, NULL, NULL, FALSE, CREATE_NO_WINDOW | DETACHED_PROCESS, NULL, NULL, &si, &pi);
     free(wprog);
     free(cmd);
@@ -335,6 +359,51 @@ static void close_quietly(int *fd) {
     *fd = -1;
 }
 
+// pipes are close-on-exec, so a child started by another thread never inherits them (it would keep them open)
+static int make_pipe(int fds[2]) {
+#if defined(__linux__)
+    return pipe2(fds, O_CLOEXEC);
+#else
+    if (pipe(fds) != 0) return -1;
+    fcntl(fds[0], F_SETFD, FD_CLOEXEC);
+    fcntl(fds[1], F_SETFD, FD_CLOEXEC);
+    return 0;
+#endif
+}
+
+// glibc 2.29+, musl and macOS 10.15+ have it; newer macOS SDKs mark the _np name deprecated in favour of the POSIX 2024 one
+static void add_chdir(posix_spawn_file_actions_t *fa, const char *dir) {
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#endif
+    posix_spawn_file_actions_addchdir_np(fa, dir);
+#ifdef __clang__
+#pragma clang diagnostic pop
+#endif
+}
+
+// the current environment with `add` entries replacing variables of the same name
+static char **environment(const char *const *add) {
+    size_t n = 0, extra = 0;
+    while (environ[n]) ++n;
+    while (add && add[extra]) ++extra;
+    char **env = sh_xcalloc(n + extra + 1, sizeof *env);
+    size_t k = 0;
+    for (size_t i = 0; i < n; ++i) {
+        bool replaced = false;
+        for (size_t j = 0; j < extra && !replaced; ++j) {
+            const char *eq = strchr(add[j], '=');
+            const size_t len = eq ? (size_t)(eq - add[j]) + 1 : strlen(add[j]);
+            replaced = strncmp(environ[i], add[j], len) == 0;
+        }
+        if (!replaced) env[k++] = environ[i];
+    }
+    for (size_t j = 0; j < extra; ++j) env[k++] = (char *)add[j];
+    env[k] = NULL;
+    return env;
+}
+
 bool sh_proc_run(const char *const *argv, const sh_proc_opts *opts, sh_proc_result *r) {
     static const sh_proc_opts none = {0};
     const sh_proc_opts *o = opts ? opts : &none;
@@ -343,46 +412,45 @@ bool sh_proc_run(const char *const *argv, const sh_proc_opts *opts, sh_proc_resu
     sh_buf_append(&r->out, "", 0);
     sh_buf_append(&r->err, "", 0);
 
-    int in[2] = {-1, -1}, out[2] = {-1, -1}, err[2] = {-1, -1}, report[2] = {-1, -1};
-    if (pipe(in) || pipe(out) || pipe(err) || pipe(report)) {
+    int in[2] = {-1, -1}, out[2] = {-1, -1}, err[2] = {-1, -1};
+    if (make_pipe(in) || make_pipe(out) || make_pipe(err)) {
         close_quietly(&in[0]); close_quietly(&in[1]); close_quietly(&out[0]); close_quietly(&out[1]);
-        close_quietly(&err[0]); close_quietly(&err[1]); close_quietly(&report[0]); close_quietly(&report[1]);
+        close_quietly(&err[0]); close_quietly(&err[1]);
         return false;
     }
-    fcntl(report[1], F_SETFD, FD_CLOEXEC);  // closes on a successful exec; carries errno when exec fails
-
-    const pid_t pid = fork();
-    if (pid < 0) return false;
-    if (pid == 0) {
-        dup2(in[0], 0);
-        dup2(out[1], 1);
-        dup2(err[1], 2);
-        close(in[0]); close(in[1]); close(out[0]); close(out[1]); close(err[0]); close(err[1]); close(report[0]);
-        signal(SIGPIPE, SIG_DFL);
-        if (o->cwd && chdir(o->cwd) != 0) {
-            const int e = errno;
-            if (write(report[1], &e, sizeof e) < 0) {}
-            _exit(127);
-        }
-        for (size_t i = 0; o->env && o->env[i]; ++i) putenv((char *)o->env[i]);
-        if (strchr(argv[0], '/')) execv(argv[0], (char *const *)argv);
-        else execvp(argv[0], (char *const *)argv);
-        const int e = errno;
-        if (write(report[1], &e, sizeof e) < 0) {}
-        _exit(127);
-    }
+    posix_spawn_file_actions_t fa;
+    posix_spawn_file_actions_init(&fa);
+    posix_spawn_file_actions_adddup2(&fa, in[0], 0);
+    posix_spawn_file_actions_adddup2(&fa, out[1], 1);
+    posix_spawn_file_actions_adddup2(&fa, err[1], 2);
+    if (o->cwd) add_chdir(&fa, o->cwd);
+    posix_spawnattr_t attr;
+    posix_spawnattr_init(&attr);
+    sigset_t defaults, none_blocked;
+    sigemptyset(&defaults);
+    sigaddset(&defaults, SIGPIPE);  // the parent ignores SIGPIPE; the child gets the normal behaviour back
+    posix_spawnattr_setsigdefault(&attr, &defaults);
+    sigemptyset(&none_blocked);
+    posix_spawnattr_setsigmask(&attr, &none_blocked);
+    short flags = POSIX_SPAWN_SETSIGDEF | POSIX_SPAWN_SETSIGMASK;
+#ifdef __APPLE__
+    flags |= POSIX_SPAWN_CLOEXEC_DEFAULT;  // nothing but stdin, stdout and stderr reaches the child
+#endif
+    posix_spawnattr_setflags(&attr, flags);
+    char **env = environment(o->env);
+    pid_t pid = 0;
+    const int rc = strchr(argv[0], '/') ? posix_spawn(&pid, argv[0], &fa, &attr, (char *const *)argv, env)
+                                        : posix_spawnp(&pid, argv[0], &fa, &attr, (char *const *)argv, env);
+    free(env);
+    posix_spawnattr_destroy(&attr);
+    posix_spawn_file_actions_destroy(&fa);
     close(in[0]);
     close(out[1]);
     close(err[1]);
-    close(report[1]);
-    int exec_errno = 0;
-    const ssize_t got = read(report[0], &exec_errno, sizeof exec_errno);
-    close(report[0]);
-    if (got == (ssize_t)sizeof exec_errno) {  // exec failed: the program never ran
+    if (rc != 0) {  // the program could not be started
         close(in[1]);
         close(out[0]);
         close(err[0]);
-        waitpid(pid, NULL, 0);
         return false;
     }
     r->started = true;
@@ -437,8 +505,9 @@ bool sh_proc_run(const char *const *argv, const sh_proc_opts *opts, sh_proc_resu
     close_quietly(&out[0]);
     close_quietly(&err[0]);
     int status = 0;
-    while (waitpid(pid, &status, 0) < 0 && errno == EINTR) {}
-    if (WIFEXITED(status)) r->exit_code = WEXITSTATUS(status);
+    pid_t waited;
+    while ((waited = waitpid(pid, &status, 0)) < 0 && errno == EINTR) {}
+    if (waited == pid && WIFEXITED(status)) r->exit_code = WEXITSTATUS(status);  // else -1: never read an unknown status as 0
     return !r->timed_out && r->exit_code == 0;
 }
 

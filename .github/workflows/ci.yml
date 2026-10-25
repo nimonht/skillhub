@@ -151,8 +151,10 @@ jobs:
       - name: Build
         shell: cmd
         run: |
-          cmake -B build -G "NMake Makefiles" -DCMAKE_PREFIX_PATH="%QT_ROOT_DIR%" -DSKILLHUB_WERROR=ON
-          cmake --build build
+          rem Ninja keeps going after a failing file (-k 0), so one run lists every compiler error
+          where ninja >nul 2>&1 || choco install ninja --no-progress -y
+          cmake -B build -G Ninja -DCMAKE_PREFIX_PATH="%QT_ROOT_DIR%" -DSKILLHUB_WERROR=ON
+          cmake --build build -- -k 0
           dir build\*.exe
       - name: Version
         run: ./build/skillhub-cli.exe --version

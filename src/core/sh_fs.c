@@ -71,13 +71,21 @@ static DWORD attributes(const char *path) {
 
 // ---- reading and writing ----
 
+// Files are opened close-on-exec, so a git process another thread starts meanwhile never inherits them. macOS gets the
+// same from POSIX_SPAWN_CLOEXEC_DEFAULT in sh_proc; Windows passes an explicit handle list.
+#if defined(__linux__)
+#define FOPEN_CLOEXEC "e"
+#else
+#define FOPEN_CLOEXEC ""
+#endif
+
 bool sh_read_file(const char *path, size_t max, sh_buf *out) {
 #ifdef _WIN32
     wchar_t *w = sh_wide_path(path);
     FILE *f = _wfopen(w, L"rb");
     free(w);
 #else
-    FILE *f = fopen(path, "rb");
+    FILE *f = fopen(path, "rb" FOPEN_CLOEXEC);
 #endif
     if (!f) return false;
     char chunk[65536];
@@ -103,7 +111,7 @@ bool sh_write_file(const char *path, const void *data, size_t n) {
     FILE *f = _wfopen(w, L"wb");
     free(w);
 #else
-    FILE *f = fopen(path, "wb");
+    FILE *f = fopen(path, "wb" FOPEN_CLOEXEC);
 #endif
     if (!f) return false;
     const bool ok = fwrite(data, 1, n, f) == n;
@@ -165,7 +173,7 @@ bool sh_write_atomic(const char *path_in, const void *data, size_t n) {
     free(wt);
     free(wp);
 #else
-    const int fd = open(tmp, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    const int fd = open(tmp, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
     if (fd >= 0) {
         const char *p = data;
         size_t left = n;
@@ -480,14 +488,14 @@ bool sh_copy_file(const char *from, const char *to) {
     free(wt);
     return ok;
 #else
-    const int in = open(from, O_RDONLY);
+    const int in = open(from, O_RDONLY | O_CLOEXEC);
     if (in < 0) return false;
     struct stat st;
     if (fstat(in, &st) != 0) {
         close(in);
         return false;
     }
-    const int out = open(to, O_WRONLY | O_CREAT | O_EXCL, st.st_mode & 07777);
+    const int out = open(to, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, st.st_mode & 07777);
     if (out < 0) {
         close(in);
         return false;

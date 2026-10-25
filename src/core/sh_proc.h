@@ -1,5 +1,6 @@
-// Running other programs (git, systemctl, launchctl, schtasks, notify-send) and finding them. This is the synchronous
-// runner used by the command line; the parallel engine starts its git processes through libuv instead.
+// Running other programs (git, systemctl, launchctl, schtasks, notify-send) and finding them. sh_proc_run is safe to call
+// from several threads at once: the parallel engine runs one git process per worker thread. Each child gets only its own
+// stdin, stdout and stderr (close-on-exec pipes and posix_spawn on POSIX, an explicit handle list on Windows).
 #pragma once
 
 #include <stdbool.h>
@@ -32,7 +33,7 @@ typedef struct {
 bool sh_proc_run(const char *const *argv, const sh_proc_opts *opts, sh_proc_result *r);
 void sh_proc_result_free(sh_proc_result *r);
 
-// Starts `argv` without waiting for it (desktop notifications).
+// Starts `argv` without waiting for it (desktop notifications). Call it from the main thread only: it forks on POSIX.
 bool sh_proc_detach(const char *const *argv);
 
 // Like Qt's QStandardPaths::findExecutable(name, dirs): the first executable `name` in `dirs` (PATH when dirs is NULL);
