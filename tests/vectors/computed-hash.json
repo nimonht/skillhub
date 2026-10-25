@@ -1,0 +1,349 @@
+{
+  "generatedBy": "node v26.12.1, ICU 78.3, locale en-US",
+  "algorithm": "sha256 over (relative path, then content) for each regular file, sorted with localeCompare; .git and node_modules folders skipped",
+  "cases": [
+    {
+      "name": "ascii-case",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "content": "content of SKILL.md\n"
+        },
+        {
+          "path": "b.md",
+          "content": "content of b.md\n"
+        },
+        {
+          "path": "A.md",
+          "content": "content of A.md\n"
+        },
+        {
+          "path": "a.md",
+          "content": "content of a.md\n"
+        },
+        {
+          "path": "B.md",
+          "content": "content of B.md\n"
+        },
+        {
+          "path": "README",
+          "content": "content of README\n"
+        },
+        {
+          "path": "readme",
+          "content": "content of readme\n"
+        }
+      ],
+      "skipped": [],
+      "order": [
+        "a.md",
+        "A.md",
+        "b.md",
+        "B.md",
+        "readme",
+        "README",
+        "SKILL.md"
+      ],
+      "computedHash": "4991caa42429a83de7c70216e673ec4a0e14db6064eb1df2954bf041b7fdc275"
+    },
+    {
+      "name": "punctuation",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "content": "content of SKILL.md\n"
+        },
+        {
+          "path": "_x.md",
+          "content": "content of _x.md\n"
+        },
+        {
+          "path": "-y.md",
+          "content": "content of -y.md\n"
+        },
+        {
+          "path": ".z",
+          "content": "content of .z\n"
+        },
+        {
+          "path": "x y.md",
+          "content": "content of x y.md\n"
+        },
+        {
+          "path": "x_y.md",
+          "content": "content of x_y.md\n"
+        },
+        {
+          "path": "x-y.md",
+          "content": "content of x-y.md\n"
+        },
+        {
+          "path": "x.y.md",
+          "content": "content of x.y.md\n"
+        },
+        {
+          "path": "x~y.md",
+          "content": "content of x~y.md\n"
+        },
+        {
+          "path": "x+y.md",
+          "content": "content of x+y.md\n"
+        },
+        {
+          "path": "#a",
+          "content": "content of #a\n"
+        },
+        {
+          "path": "@b",
+          "content": "content of @b\n"
+        }
+      ],
+      "skipped": [],
+      "order": [
+        "_x.md",
+        "-y.md",
+        ".z",
+        "@b",
+        "#a",
+        "SKILL.md",
+        "x y.md",
+        "x_y.md",
+        "x-y.md",
+        "x.y.md",
+        "x+y.md",
+        "x~y.md"
+      ],
+      "computedHash": "060b5a3bb35126729ce30b5e5f55202eb87aa6f905bfdaab869e805172e3106e"
+    },
+    {
+      "name": "digits",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "content": "content of SKILL.md\n"
+        },
+        {
+          "path": "10.md",
+          "content": "content of 10.md\n"
+        },
+        {
+          "path": "9.md",
+          "content": "content of 9.md\n"
+        },
+        {
+          "path": "1.md",
+          "content": "content of 1.md\n"
+        },
+        {
+          "path": "a1.md",
+          "content": "content of a1.md\n"
+        },
+        {
+          "path": "a10.md",
+          "content": "content of a10.md\n"
+        },
+        {
+          "path": "a2.md",
+          "content": "content of a2.md\n"
+        },
+        {
+          "path": "01.md",
+          "content": "content of 01.md\n"
+        }
+      ],
+      "skipped": [],
+      "order": [
+        "01.md",
+        "1.md",
+        "10.md",
+        "9.md",
+        "a1.md",
+        "a10.md",
+        "a2.md",
+        "SKILL.md"
+      ],
+      "computedHash": "33c018eda3a934f45635561e484c2d0533ea3e8f77b8fd259e4cfc3a8fd82312"
+    },
+    {
+      "name": "nested",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "content": "content of SKILL.md\n"
+        },
+        {
+          "path": "sub/Z.md",
+          "content": "content of sub/Z.md\n"
+        },
+        {
+          "path": "sub/y.md",
+          "content": "content of sub/y.md\n"
+        },
+        {
+          "path": "sub-dir/a.md",
+          "content": "content of sub-dir/a.md\n"
+        },
+        {
+          "path": "sub.md",
+          "content": "content of sub.md\n"
+        },
+        {
+          "path": "Sub/a.md",
+          "content": "content of Sub/a.md\n"
+        },
+        {
+          "path": "subz/a.md",
+          "content": "content of subz/a.md\n"
+        },
+        {
+          "path": "sub/deeper/x.md",
+          "content": "content of sub/deeper/x.md\n"
+        }
+      ],
+      "skipped": [],
+      "order": [
+        "SKILL.md",
+        "sub-dir/a.md",
+        "sub.md",
+        "Sub/a.md",
+        "sub/deeper/x.md",
+        "sub/y.md",
+        "sub/Z.md",
+        "subz/a.md"
+      ],
+      "computedHash": "ff21f6d3c71ecdc7e2d204b736cc7430ba1cb04bfad405f301623b31bc05c8ba"
+    },
+    {
+      "name": "skipped",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "content": "content of SKILL.md\n"
+        },
+        {
+          "path": "scripts/run.sh",
+          "content": "content of scripts/run.sh\n"
+        }
+      ],
+      "skipped": [
+        ".git/HEAD",
+        "node_modules/x/index.js",
+        "deep/node_modules/y.js",
+        "deep/.git/config"
+      ],
+      "order": [
+        "scripts/run.sh",
+        "SKILL.md"
+      ],
+      "computedHash": "927a21d9111c30de3103f347bd874e906e6bf88eecfea8a1d702e3c639c0bf0b"
+    },
+    {
+      "name": "unicode",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "content": "content of SKILL.md\n"
+        },
+        {
+          "path": "ä.md",
+          "content": "content of ä.md\n"
+        },
+        {
+          "path": "z.md",
+          "content": "content of z.md\n"
+        },
+        {
+          "path": "é.md",
+          "content": "content of é.md\n"
+        },
+        {
+          "path": "e.md",
+          "content": "content of e.md\n"
+        },
+        {
+          "path": "E.md",
+          "content": "content of E.md\n"
+        },
+        {
+          "path": "Ω.md",
+          "content": "content of Ω.md\n"
+        },
+        {
+          "path": "日本.md",
+          "content": "content of 日本.md\n"
+        },
+        {
+          "path": "ß.md",
+          "content": "content of ß.md\n"
+        },
+        {
+          "path": "ss.md",
+          "content": "content of ss.md\n"
+        }
+      ],
+      "skipped": [],
+      "order": [
+        "ä.md",
+        "e.md",
+        "E.md",
+        "é.md",
+        "SKILL.md",
+        "ss.md",
+        "ß.md",
+        "z.md",
+        "Ω.md",
+        "日本.md"
+      ],
+      "computedHash": "a0237bbcd24e10db1443062522524790feaeb2b4501664c91134fd493c6448f5"
+    },
+    {
+      "name": "realistic",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "content": "content of SKILL.md\n"
+        },
+        {
+          "path": "references/api.md",
+          "content": "content of references/api.md\n"
+        },
+        {
+          "path": "references/README.md",
+          "content": "content of references/README.md\n"
+        },
+        {
+          "path": "scripts/install.sh",
+          "content": "content of scripts/install.sh\n"
+        },
+        {
+          "path": "scripts/Install.ps1",
+          "content": "content of scripts/Install.ps1\n"
+        },
+        {
+          "path": "assets/logo.svg",
+          "content": "content of assets/logo.svg\n"
+        },
+        {
+          "path": "LICENSE.txt",
+          "content": "content of LICENSE.txt\n"
+        },
+        {
+          "path": "examples/basic/index.html",
+          "content": "content of examples/basic/index.html\n"
+        }
+      ],
+      "skipped": [],
+      "order": [
+        "assets/logo.svg",
+        "examples/basic/index.html",
+        "LICENSE.txt",
+        "references/api.md",
+        "references/README.md",
+        "scripts/Install.ps1",
+        "scripts/install.sh",
+        "SKILL.md"
+      ],
+      "computedHash": "0efa9c2f1b440fba3df48be88c8917fba2f1276937742a10ae8d6fc14a1fa737"
+    }
+  ]
+}

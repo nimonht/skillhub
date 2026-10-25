@@ -1,12 +1,8 @@
-# qmake / build output
+# CMake build output
 build/
 build-*/
-Makefile*
-.qmake.stash
-*.o
-moc_*
-qrc_*.cpp
-/skillhub
+CMakeUserPresets.json
+compile_commands.json
 # editors
 .vscode/
 .idea/
@@ -21,5 +17,3 @@ dist/
 *.deb
 *.rpm
 *.pkg.tar.*
-release/
-debug/

@@ -7,6 +7,7 @@ export LC_ALL=C.UTF-8 DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq python3 git /pkg/skillhub_*.deb >/dev/null
 skillhub --version
+test -x "$(dirname "$(command -v skillhub)")/skillhub-gui"   # the window sits next to the command line
 mkdir -p -m 700 /tmp/xdg
 export XDG_RUNTIME_DIR=/tmp/xdg
 python3 -I /src/tests/portable_smoke.py "$(command -v skillhub)"

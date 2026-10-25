@@ -3,6 +3,7 @@ Section: devel
 Priority: optional
 Maintainer: nimonht <181256175+nimonht@users.noreply.github.com>
 Build-Depends: debhelper-compat (= 13),
+               cmake,
                git,
                python3,
                qt6-base-dev,
@@ -29,5 +30,5 @@ Description: one skills folder for every coding agent
  shared folder of agent skills for all of them, installs skills from GitHub,
  keeps them up to date and moves the whole set to another computer with one file.
  .
- One native Qt 6 binary: a window when started without arguments, a command line
- otherwise.
+ A small command line written in C (skillhub) and a native Qt 6 window
+ (skillhub-gui), which `skillhub` starts when run without a command.

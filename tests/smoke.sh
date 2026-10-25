@@ -7,7 +7,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 python3 -I "$HERE/catalog-check.py" || exit 1
 H=$(mktemp -d)
 trap 'rm -rf "$H"' EXIT
-export HOME="$H" XDG_CACHE_HOME="$H/.cache" XDG_CONFIG_HOME="$H/.config"
+export HOME="$H" XDG_CACHE_HOME="$H/.cache" XDG_CONFIG_HOME="$H/.config" XDG_STATE_HOME="$H/.local/state" XDG_DATA_HOME="$H/.local/share"
 # stub systemctl: the test must never talk to the real user manager
 mkdir -p "$H/stubbin"
 printf '#!/bin/sh\necho "$*" >> "%s/systemctl.log"\nexit 0\n' "$H" > "$H/stubbin/systemctl"
@@ -118,7 +118,7 @@ PY
 python3 -c "import json,sys; assert json.load(open('$H/nolocal.json'))['skills'] == []" || fail "--no-local still exported local skills"
 
 H2=$(mktemp -d); mkdir -p "$H2/.claude"
-second() { HOME="$H2" XDG_CACHE_HOME="$H2/.cache" XDG_CONFIG_HOME="$H2/.config" "$@"; }
+second() { HOME="$H2" XDG_CACHE_HOME="$H2/.cache" XDG_CONFIG_HOME="$H2/.config" XDG_STATE_HOME="$H2/.local/state" XDG_DATA_HOME="$H2/.local/share" "$@"; }
 second "$BIN" import "$EXPORT" >/dev/null 2>&1 && fail "import without --yes and without a terminal must refuse"
 second "$BIN" import "$EXPORT" --yes >/dev/null
 cmp "$H/.agents/skills/alpha/SKILL.md" "$H2/.agents/skills/alpha/SKILL.md" || fail "imported skill differs"
@@ -150,6 +150,9 @@ rm -rf "$H2"
 IB="$H/.local/bin/skillhub"; HC="$H/.local/share/icons/hicolor"
 mkdir -p "$H/.local/bin" "$H/.local/share/applications" "$HC/48x48/apps" "$HC/scalable/apps" "$H/.config/systemd/user" "$XDG_CACHE_HOME/skillhub/repos/x"
 cp "$BIN" "$IB"
+# until the C core lands, the command line hands 1.x commands to the window's program next to it
+GUI="$(dirname "$BIN")/skillhub-gui"
+[ -x "$GUI" ] && cp "$GUI" "$H/.local/bin/skillhub-gui"
 touch "$H/.local/share/applications/skillhub.desktop" "$H/.local/share/applications/other.desktop" \
       "$HC/48x48/apps/skillhub.png" "$HC/scalable/apps/skillhub.svg" "$HC/48x48/apps/other-app.png" \
       "$H/.config/systemd/user/skillhub-update.timer" "$H/.config/systemd/user/skillhub-update.service" \
@@ -157,7 +160,7 @@ touch "$H/.local/share/applications/skillhub.desktop" "$H/.local/share/applicati
 "$IB" uninstall --dry-run >/dev/null
 [ -x "$IB" ] && [ -d "$XDG_CACHE_HOME/skillhub" ] && [ -f "$H/.config/systemd/user/skillhub-update.timer" ] || fail "uninstall --dry-run removed something"
 "$IB" uninstall --yes >/dev/null
-for f in "$IB" "$H/.local/share/applications/skillhub.desktop" "$HC/48x48/apps/skillhub.png" "$HC/scalable/apps/skillhub.svg" \
+for f in "$IB" "$H/.local/bin/skillhub-gui" "$H/.local/share/applications/skillhub.desktop" "$HC/48x48/apps/skillhub.png" "$HC/scalable/apps/skillhub.svg" \
          "$H/.config/systemd/user/skillhub-update.timer" "$H/.config/systemd/user/skillhub-update.service" \
          "$H/.config/systemd/user/skillhub-adopt.path" "$H/.config/systemd/user/skillhub-adopt.service" "$XDG_CACHE_HOME/skillhub"; do
   [ ! -e "$f" ] || fail "uninstall left $f"

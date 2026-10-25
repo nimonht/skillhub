@@ -19,8 +19,10 @@ os.makedirs(OUT, exist_ok=True)
 
 home = os.path.realpath(tempfile.mkdtemp(prefix="skillhub-gui-"))
 env = dict(os.environ, HOME=home, USERPROFILE=home, SKILLHUB_HOME=home, XDG_CONFIG_HOME=home + "/.config", XDG_CACHE_HOME=home + "/.cache",
+           XDG_STATE_HOME=home + "/.local/state", XDG_DATA_HOME=home + "/.local/share",
            SKILLHUB_CACHE=home + "/cache", SKILLHUB_CONFIG=home + "/config", SKILLHUB_BIN_PATH=home + "/none",
-           QT_QPA_PLATFORM=os.environ.get("SKILLHUB_TEST_PLATFORM", "offscreen"), QT_QUICK_BACKEND="software", SKILLHUB_REDUCE_MOTION="1")
+           QT_QPA_PLATFORM=os.environ.get("SKILLHUB_TEST_PLATFORM", "offscreen"), QT_QUICK_BACKEND="software", SKILLHUB_REDUCE_MOTION="1",
+           QT_FORCE_STDERR_LOGGING="1")
 
 
 def fail(msg):

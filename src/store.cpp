@@ -799,9 +799,12 @@ bool Store::track(const QString &name, const QString &repoInput, const QString &
 
 static QString unitDir() { return platform::homeDir() + QStringLiteral("/.config/systemd/user"); }
 
+// The units run the command line, never the window: it sits next to skillhub-gui and loads no Qt.
 static QString exeForUnits() {
     const QString installed = platform::homeDir() + QStringLiteral("/.local/bin/skillhub");
-    return QFileInfo::exists(installed) ? QStringLiteral("%h/.local/bin/skillhub") : QCoreApplication::applicationFilePath();
+    if (QFileInfo::exists(installed)) return QStringLiteral("%h/.local/bin/skillhub");
+    const QString cli = QCoreApplication::applicationDirPath() + QStringLiteral("/skillhub");
+    return QFileInfo::exists(cli) ? cli : QCoreApplication::applicationFilePath();
 }
 
 QString Store::unitState(const QString &unit) const {
@@ -919,7 +922,8 @@ bool Store::uninstall(bool dryRun, bool keepCache) {
         prefixes.insert(p.absolutePath());
     }
     for (const QString &prefix : prefixes) {
-        QStringList files{prefix + QStringLiteral("/bin/skillhub"), prefix + QStringLiteral("/share/applications/skillhub.desktop"),
+        QStringList files{prefix + QStringLiteral("/bin/skillhub"), prefix + QStringLiteral("/bin/skillhub-gui"),
+                          prefix + QStringLiteral("/share/applications/skillhub.desktop"),
                           prefix + QStringLiteral("/share/metainfo/io.github.nimonht.skillhub.metainfo.xml"),
                           prefix + QStringLiteral("/share/icons/hicolor/scalable/apps/skillhub.svg")};
         for (int sz : {16, 24, 32, 48, 64, 128, 256, 512})

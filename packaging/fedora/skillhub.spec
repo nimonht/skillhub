@@ -6,6 +6,8 @@ License:        MIT AND OFL-1.1 AND CC0-1.0
 URL:            https://github.com/nimonht/skillhub
 Source0:        %{url}/archive/refs/tags/v%{version}/%{name}-%{version}.tar.gz
 
+BuildRequires:  cmake
+BuildRequires:  gcc
 BuildRequires:  gcc-c++
 BuildRequires:  make
 BuildRequires:  git-core
@@ -24,22 +26,22 @@ Codex, Cursor, OpenCode, Gemini CLI, Antigravity, Zed and many more), keeps one
 shared folder of agent skills for all of them, installs skills from GitHub,
 keeps them up to date and moves the whole set to another computer with one file.
 
-One native Qt 6 binary: a window when started without arguments, a command line
-otherwise.
+A small command line written in C (skillhub) and a native Qt 6 window
+(skillhub-gui), which `skillhub` starts when run without a command.
 
 %prep
 %autosetup -n %{name}-%{version}
 
 %build
-%{qmake_qt6} PREFIX=%{_prefix} CONFIG+=release skillhub.pro
-%make_build
+%cmake -DCMAKE_BUILD_TYPE=Release
+%cmake_build
 
 %install
-make install INSTALL_ROOT=%{buildroot}
+%cmake_install
 
 %check
 python3 -I tests/catalog-check.py
-python3 -I tests/portable_smoke.py ./skillhub
+python3 -I tests/portable_smoke.py %{_vpath_builddir}/skillhub
 desktop-file-validate %{buildroot}%{_datadir}/applications/skillhub.desktop
 appstream-util validate-relax --nonet %{buildroot}%{_metainfodir}/io.github.nimonht.skillhub.metainfo.xml
 
@@ -47,6 +49,7 @@ appstream-util validate-relax --nonet %{buildroot}%{_metainfodir}/io.github.nimo
 %license LICENSE NOTICE.md data/LICENSE-vercel-labs-skills data/LICENSE-lobe-icons data/LICENSE-simple-icons fonts/OFL.txt
 %doc README.md SECURITY.md
 %{_bindir}/skillhub
+%{_bindir}/skillhub-gui
 %{_datadir}/applications/skillhub.desktop
 %{_metainfodir}/io.github.nimonht.skillhub.metainfo.xml
 %{_datadir}/icons/hicolor/*/apps/skillhub.png

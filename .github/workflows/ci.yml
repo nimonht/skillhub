@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, v2]
   pull_request:
 
 env:
@@ -14,7 +14,9 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - name: Qt (Ubuntu 24.04 ships Qt 6.4, older than the app needs)
+        with:
+          fetch-depth: 0   # the v1.0.1 tag: the reference for the differential test
+      - name: Qt (newer than the Qt 6.4 that Ubuntu 24.04 ships; that one is tested in its own job)
         uses: jurplel/install-qt-action@v4
         with:
           version: ${{ env.QT_VERSION }}
@@ -22,12 +24,11 @@ jobs:
       - name: System libraries
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends build-essential git libgl1-mesa-dev libxkbcommon-dev libegl1 libfontconfig1 fonts-dejavu-core
+          sudo apt-get install -y --no-install-recommends build-essential cmake git libgl1-mesa-dev libxkbcommon-dev libegl1 libfontconfig1 fonts-dejavu-core
       - name: Build
         run: |
-          mkdir build && cd build
-          qmake ../skillhub.pro
-          make -j"$(nproc)"
+          cmake -B build -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR" -DSKILLHUB_WERROR=ON
+          cmake --build build -j"$(nproc)"
       - name: Version
         run: ./build/skillhub --version
       - name: Design token contrast (WCAG)
@@ -37,14 +38,44 @@ jobs:
       - name: Portable CLI test (detection, links, git install/update, export/import)
         run: python3 tests/portable_smoke.py build/skillhub
       - name: Install / uninstall round trip (must not remove shared directories)
-        run: sh tests/install-roundtrip.sh
+        run: CMAKE_PREFIX_PATH="$QT_ROOT_DIR" sh tests/install-roundtrip.sh
       - name: GUI renders headless (both themes, three sizes) with no QML errors
         run: sh tests/gui-smoke.sh build/skillhub "$RUNNER_TEMP/screens"
+      - name: Skill Hub 1.0.1, the reference for the differential test
+        run: |
+          git worktree add "$RUNNER_TEMP/ref" v1.0.1
+          mkdir "$RUNNER_TEMP/ref/build" && cd "$RUNNER_TEMP/ref/build"
+          qmake ../skillhub.pro && make -j"$(nproc)"
+      - name: Differential test against 1.0.1 (output, exit codes, files left behind)
+        run: python3 tests/diff_vs_1_0.py "$RUNNER_TEMP/ref/build/skillhub" build/skillhub
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: gui-screenshots
           path: ${{ runner.temp }}/screens
+
+  qt64:
+    name: Debian 12 (Qt 6.4, the oldest supported)
+    runs-on: ubuntu-24.04
+    container: debian:bookworm
+    steps:
+      - name: Build tools and Qt 6.4 from Debian
+        run: |
+          apt-get update -qq
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends build-essential cmake git python3 ca-certificates \
+            qt6-base-dev qt6-declarative-dev libgl-dev qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-templates \
+            qml6-module-qtquick-shapes qml6-module-qtquick-window qml6-module-qtqml-workerscript qml6-module-qtquick-dialogs fonts-dejavu-core
+      - uses: actions/checkout@v4
+      - name: Build
+        run: |
+          cmake -B build -DSKILLHUB_WERROR=ON
+          cmake --build build -j"$(nproc)"
+      - name: Smoke test
+        run: sh tests/smoke.sh build/skillhub
+      - name: Portable CLI test
+        run: python3 tests/portable_smoke.py build/skillhub
+      - name: GUI renders headless on Qt 6.4
+        run: sh tests/gui-smoke.sh build/skillhub "$RUNNER_TEMP/screens-qt64"
 
   macos:
     name: macOS (universal)
@@ -57,16 +88,16 @@ jobs:
           cache: true
       - name: Build
         run: |
-          mkdir build && cd build
-          qmake ../skillhub.pro CONFIG+=release
-          make -j"$(sysctl -n hw.ncpu)"
-          lipo -archs skillhub.app/Contents/MacOS/skillhub
+          cmake -B build -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR" -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64" -DSKILLHUB_WERROR=ON
+          cmake --build build -j"$(sysctl -n hw.ncpu)"
+          lipo -archs build/skillhub-gui.app/Contents/MacOS/skillhub-gui
+          lipo -archs build/skillhub-gui.app/Contents/MacOS/skillhub
       - name: Version
-        run: ./build/skillhub.app/Contents/MacOS/skillhub --version
+        run: ./build/skillhub-gui.app/Contents/MacOS/skillhub --version
       - name: Portable CLI test
-        run: python3 tests/portable_smoke.py build/skillhub.app/Contents/MacOS/skillhub
+        run: python3 tests/portable_smoke.py build/skillhub-gui.app/Contents/MacOS/skillhub
       - name: GUI renders headless
-        run: python3 tests/gui_launch.py build/skillhub.app/Contents/MacOS/skillhub "$RUNNER_TEMP/screens"
+        run: python3 tests/gui_launch.py build/skillhub-gui.app/Contents/MacOS/skillhub "$RUNNER_TEMP/screens"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -87,30 +118,23 @@ jobs:
       - name: Build
         shell: cmd
         run: |
-          mkdir build
-          cd build
-          qmake ..\skillhub.pro CONFIG+=release
-          nmake
-          dir release
+          cmake -B build -G "NMake Makefiles" -DCMAKE_PREFIX_PATH="%QT_ROOT_DIR%" -DSKILLHUB_WERROR=ON
+          cmake --build build
+          dir build\*.exe
       - name: Version
-        run: ./build/release/skillhub.exe --version
+        run: ./build/skillhub-cli.exe --version
         shell: bash
-      - name: Console copy for the command line (the window build has no console)
-        shell: bash
-        run: |
-          cp build/release/skillhub.exe build/release/skillhub-cli.exe
-          python3 tools/exe-subsystem.py build/release/skillhub-cli.exe console
       - name: Portable CLI test
         shell: bash
-        run: python3 tests/portable_smoke.py build/release/skillhub-cli.exe
+        run: python3 tests/portable_smoke.py build/skillhub-cli.exe
       - name: Portable CLI test again, as an account that may not create symlinks (junction fallback)
         shell: bash
         env:
           SKILLHUB_NO_SYMLINKS: "1"
-        run: python3 tests/portable_smoke.py build/release/skillhub-cli.exe
+        run: python3 tests/portable_smoke.py build/skillhub-cli.exe
       - name: GUI renders headless
         shell: bash
-        run: python3 tests/gui_launch.py build/release/skillhub-cli.exe "$RUNNER_TEMP/screens"
+        run: python3 tests/gui_launch.py build/skillhub-cli.exe "$RUNNER_TEMP/screens"
       - uses: actions/upload-artifact@v4
         if: always()
         with:

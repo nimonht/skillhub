@@ -8,7 +8,9 @@ OUT=${2:-$(mktemp -d)}
 mkdir -p "$OUT"
 H=$(mktemp -d)
 trap 'rm -rf "$H"' EXIT
-export HOME="$H" XDG_CACHE_HOME="$H/.cache" XDG_CONFIG_HOME="$H/.config" QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software
+export HOME="$H" XDG_CACHE_HOME="$H/.cache" XDG_CONFIG_HOME="$H/.config" XDG_STATE_HOME="$H/.local/state" XDG_DATA_HOME="$H/.local/share"
+# QT_FORCE_STDERR_LOGGING: with stderr not a terminal, Qt may log to journald instead, and QML errors would go unseen
+export QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software QT_FORCE_STDERR_LOGGING=1
 mkdir -p "$H/provbin"
 for c in codex agy; do printf '#!/bin/sh\nexit 0\n' > "$H/provbin/$c"; chmod +x "$H/provbin/$c"; done
 export SKILLHUB_BIN_PATH="$H/provbin"   # detect agents from this folder only
