@@ -826,6 +826,7 @@ int main(int argc, char **argv) {
     }
     if (argc < 2 || strcmp(argv[1], "gui") == 0) return start_gui(argc, argv);
     signal(SIGPIPE, SIG_IGN);  // a program that stops reading its input must not end this one
+    signal(SIGCHLD, SIG_DFL);  // an ignored SIGCHLD is inherited through exec, and waitpid could then never see an exit code
     return run_cli(argc, argv);
 }
 

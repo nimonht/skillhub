@@ -98,6 +98,7 @@ add_library(skillhub_core STATIC
     src/core/sh_proc.c src/core/sh_proc.h
     src/core/sh_store.c src/core/sh_store.h
     src/core/sh_str.c src/core/sh_str.h
+    src/core/sh_thread.c src/core/sh_thread.h
     src/core/sh_time.c src/core/sh_time.h
     src/core/sh_transfer.c
     src/core/sh_units.c
@@ -106,7 +107,8 @@ add_library(skillhub_core STATIC
 target_include_directories(skillhub_core PUBLIC src/core)
 target_compile_options(skillhub_core PRIVATE ${SKILLHUB_C_WARNINGS})
 target_compile_definitions(skillhub_core PUBLIC SKILLHUB_VERSION="${SKILLHUB_VERSION}")
-target_link_libraries(skillhub_core PUBLIC skillhub_yyjson)
+find_package(Threads REQUIRED)
+target_link_libraries(skillhub_core PUBLIC skillhub_yyjson Threads::Threads)
 if(WIN32)
     target_link_libraries(skillhub_core PUBLIC shell32 ole32 uuid)
 endif()
