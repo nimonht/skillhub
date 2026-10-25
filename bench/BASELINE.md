@@ -61,4 +61,19 @@ Where the time goes now:
   Before that table, `list` took 1.3 s at 10,000 skills and `install` 8.7 s.
 - **Of the 1.6 s check, about 0.35 s is reading the shared folder** (every SKILL.md and every link), as `list` does.
 
+## The window's backend (milestone M1c)
+
+`python3 bench/bench_serve.py build/skillhub --repos 500 --skills 20`, same machine and fixture: every skill installed
+first with one `skillhub add`, then `skillhub serve --stdio` driven over its pipes the way the window drives it.
+
+| 10,000 skills | Time | Data to the window |
+|---|---:|---:|
+| First snapshot, 10 pages of 1,000 | 0.49 s | 4.7 MB |
+| `skills.check`, nothing changed upstream | 1.07 s | delta 4.7 MB: every row goes from tracked to current |
+| `skills.check`, 10 % changed | 2.72 s | delta 0.5 MB |
+| `skills.update`, the 1,000 available | 1.69 s | delta 0.5 MB |
+
+Backend peak RSS over the whole run: 69 MB (target: under 100 MB). The first check after start is the largest delta the
+window ever applies; the window's 20 ms stall budget (M2) is measured against that one.
+
 A small run against real GitHub repositories and a Windows run are still to be recorded.

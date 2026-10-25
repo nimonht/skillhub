@@ -1,18 +1,28 @@
 # Contributing
 
 Thanks for helping. The project is small on purpose: a command line in C (`skillhub`) and a Qt 6 / C++17 window (`skillhub-gui`).
-Version 2.0 is under way on the `v2` branch: the core moves to C and the window talks to it over a pipe
-(see `docs/formats.md` and `docs/protocol.md`). Until that lands, `skillhub` hands most commands to `skillhub-gui`.
+Version 2.0 is under way on the `v2` branch: the core is C, and the window is moving to talk to it over a pipe through
+`skillhub serve --stdio` (see `docs/formats.md` and `docs/protocol.md`). Until it does, the window still carries the 1.x
+C++ core.
 
 ## Build and test
 
 ```sh
 cmake -B build && cmake --build build -j"$(nproc)"
+ctest --test-dir build                        # C unit tests (tests/unit)
 sh tests/smoke.sh build/skillhub              # offline: adopt / relink / doctor / remove / uninstall (stubbed systemctl)
+python3 tests/portable_smoke.py build/skillhub  # every platform: detection, links, git install / update, export / import
+python3 tests/rpc_smoke.py build/skillhub     # the window's backend: skillhub serve --stdio
+python3 tests/diff_vs_1_0.py OLD/skillhub build/skillhub   # same output, exit codes and files as Skill Hub 1.0.1
 sh tests/install-roundtrip.sh                 # cmake --install / uninstall into a fake root; shared dirs must survive
 python3 tests/contrast.py                     # WCAG gate on the tokens in qml/Theme.qml
 sh tests/gui-smoke.sh build/skillhub out      # headless render of both themes at three sizes; fails on QML errors
 ```
+
+The C core also builds with sanitizers (`CC=clang cmake -B build-asan -DSKILLHUB_GUI=OFF -DSKILLHUB_SANITIZE=ON`; ThreadSanitizer
+through `-DCMAKE_C_FLAGS=-fsanitize=thread -DCMAKE_EXE_LINKER_FLAGS=-fsanitize=thread`) and with libFuzzer targets for every
+parser of untrusted input (`-DSKILLHUB_FUZZ=ON`, see `tests/fuzz`). `bench/bench.py` and `bench/bench_serve.py` measure the
+command line and the backend against `bench/BASELINE.md`.
 
 Look at the UI without a display: `QT_QPA_PLATFORM=offscreen build/skillhub gui --shot out.png --theme light --size 1000x640
 --select NAME` (also `--agent ID`, `--mode add`, `--filter problems`, `--search TEXT`, `--discover OWNER/REPO`, `--console`).
@@ -22,7 +32,8 @@ The software renderer used by `offscreen` is a little rougher than the GPU one; 
 
 | Path | What |
 |---|---|
-| `src/cli/`, `src/core/` | the C command line and the C core (2.0); `skillhub` forwards to `skillhub-gui` until the core lands |
+| `src/cli/`, `src/core/` | the C command line and the C core (2.0): store, lock file, parallel git engine (`sh_engine`, `sh_git`), JSON-RPC framing |
+| `src/serve/` | `skillhub serve --stdio`, the window's backend: the libuv loop, jobs, state and deltas, file watchers |
 | `src/store.*` | scan, adopt, relink, lock file, git updates, systemd units, uninstall; QtCore only |
 | `src/providers.cpp` | which coding agents exist and are managed: detection, user overrides, custom agents, config wiring |
 | `src/transfer.cpp` | export / import of the skill set (strict validation: an import file is untrusted) |
