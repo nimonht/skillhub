@@ -96,7 +96,7 @@ static void usage(void) {
         "  skillhub adopt [--notify]       move stray skills from agent dirs into ~/.agents/skills\n"
         "  skillhub check                  fetch upstream, show available updates (exit 10 if any)\n"
         "  skillhub update [--all|NAME...] [--auto] [--notify]\n"
-        "  skillhub add OWNER/REPO [--skill a,b | --all]\n"
+        "  skillhub add OWNER/REPO... [--skill a,b | --all]\n"
         "  skillhub remove NAME\n"
         "  skillhub track NAME OWNER/REPO [PATH]   set the upstream of a local skill\n"
         "  skillhub autoupdate on|off|status       daily update timer (Linux: systemd user timer)\n"
@@ -548,44 +548,60 @@ static int cmd_check_update(sh_store *st, const args_t *a, bool do_update) {
     return rc;
 }
 
+// skillhub add OWNER/REPO... [--skill a,b | --all]: one repository behaves exactly as in 1.x; several are read and installed
+// in one run (the engine fetches them in parallel)
 static int cmd_add(sh_store *st, const args_t *a) {
-    if (a->n == 0) {
+    sh_strv repos = SH_STRV_INIT;
+    for (int i = 0; i < a->n; ++i) {
+        if (strcmp(a->v[i], "--skill") == 0) {
+            ++i;  // its value is not a repository
+            continue;
+        }
+        if (!sh_starts_with(a->v[i], "--")) sh_strv_push(&repos, a->v[i]);
+    }
+    if (repos.len == 0) {
         usage();
+        sh_strv_free(&repos);
         return 2;
     }
-    char *e = NULL;
-    sh_candidates cands;
-    sh_store_discover(st, a->v[0], &cands, &e);
-    if (cands.len == 0) {
-        errf("%s\n", e ? e : "");
-        free(e);
-        sh_candidates_free(&cands);
-        return 1;
-    }
-    free(e);
     sh_strv want = SH_STRV_INIT;
     comma_list(after(a, "--skill"), &want);
     const bool all = has(a, "--all");
-    int rc = 0;
-    if (!all && want.len == 0) {
-        outf("skills in %s:\n", a->v[0]);
-        for (size_t i = 0; i < cands.len; ++i) {
-            char *desc = sh_left_utf16(cands.items[i].description, 80);
-            out("  ");
-            padded(cands.items[i].name, 30);
-            outf("%s\n", desc);
-            free(desc);
+    const bool listing = !all && want.len == 0;
+    int ok = 0, failed_repos = 0;
+    for (size_t r = 0; r < repos.len; ++r) {
+        char *e = NULL;
+        sh_candidates cands;
+        sh_store_discover(st, repos.items[r], &cands, &e);
+        if (cands.len == 0) {
+            errf("%s\n", e ? e : "");
+            ++failed_repos;
+        } else if (listing) {
+            outf("skills in %s:\n", repos.items[r]);
+            for (size_t i = 0; i < cands.len; ++i) {
+                char *desc = sh_left_utf16(cands.items[i].description, 80);
+                out("  ");
+                padded(cands.items[i].name, 30);
+                outf("%s\n", desc);
+                free(desc);
+            }
+        } else {
+            for (size_t i = 0; i < cands.len; ++i)
+                if ((all || sh_strv_contains(&want, cands.items[i].name)) && sh_store_install(st, &cands.items[i])) ++ok;
         }
-        out("re-run with --skill NAME[,NAME] or --all\n");
+        free(e);
+        sh_candidates_free(&cands);
+    }
+    int rc;
+    if (listing) {
+        if (failed_repos < (int)repos.len) out("re-run with --skill NAME[,NAME] or --all\n");
+        rc = failed_repos ? 1 : 0;
     } else {
-        int ok = 0;
-        for (size_t i = 0; i < cands.len; ++i)
-            if ((all || sh_strv_contains(&want, cands.items[i].name)) && sh_store_install(st, &cands.items[i])) ++ok;
-        outf("%d installed\n", ok);
-        rc = ok ? 0 : 1;
+        if (failed_repos < (int)repos.len) outf("%d installed\n", ok);
+        rc = ok && !failed_repos ? 0 : 1;
     }
     sh_strv_free(&want);
-    sh_candidates_free(&cands);
+    sh_strv_free(&repos);
     return rc;
 }
 

@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """Install, check and update benchmark for Skill Hub, offline.
 
-usage: python3 bench/bench.py BINARY [--repos N] [--skills M] [--changed PERCENT] [--label NAME] [--json FILE]
+usage: python3 bench/bench.py BINARY [--repos N] [--skills M] [--changed PERCENT] [--install-mode each|all]
+                                       [--label NAME] [--json FILE]
 
 Builds N local git repositories with M skills each and maps them to github.com/bench/<repo> with a throw-away git
 config (url.insteadOf), so the GitHub-only 1.0.1 and newer builds run the very same fixture. Then, in a fresh home with
 Claude Code "installed" (so every skill also gets a link):
 
-  install   `skillhub add bench/<repo> --all` for every repository
+  install   `skillhub add bench/<repo> --all` for every repository (--install-mode each, the only way 1.0.1 can), or
+            one `skillhub add bench/<repo1> bench/<repo2> ... --all` (--install-mode all, 2.0)
   check     `skillhub check`, nothing changed upstream
   check-10  `skillhub check` after PERCENT % of the skills changed upstream
   update    `skillhub update --all`
@@ -31,6 +33,7 @@ ap.add_argument("binary")
 ap.add_argument("--repos", type=int, default=25)
 ap.add_argument("--skills", type=int, default=20)
 ap.add_argument("--changed", type=float, default=10.0)
+ap.add_argument("--install-mode", choices=("each", "all"), default="each")
 ap.add_argument("--label", default="")
 ap.add_argument("--json", default="")
 ap.add_argument("--keep", action="store_true")
@@ -93,7 +96,7 @@ class Peak:
         self.stop = threading.Event()
 
     def _sample(self):
-        names = {os.path.basename(BIN), "skillhub-gui"}
+        names = {os.path.basename(BIN)[:15], "skillhub-gui"}  # /proc/<pid>/comm keeps 15 characters
         while not self.stop.is_set():
             for pid in os.listdir("/proc"):
                 if not pid.isdigit():
@@ -160,7 +163,11 @@ def main():
             print("%-9s %9.2f s   peak %7.1f MB   %6d git processes" % (name, wall, peak.kb / 1024, calls))
             return row
 
-        rows = [phase("install", [["add", "bench/" + name, "--all"] for name, _ in repos])]
+        if args.install_mode == "all":
+            install = [["add", *["bench/" + name for name, _ in repos], "--all"]]
+        else:
+            install = [["add", "bench/" + name, "--all"] for name, _ in repos]
+        rows = [phase("install", install)]
         rows.append(phase("check", [["check"]]))
         changed = change_upstream(repos)
         rows.append(phase("check-%d" % args.changed, [["check"]], expect=(0, 10)))
@@ -172,6 +179,7 @@ def main():
         result = {"label": args.label or os.path.basename(BIN), "binary": BIN,
                   "version": subprocess.run([BIN, "--version"], capture_output=True, text=True).stdout.strip(),
                   "repos": args.repos, "skills_per_repo": args.skills, "skills": args.repos * args.skills,
+                  "install_mode": args.install_mode,
                   "changed": changed, "machine": "%s %s, %d CPUs" % (platform.system(), platform.machine(), os.cpu_count() or 0),
                   "git": subprocess.run([REAL_GIT, "--version"], capture_output=True, text=True).stdout.strip(),
                   "phases": rows}
