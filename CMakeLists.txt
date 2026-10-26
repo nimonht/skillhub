@@ -186,13 +186,12 @@ endif()
 # ---- window -------------------------------------------------------------------------------------------------------------
 
 if(SKILLHUB_GUI)
-    find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Concurrent)
+    find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2)
     qt_standard_project_setup()
     set(CMAKE_AUTORCC ON)
 
     qt_add_executable(skillhub_gui WIN32 MACOSX_BUNDLE
-        src/main.cpp src/store.cpp src/providers.cpp src/transfer.cpp src/platform.cpp src/app.cpp
-        src/store.h src/platform.h src/app.h
+        src/main.cpp src/app.cpp src/app.h
         src/gui/core_client.cpp src/gui/core_client.h src/gui/skill_row.h
         resources.qrc)
     # the window runs the command line as its backend: build it too, so a fresh build starts
@@ -200,7 +199,7 @@ if(SKILLHUB_GUI)
     if(WIN32)
         add_dependencies(skillhub_gui skillhub_cliw)
     endif()
-    target_link_libraries(skillhub_gui PRIVATE Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2 Qt6::Concurrent)
+    target_link_libraries(skillhub_gui PRIVATE Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2)
     target_compile_definitions(skillhub_gui PRIVATE SKILLHUB_VERSION="${SKILLHUB_VERSION}")
     set_target_properties(skillhub_gui PROPERTIES OUTPUT_NAME skillhub-gui)
     if(MSVC)
