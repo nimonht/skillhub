@@ -95,6 +95,10 @@ Flickable {
             visible: root.adding
             width: parent.width
             spacing: 8
+            Connections {
+                target: app
+                function onCustomProviderAdded(error) { if (error === "") { cName.clear(); cDir.clear(); root.adding = false } }
+            }
             SectionLabel { width: parent.width; text: "Your agent" }
             Field { id: cName; width: parent.width; placeholderText: "Name, for example My Agent" }
             Field { id: cDir; width: parent.width; iconName: "folder"; placeholderText: "Its skills folder, for example ~/.myagent/skills" }
@@ -104,7 +108,7 @@ Flickable {
                 Btn {
                     kind: "primary"; text: "Add agent"
                     enabled: cName.text.trim() !== "" && cDir.text.trim() !== "" && !app.busy
-                    onClicked: { if (app.addCustomProvider(cName.text, cDir.text, cShared.checked) === "") { cName.clear(); cDir.clear(); root.adding = false } }
+                    onClicked: app.addCustomProvider(cName.text, cDir.text, cShared.checked)
                 }
                 Btn { kind: "ghost"; text: "Cancel"; onClicked: root.adding = false }
             }

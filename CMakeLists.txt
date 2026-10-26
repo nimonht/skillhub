@@ -193,7 +193,13 @@ if(SKILLHUB_GUI)
     qt_add_executable(skillhub_gui WIN32 MACOSX_BUNDLE
         src/main.cpp src/store.cpp src/providers.cpp src/transfer.cpp src/platform.cpp src/app.cpp
         src/store.h src/platform.h src/app.h
+        src/gui/core_client.cpp src/gui/core_client.h src/gui/skill_row.h
         resources.qrc)
+    # the window runs the command line as its backend: build it too, so a fresh build starts
+    add_dependencies(skillhub_gui skillhub_cli)
+    if(WIN32)
+        add_dependencies(skillhub_gui skillhub_cliw)
+    endif()
     target_link_libraries(skillhub_gui PRIVATE Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2 Qt6::Concurrent)
     target_compile_definitions(skillhub_gui PRIVATE SKILLHUB_VERSION="${SKILLHUB_VERSION}")
     set_target_properties(skillhub_gui PROPERTIES OUTPUT_NAME skillhub-gui)

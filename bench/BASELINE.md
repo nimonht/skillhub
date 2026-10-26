@@ -76,4 +76,18 @@ first with one `skillhub add`, then `skillhub serve --stdio` driven over its pip
 Backend peak RSS over the whole run: 69 MB (target: under 100 MB). The first check after start is the largest delta the
 window ever applies; the window's 20 ms stall budget (M2) is measured against that one.
 
+## The window (milestone M2)
+
+`python3 bench/bench_gui.py build`: 10,000 skills, 1,000 of them changed upstream, the window headless (`--bench`). The
+longest gap between two runs of the interface thread's event loop:
+
+| Phase | Worst gap | Of which |
+|---|---:|---|
+| Check (its delta changes all 10,000 rows) | 18–19 ms | applying that delta: about 16 ms |
+| Update of the 1,000 available | 14–17 ms while the job runs, 4–6 ms after | waiting for a turn on the CPU next to the backend's git processes |
+
+Target: 20 ms or less. Rows arrive already built from the backend client's worker thread, the sort compares keys folded
+once per row, and the backend runs at a lower priority (nice 5; below normal on Windows) so the window gets the CPU first.
+Layout and drawing stay under 4 ms.
+
 A small run against real GitHub repositories and a Windows run are still to be recorded.
