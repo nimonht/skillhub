@@ -1,17 +1,20 @@
-// Qt Quick front end plumbing: list models and one controller that wraps hub::Store.
-// QML talks only to these classes; all file/git/systemd logic stays in Store.
+// Qt Quick front end plumbing: list models and one controller. QML talks only to these classes; every file, git and
+// systemd operation happens in the backend (`skillhub serve --stdio`, through CoreClient).
 #pragma once
 
 #include <QAbstractListModel>
-#include <QFutureWatcher>
-#include <QSet>
+#include <QHash>
+#include <QJsonArray>
+#include <QJsonObject>
 #include <QSortFilterProxyModel>
 #include <QVariantList>
 #include <QVariantMap>
-#include <functional>
 
-#include "store.h"
+#include "gui/core_client.h"
+#include "gui/skill_row.h"
 
+// The skills, keyed by name: snapshot pages are appended, deltas change rows in place (one ranged dataChanged for all
+// of them) and insert or remove only what came or went. The model is never reset except for a fresh snapshot.
 class SkillModel : public QAbstractListModel {
     Q_OBJECT
 public:
@@ -19,28 +22,29 @@ public:
         NameRole = Qt::UserRole + 1,
         DescriptionRole,
         SourceRole,
-        StateRole,      // local | tracked | current | available | updated | error
+        StateRole,  // local | tracked | current | available | updated | error
         NoteRole,
-        LinksRole,      // per agent: link | shared | missing | copy | foreign
+        LinksRole,  // per agent: link | shared | missing | copy | foreign
         ProblemRole,
         RankRole
     };
 
     explicit SkillModel(QObject *parent = nullptr) : QAbstractListModel(parent) {}
-    int rowCount(const QModelIndex &parent = {}) const override { return parent.isValid() ? 0 : skills_.size(); }
+    int rowCount(const QModelIndex &parent = {}) const override { return parent.isValid() ? 0 : int(rows_.size()); }
     QVariant data(const QModelIndex &index, int role) const override;
     QHash<int, QByteArray> roleNames() const override;
 
-    void setSkills(const QVector<hub::Skill> &skills, const QVector<hub::AgentDef> &agents, const QSet<QString> &justUpdated);
-    const QVector<hub::Skill> &skills() const { return skills_; }
-    const hub::Skill *find(const QString &name) const;
-    static QString stateKey(const hub::Skill &s, bool justUpdated);
-    static bool hasProblem(const hub::Skill &s);
+    void reset(const QVector<SkillRow> &rows);
+    void append(const QVector<SkillRow> &rows);
+    void upsert(const QVector<SkillRow> &rows);
+    void remove(const QStringList &names);
+    const SkillRow *find(const QString &name) const;
+    const QVector<SkillRow> &rows() const { return rows_; }
 
 private:
-    QVector<hub::Skill> skills_;
-    QVector<hub::AgentDef> agents_;
-    QSet<QString> updated_;
+    void reindex();
+    QVector<SkillRow> rows_;
+    QHash<QString, int> index_;
 };
 
 // Search text, quick filter (all | updates | local | problems) and sort for the list.
@@ -70,6 +74,7 @@ protected:
     bool lessThan(const QModelIndex &l, const QModelIndex &r) const override;
 
 private:
+    const SkillRow &row(const QModelIndex &i) const;
     void apply();
     QString text_, mode_ = QStringLiteral("all"), key_ = QStringLiteral("name");
     bool asc_ = true;
@@ -80,10 +85,11 @@ class LogModel : public QAbstractListModel {
 public:
     enum Roles { TimeRole = Qt::UserRole + 1, TextRole, LevelRole };
     explicit LogModel(QObject *parent = nullptr) : QAbstractListModel(parent) {}
-    int rowCount(const QModelIndex &parent = {}) const override { return parent.isValid() ? 0 : lines_.size(); }
+    int rowCount(const QModelIndex &parent = {}) const override { return parent.isValid() ? 0 : int(lines_.size()); }
     QVariant data(const QModelIndex &index, int role) const override;
     QHash<int, QByteArray> roleNames() const override;
-    void add(const QString &text);
+    void add(const QJsonArray &lines);  // event.log lines: {time, level, text}
+    void addText(const QString &text, const QString &level = QStringLiteral("info"));
     Q_INVOKABLE void clear();
 
 private:
@@ -123,10 +129,10 @@ class AppController : public QObject {
     Q_PROPERTY(QString candidateRepo READ candidateRepo NOTIFY candidatesChanged)
     Q_PROPERTY(QString candidateError READ candidateError NOTIFY candidatesChanged)
     Q_PROPERTY(bool discovering READ discovering NOTIFY candidatesChanged)
-    Q_PROPERTY(bool automationSupported READ automationSupported CONSTANT)  // daily timer + stray watcher exist on this system
+    Q_PROPERTY(bool automationSupported READ automationSupported NOTIFY automationChanged)  // daily timer + stray watcher exist on this system
     Q_PROPERTY(QString timerState READ timerState NOTIFY automationChanged)
     Q_PROPERTY(QString watcherState READ watcherState NOTIFY automationChanged)
-    Q_PROPERTY(QString centralPath READ centralPath CONSTANT)
+    Q_PROPERTY(QString centralPath READ centralPath NOTIFY countsChanged)
     Q_PROPERTY(QString version READ version CONSTANT)
     Q_PROPERTY(QString themeMode READ themeMode WRITE setThemeMode NOTIFY themeChanged)  // system | dark | light
     Q_PROPERTY(bool reduceMotion READ reduceMotion WRITE setReduceMotion NOTIFY themeChanged)  // the user's setting
@@ -149,19 +155,19 @@ public:
     QString busyText() const { return busyText_; }
     double progress() const { return progress_; }
     int skillCount() const { return model_.rowCount(); }
-    int updateCount() const { return counts_[0]; }
-    int localCount() const { return counts_[1]; }
-    int problemCount() const { return counts_[2]; }
-    int strayCount() const { return strays_; }
-    int checkedCount() const { return counts_[3]; }
-    bool wiringOk() const { return wiringOk_; }
+    int updateCount() const { return counts_.value(QStringLiteral("updates")).toInt(); }
+    int localCount() const { return counts_.value(QStringLiteral("local")).toInt(); }
+    int problemCount() const { return counts_.value(QStringLiteral("problems")).toInt(); }
+    int strayCount() const { return counts_.value(QStringLiteral("strays")).toInt(); }
+    int checkedCount() const { return counts_.value(QStringLiteral("checked")).toInt(); }
+    bool wiringOk() const { return counts_.value(QStringLiteral("wiringOk")).toBool(true); }
     QVariantList agents() const { return agents_; }
     int columnCount() const { return columns_; }
     int portW() const { return portW_; }
     int hiddenCount() const { return hidden_; }
     QVariantMap overflow() const { return overflow_; }
     QVariantList providerList() const { return providerList_; }
-    int knownCount() const { return providerList_.size(); }
+    int knownCount() const { return int(providerList_.size()); }
     QString focusAgent() const { return focus_; }
     void setFocusAgent(const QString &id);
     QVariantMap agentDetail() const;
@@ -174,7 +180,7 @@ public:
     QString candidateRepo() const { return candidateRepo_; }
     QString candidateError() const { return candidateError_; }
     bool discovering() const { return discovering_; }
-    bool automationSupported() const;
+    bool automationSupported() const { return automationSupported_; }
     QString timerState() const { return timer_; }
     QString watcherState() const { return watch_; }
     QString centralPath() const;
@@ -191,6 +197,7 @@ public:
     QString documentsFolder() const;
     QVariantList importItems() const { return importItems_; }
     QString importError() const { return importError_; }
+    bool idle() const { return loaded_ && !busy_; }  // the screenshot harness waits for this
 
     Q_INVOKABLE void refresh();
     Q_INVOKABLE void checkUpdates();
@@ -209,9 +216,9 @@ public:
     Q_INVOKABLE void setWatcher(bool on);
     Q_INVOKABLE void rescanProviders();
     Q_INVOKABLE void setProviderManaged(const QString &id, bool on);
-    Q_INVOKABLE QString addCustomProvider(const QString &label, const QString &dir, bool readsShared);
+    Q_INVOKABLE void addCustomProvider(const QString &label, const QString &dir, bool readsShared);  // answers with customProviderAdded
     Q_INVOKABLE void removeCustomProvider(const QString &id);
-    Q_INVOKABLE QString exportTo(const QString &path, bool includeLocal);
+    Q_INVOKABLE void exportTo(const QString &path, bool includeLocal);
     Q_INVOKABLE void importPreview(const QString &path);
     Q_INVOKABLE void importInstall(const QStringList &names);
     Q_INVOKABLE void importClear();
@@ -231,43 +238,44 @@ signals:
     void automationChanged();
     void themeChanged();
     void toast(const QString &level, const QString &text);
+    void customProviderAdded(const QString &error);  // "" when it worked
 
 private:
-    using Progress = std::function<void(double)>;
-    using Job = std::function<QVector<hub::Skill>(hub::Store &, QVector<hub::Skill>, const Progress &)>;
-    void run(const QString &what, Job job, bool determinate = false, const QString &doneText = {});
-    void finished();
-    void applyScan(const QVector<hub::Skill> &verdicts);
-    void rebuildDerived();
+    void onReady(bool restarted);
+    void onNotification(const QString &method, const QJsonObject &params, const SkillRows &rows);
+    void loadSnapshot();
+    void loadPage(int page, qint64 rev);
+    void applyState(const QJsonObject &o);
+    void applyDelta(const QJsonObject &params, const SkillRows &rows);
+    void startJob(const QString &method, const QJsonObject &params, const QString &busyText, const QString &kind, bool determinate);
+    void jobDone(const QJsonObject &done);
     void rebuildDetail();
+    void readPreview(const QString &name);
     void refreshAutomation();
+    void loadSettings();
+    void saveSetting(const QString &key, const QJsonValue &value);
     void setBusy(bool busy, const QString &text = {}, double progress = -1);
+    QString tilde(const QString &path) const;
 
-    hub::Store store_;
+    CoreClient core_;
     SkillModel model_;
     SkillFilter filter_;
     LogModel log_;
-    struct DiscoverResult { QVector<hub::Candidate> items; QString error; };
-    QFutureWatcher<QVector<hub::Skill>> jobWatcher_;
-    QFutureWatcher<DiscoverResult> discoverWatcher_;
-    QVector<hub::Candidate> pending_;
-    QStringList jobUpdated_;
-    QVector<hub::ImportItem> importPending_;
-    QVariantList importItems_;
-    QString importError_;
-    int importOk_ = 0, importFailed_ = 0;
-    QVector<hub::Skill> before_;
-    QSet<QString> justUpdated_;
+    QJsonObject counts_;
     QVariantList agents_, providerList_;
     QVariantMap overflow_;
     int columns_ = 0, portW_ = 72, hidden_ = 0;
+    qint64 rev_ = 0;
+    bool loading_ = false, stale_ = false;
+    QString job_, jobKind_, jobName_;  // the running job: its id, kind, and the skill it is about
     QVariantMap detail_;
     QVariantList candidates_;
+    QVariantList importItems_;
+    QString importError_, importPath_;
     QString selected_, preview_, focus_, mode_ = QStringLiteral("skill");
-    QString busyText_, doneText_, candidateRepo_, candidateError_, timer_ = QStringLiteral("off"), watch_ = QStringLiteral("off");
+    QString busyText_, candidateRepo_, candidateError_, timer_ = QStringLiteral("off"), watch_ = QStringLiteral("off");
     QString themeMode_ = QStringLiteral("system");
-    int counts_[4] = {0, 0, 0, 0};  // updates, local, problems, checked
-    int strays_ = 0;
     double progress_ = -1;
-    bool busy_ = false, wiringOk_ = true, discovering_ = false, reduce_ = false, forcedStill_ = false, noHover_ = false, loaded_ = false;
+    bool busy_ = false, discovering_ = false, reduce_ = false, forcedStill_ = false, noHover_ = false, loaded_ = false;
+    bool automationSupported_ = false, themeForced_ = false;
 };

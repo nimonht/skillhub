@@ -906,6 +906,13 @@ int sh_serve_stdio(void) {
         fputs("skillhub serve: standard output is not usable\n", stderr);
         return 1;
     }
+    // A background service: it yields the processor to the window it serves, and its git processes inherit that. With
+    // 16 workers and their git processes busy, the window would otherwise wait for a turn on the CPU.
+#ifdef _WIN32
+    SetPriorityClass(GetCurrentProcess(), BELOW_NORMAL_PRIORITY_CLASS);
+#else
+    if (nice(5) == -1) errno = 0;  // not being able to lower it is harmless
+#endif
     // first-call caches, filled before any other thread could race to fill them
     sh_git_program();
     sh_can_make_dir_links();

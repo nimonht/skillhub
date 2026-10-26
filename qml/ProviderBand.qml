@@ -64,7 +64,8 @@ Item {
         delegate: Item {
             id: col
             required property int index
-            readonly property var a: root.agents[index]
+            // columnCount and agents change together, but QML may see the new count a moment before the new list
+            readonly property var a: root.agents[index] ?? ({ id: "", label: "", short: "", monogram: "", icon: ({}), mode: "", ok: 0, total: 0, problems: 0, detected: true, health: "ok" })
             readonly property bool focused: app.focusAgent === a.id
             x: root.colX(index)
             width: root.colW
