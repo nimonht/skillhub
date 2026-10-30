@@ -125,6 +125,51 @@ def main():
     run(env, "update", "--all", "--project", hostile, expect=None)
     check("private notes" not in read(hostile + "/.agents/skills/stolen/SKILL.md"), "a project lock read a folder outside the project")
     check(not any("pwned" in f for _, _, fs in os.walk(ROOT) for f in fs), "a project lock ran a command")
+    # the declared type proves nothing: where a source leads is what counts
+    private = make_upstream("github/me/private.git")
+    skill(private + "/leak", "leak", "private notes")
+    commit(private)
+    bare = os.path.join(ROOT, "hosts", "github", "me", "private.git")
+    for name, entry in (("via-github", {"source": "acme/skills", "sourceType": "github", "sourceUrl": bare, "skillPath": "leak/SKILL.md"}),
+                        ("via-dash", {"source": "acme/skills", "sourceType": "github", "sourceUrl": "--upload-pack=touch pwned", "skillPath": "leak/SKILL.md"}),
+                        ("via-git", {"source": bare, "sourceType": "git", "skillPath": "leak/SKILL.md"}),
+                        ("via-gitlab", {"source": bare, "sourceType": "gitlab", "sourceUrl": bare, "skillPath": "leak/SKILL.md"})):
+        repo = os.path.join(ROOT, "lock-" + name)
+        skill(repo + "/.agents/skills/leak", "leak", "bait")
+        write(repo + "/skills-lock.json", json.dumps({"version": 1, "skills": {"leak": dict(entry, computedHash="0")}}))
+        run(env, "check", "--project", repo, expect=None)
+        run(env, "update", "--all", "--project", repo, expect=None)
+        check("private notes" not in read(repo + "/.agents/skills/leak/SKILL.md"), "%s reached a repository on this machine" % name)
+    check(not any("pwned" in f for _, _, fs in os.walk(ROOT) for f in fs), "a lock made git run a command")
+    if not WIN:
+        # a committed link: the text of the path stays inside, and the files are outside
+        linked = os.path.join(ROOT, "lock-link")
+        skill(linked + "/.agents/skills/stolen", "stolen", "bait")
+        os.symlink(secret, linked + "/vendor")
+        write(linked + "/skills-lock.json", json.dumps({"version": 1, "skills": {"stolen": {"source": "./vendor/stolen", "sourceType": "local", "computedHash": "0"}}}))
+        run(env, "update", "--all", "--project", linked, expect=None)
+        check("private notes" not in read(linked + "/.agents/skills/stolen/SKILL.md"), "a link in the repository led to a folder outside")
+        # agent folders that lead out of the repository must not be written through
+        real = os.path.join(ROOT, "real-claude")
+        os.makedirs(real)
+        out = os.path.join(ROOT, "lock-agent")
+        os.makedirs(out)
+        os.symlink(real, out + "/.claude")
+        run(env, "add", "acme/skills", "--skill", "zeta", "--project", out)
+        check(os.listdir(real) == [], "relink wrote through a link out of the repository: %s" % os.listdir(real))
+        for victim, what in ((".agents", "shared folder"), ("skills-lock.json", "lock file")):
+            trap = os.path.join(ROOT, "lock-trap-" + what.split()[0])
+            os.makedirs(trap)
+            target = os.path.join(ROOT, "trap-target-" + what.split()[0])
+            if victim == ".agents":
+                os.makedirs(target + "/skills")
+            else:
+                write(target, '{"version": 1, "skills": {}}\n')
+            os.symlink(target, trap + "/" + victim)
+            p = run(env, "add", "acme/skills", "--all", "--project", trap, expect=1)
+            check("outside" in p.stderr, "a %s that leads out of the repository:\n%s" % (what, p.stderr))
+            check(not os.path.exists(target + "/skills/zeta") and (victim == ".agents" or "zeta" not in read(target)), "written through the link")
+
     if not WIN:
         os.symlink(secret + "/stolen", hostile + "/.agents/skills/linked")
         write(hostile + "/skills-lock.json", json.dumps({"version": 1, "skills": {"linked": {"source": "./x", "sourceType": "local", "computedHash": "0"}}}))

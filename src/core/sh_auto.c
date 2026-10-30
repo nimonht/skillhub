@@ -308,9 +308,9 @@ static char *plist_text(const sh_store *st, bool timer) {
     return text;
 }
 
-static void launchctl(sh_store *st, const char *verb, const char *target, const char *plist) {
+static bool launchctl(sh_store *st, const char *verb, const char *target, const char *plist) {
     const char *argv[] = {"launchctl", verb, target, plist, NULL};
-    tool(st, argv, NULL, 0);
+    return tool(st, argv, NULL, 0);
 }
 
 static bool launchd_one(sh_store *st, bool timer, char **err) {
@@ -319,11 +319,12 @@ static bool launchd_one(sh_store *st, bool timer, char **err) {
     char *logs = sh_path_join(st->home, "Library/Logs/skillhub");
     sh_mkpath(logs);
     free(logs);
-    const bool ok = sh_write_atomic(path, text, strlen(text));
+    bool ok = sh_write_atomic(path, text, strlen(text));
     if (ok) {
         char *domain = sh_strfmt("gui/%ld", user_id()), *service = sh_strfmt("gui/%ld/%s", user_id(), label);
         launchctl(st, "bootout", service, NULL);  // running already: it reads the new file only when loaded again
-        launchctl(st, "bootstrap", domain, path);
+        ok = launchctl(st, "bootstrap", domain, path);
+        if (!ok && err) *err = sh_strfmt("launchctl could not load %s", label);
         free(service);
         free(domain);
     } else if (err) {
@@ -473,8 +474,18 @@ static char *schtasks_state(const sh_store *st, bool timer) {
 
 // ---- the environment of scheduled runs ----
 
-// Scheduled runs lack the login environment, so a variable like CLAUDE_CONFIG_DIR would be missing and the agent's folder
-// would resolve differently. The variables the catalog refers to are recorded when automation is switched on.
+static void keep_var(yyjson_mut_doc *m, yyjson_mut_val *env, const char *name, bool *changed) {
+    char *value = sh_getenv(name);
+    if (value && *value) {
+        sh_json_set_str(m, env, name, value);
+        *changed = true;
+    }
+    free(value);
+}
+
+// Scheduled runs lack the login environment, so a variable like CLAUDE_CONFIG_DIR would be missing and an agent's folder would
+// resolve differently, and without XDG_STATE_HOME so would the lock file npx uses. The variables the catalog refers to and
+// the ones paths depend on are recorded when automation is switched on.
 static void record_env(void) {
     yyjson_mut_doc *m = sh_state_load(NULL);
     if (!m) return;
@@ -485,15 +496,12 @@ static void record_env(void) {
         p += 2;
         const size_t n = strspn(p, "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_");
         char *name = sh_strndup(p, n);
-        char *value = n ? sh_getenv(name) : NULL;
-        if (value && *value) {
-            sh_json_set_str(m, env, name, value);
-            changed = true;
-        }
-        free(value);
+        if (n) keep_var(m, env, name, &changed);
         free(name);
         p += n;
     }
+    static const char *const paths[] = {"XDG_STATE_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME", "XDG_CONFIG_HOME"};
+    for (size_t i = 0; i < sizeof paths / sizeof paths[0]; ++i) keep_var(m, env, paths[i], &changed);
     if (changed) sh_state_save(m);
     yyjson_mut_doc_free(m);
 }

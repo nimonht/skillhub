@@ -109,6 +109,7 @@ def scheduled_env(home, env):
     run(with_var, "autoupdate", "on")
     state = json.loads(read(env["SKILLHUB_CONFIG"] + "/state.json"))
     check(state["automationEnv"]["CLAUDE_CONFIG_DIR"] == agent, "recorded: %s" % state.get("automationEnv"))
+    check(state["automationEnv"]["XDG_STATE_HOME"] == env["XDG_STATE_HOME"], "the variable the lock file depends on: %s" % state.get("automationEnv"))
     skill(agent + "/skills/stray", "stray")
     plain = {k: v for k, v in env.items() if k != "CLAUDE_CONFIG_DIR"}
     run(plain, "adopt", "--notify")
@@ -141,9 +142,34 @@ def resident(home, env):
         p.stderr.close()
 
 
+def for_real(home, env):
+    """On a disposable CI machine: what launchd and Task Scheduler really say about what we hand them."""
+    if sys.platform == "darwin":
+        p = run(env, "autoupdate", "on", expect=None)
+        plist = home + "/Library/LaunchAgents/io.github.nimonht.skillhub.update.plist"
+        if p.returncode == 0:
+            check("enabled" in run(env, "autoupdate", "status").stdout, "launchd did not take it")
+            run(env, "autoupdate", "off")
+        else:  # this machine has no GUI session to load into; the file can still be checked
+            print("launchctl bootstrap refused here: %s" % p.stderr.strip())
+            check(subprocess.run(["plutil", "-lint", plist]).returncode == 0, "plutil rejected the plist")
+    elif sys.platform == "win32":
+        run(env, "autoupdate", "on")
+        check("enabled" in run(env, "autoupdate", "status").stdout, "Task Scheduler did not take the update task")
+        run(env, "autoupdate", "off")
+        run(env, "watch", "on")
+        check("enabled" in run(env, "watch", "status").stdout, "Task Scheduler did not take the watcher task")
+        run(env, "watch", "off")
+        check("not installed" in run(env, "watch", "status").stdout, "the task stayed")
+    print("automation accepted for real (%s)" % sys.platform)
+
+
 def main():
     home, env = make_home("home")
     run(env, "adopt")
+    if os.environ.get("SKILLHUB_TEST_REAL_AUTOMATION"):
+        for_real(home, env)
+        return
     launchd(home, env)
     schtasks(home, env)
     systemd(home, env)

@@ -144,8 +144,10 @@ Written exactly like `npx skills` `src/local-lock.ts`, because it is committed a
   themselves, the others get relative links inside the repository, never into `~`. Backups live outside the repository, in
   `<state>/projects/<h8>/backup`. `state.json` and `sources.json` keep a project's holds and records under the key
   `project:<root>`.
-- This file comes with the repository, so it is untrusted: a `local` source outside the project is never read, and a link
-  in the project's shared folder is no skill.
+- This file comes with the repository, so it is untrusted, and what an entry declares proves nothing. What counts is where
+  it leads once links are followed: a folder must be inside the project, whatever `sourceType` says, and a `github` entry
+  must name that repository. A link in the project's shared folder is no skill. A project whose `.agents/skills` or
+  `skills-lock.json` leads outside it is refused, and an agent folder that does is left out.
 - Where symlinks cannot be made, agents with a folder of their own get a copy that relink keeps identical (link state
   `synced`, healthy): a junction holds an absolute path, so it could not be committed. A copy that drifted is kept in
   `_conflicts` before it is replaced. A text file where a link belongs (git with `core.symlinks` off) is left alone, and
@@ -361,7 +363,7 @@ Durable state that Skill Hub owns and that is not a preference.
 - `parked`: lock entries of parked skills, kept here while parked. `npx skills update -g` reinstalls any lock entry whose
   upstream changed without checking that its folder exists, so a parked entry left in the shared lock would come back.
   Unparking returns the entry to the lock file.
-- `automationEnv`: variables the agent catalog refers to (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `XDG_CONFIG_HOME`, ...),
+- `automationEnv`: variables the agent catalog refers to (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, ...) and the `XDG_*` folders,
   recorded when automation is switched on. Scheduled runs (systemd, launchd, Task Scheduler) do not inherit the login
   environment; `--auto` and watcher runs use these values for variables that are unset.
 

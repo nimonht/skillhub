@@ -176,12 +176,28 @@ static ptrdiff_t slot_with_key(const sh_engine *e, const char *key) {
     return -1;
 }
 
+// A project's lock came with the repository, so what it declares proves nothing: what counts is where the source leads. A
+// folder has to be inside the project once links are followed, and GitHub has to be GitHub, the repository the entry names.
+static bool project_source_ok(const sh_store *st, const sh_source *src, sh_origin_type declared, const sh_origin *o) {
+    if (o->type == SH_ORIGIN_LOCAL) {
+        char *real = sh_canonical(o->url);
+        char *inside = sh_strfmt("%s/", st->project);
+        const bool ok = declared == SH_ORIGIN_LOCAL && real && sh_path_within(real, inside);
+        free(inside);
+        free(real);
+        return ok;
+    }
+    if (declared == SH_ORIGIN_LOCAL) return false;
+    return declared != SH_ORIGIN_GITHUB || (o->type == SH_ORIGIN_GITHUB && strcmp(o->source, src->source) == 0);
+}
+
 // the origin of a lock entry whose type is one Skill Hub runs; false when the entry cannot be used
 static bool origin_of(const sh_store *st, const sh_source *src, sh_origin *o) {
     memset(o, 0, sizeof *o);
     if (src->ref && !sh_origin_ref_ok(src->ref)) return false;
     const char *ref = src->ref ? src->ref : "";
-    if (!src->type || !*src->type || strcmp(src->type, "github") == 0) {
+    const bool github = !src->type || !*src->type || strcmp(src->type, "github") == 0;
+    if (github && !st->project) {
         o->type = SH_ORIGIN_GITHUB;
         o->source = sh_strdup(src->source);
         o->url = *src->url ? sh_strdup(src->url) : sh_strfmt("https://github.com/%s.git", src->source);
@@ -190,16 +206,12 @@ static bool origin_of(const sh_store *st, const sh_source *src, sh_origin *o) {
         o->host = sh_strdup("github.com");
         return true;
     }
-    sh_origin_type type;
-    if (!sh_origin_type_from_name(src->type, &type) || !sh_origin_parse(*src->url ? src->url : src->source, o, NULL)) return false;
-    if (type == SH_ORIGIN_LOCAL && st->project) {  // the lock came with the repository: it may not read other folders of this machine
-        char *inside = sh_strfmt("%s/", st->project);
-        const bool ok = sh_path_within(o->url, inside);
-        free(inside);
-        if (!ok) {
-            sh_origin_free(o);
-            return false;
-        }
+    sh_origin_type type = SH_ORIGIN_GITHUB;
+    if (!github && !sh_origin_type_from_name(src->type, &type)) return false;
+    if (!sh_origin_parse(*src->url ? src->url : src->source, o, NULL)) return false;
+    if (st->project && !project_source_ok(st, src, type, o)) {
+        sh_origin_free(o);
+        return false;
     }
     o->type = type;  // what the entry says, not what the URL looks like
     free(o->source);
