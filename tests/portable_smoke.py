@@ -242,6 +242,19 @@ try:
     if "\u2588" in run(env, "fetch", "--logo", "none").stdout or "\u25cf" in run(env, "fetch", "--icons", "none").stdout:
         fail("fetch options")
 
+    # a logo of your own: decoded and drawn in half blocks when the terminal shows no images
+    import struct, zlib
+    def chunk(kind, data):
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+    png = os.path.join(home, "logo.png")
+    with open(png, "wb") as f:
+        f.write(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", 2, 2, 8, 6, 0, 0, 0))
+                + chunk(b"IDAT", zlib.compress(b"\0" + b"\xff\0\0\xff" * 2 + b"\0" + b"\0\xff\0\xff" * 2)) + chunk(b"IEND", b""))
+    if "\u2588" not in run(env, "fetch", "--logo", png).stdout:
+        fail("fetch --logo with an image")
+    if "Skills" not in run(env, "fetch", "--logo", os.path.join(home, "nosuch.png")).stdout:
+        fail("fetch with a logo that is not there")
+
     if "not installed" not in run(env, "autoupdate", "status").stdout and not LINUX:
         fail("autoupdate status on a machine where it is off")
 

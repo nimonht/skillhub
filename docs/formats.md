@@ -284,7 +284,7 @@ Everything that both the command line and the window need. Missing keys mean the
     "uiScale": 1.0,
     "density": "comfortable"
   },
-  "layout": { "dockAtStart": false, "bandCompact": false },
+  "layout": { "dockAtStart": false, "bandCompact": false, "railAutoCollapse": false },
   "projects": { "scanRoots": ["~/Projects"] },
   "terminal": {
     "shell": "",
