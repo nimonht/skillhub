@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.0.0 - unreleased
+
+- **Skills from anywhere.** `skillhub add` and the Add sheet take GitLab projects (nested groups, self-hosted `/-/tree/`
+  links), any git URL (https, ssh, `git@host:path`), a branch or tag (`#ref`), a folder inside a repository, and local
+  folders, as a copy that updates when you choose or as a live link (`--link`). Input follows `npx skills`, and the lock
+  entries are the ones it writes.
+- Export files move to version 2 and carry those sources; version 1 still reads. Import accepts remote sources over https
+  only, so a hostile file cannot reach a local folder or use your SSH keys.
+- A private repository now says what to set up (a credential helper or an SSH key) instead of only git's message.
+- Two removals of the same skill within a second no longer fail.
+
 ## 1.0.1 - 2026-10-24
 
 - **Windows: accounts that cannot create symlinks** (the default: Developer Mode off, not an administrator) link agent folders with

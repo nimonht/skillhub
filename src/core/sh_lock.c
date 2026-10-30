@@ -46,6 +46,8 @@ char *sh_lock_path_for(const char *home) {
 }
 
 void sh_source_free(sh_source *s) {
+    free(s->type);
+    free(s->ref);
     free(s->source);
     free(s->url);
     free(s->skill_path);
@@ -56,6 +58,8 @@ void sh_source_free(sh_source *s) {
 }
 
 void sh_source_copy(const sh_source *from, sh_source *to) {
+    to->type = sh_strdup(from->type ? from->type : "");
+    to->ref = sh_strdup(from->ref ? from->ref : "");
     to->source = sh_strdup(from->source);
     to->url = sh_strdup(from->url);
     to->skill_path = sh_strdup(from->skill_path);
@@ -66,7 +70,16 @@ void sh_source_copy(const sh_source *from, sh_source *to) {
 
 bool sh_source_tracked(const sh_source *s) { return s->source && *s->source; }
 
+bool sh_source_runnable(const sh_source *s) {
+    static const char *const types[] = {"", "github", "gitlab", "git", "local"};
+    for (size_t i = 0; i < sizeof types / sizeof types[0]; ++i)
+        if (strcmp(s->type ? s->type : "", types[i]) == 0) return sh_source_tracked(s);
+    return false;
+}
+
 void sh_source_from_mut_json(yyjson_mut_val *o, sh_source *out) {
+    out->type = sh_strdup(sh_json_mut_str(o, "sourceType"));
+    out->ref = sh_strdup(sh_json_mut_str(o, "ref"));
     out->source = sh_strdup(sh_json_mut_str(o, "source"));
     out->url = sh_strdup(sh_json_mut_str(o, "sourceUrl"));
     out->skill_path = sh_strdup(sh_json_mut_str(o, "skillPath"));
@@ -76,6 +89,8 @@ void sh_source_from_mut_json(yyjson_mut_val *o, sh_source *out) {
 }
 
 void sh_source_from_json(yyjson_val *o, sh_source *out) {
+    out->type = sh_strdup(sh_json_str(o, "sourceType"));
+    out->ref = sh_strdup(sh_json_str(o, "ref"));
     out->source = sh_strdup(sh_json_str(o, "source"));
     out->url = sh_strdup(sh_json_str(o, "sourceUrl"));
     out->skill_path = sh_strdup(sh_json_str(o, "skillPath"));
@@ -162,7 +177,9 @@ static void set_entry(yyjson_mut_doc *m, const char *name, yyjson_mut_val *entry
     }
     // only our fields change; fields other tools wrote stay
     sh_json_set_str(m, entry, "source", src->source);
-    sh_json_set_str(m, entry, "sourceType", "github");
+    sh_json_set_str(m, entry, "sourceType", src->type && *src->type ? src->type : "github");
+    if (src->ref && *src->ref) sh_json_set_str(m, entry, "ref", src->ref);
+    else yyjson_mut_obj_remove_str(entry, "ref");
     sh_json_set_str(m, entry, "sourceUrl", src->url);
     sh_json_set_str(m, entry, "skillPath", src->skill_path);
     sh_json_set_str(m, entry, "skillFolderHash", src->hash);
@@ -330,4 +347,74 @@ bool sh_lock_migrate(sh_store *st, char **err) {
     yyjson_mut_doc_free(primary);
     yyjson_mut_doc_free(other);
     return ok;
+}
+
+// ---- <cache>/sources.json ----
+
+struct sh_trees {
+    yyjson_mut_doc *doc;
+    sh_json_index *ix;
+};
+
+static char *sources_path(const sh_store *st) { return sh_path_join(st->cache, "sources.json"); }
+
+// the file as a document with trees.user present; one that cannot be read starts over: nothing in it is original data
+static yyjson_mut_doc *sources_load(const sh_store *st) {
+    char *path = sources_path(st);
+    yyjson_doc *doc = NULL;
+    const bool read = sh_json_read(path, 0, &doc) == SH_JSON_OK;
+    free(path);
+    yyjson_mut_doc *m = read ? yyjson_doc_mut_copy(doc, NULL) : yyjson_mut_doc_new(NULL);
+    yyjson_doc_free(doc);
+    if (!read) yyjson_mut_doc_set_root(m, yyjson_mut_obj(m));
+    yyjson_mut_val *root = yyjson_mut_doc_get_root(m);
+    if (!yyjson_mut_obj_get(root, "version")) sh_json_set_int(m, root, "version", 1);
+    sh_json_get_or_add_obj(m, sh_json_get_or_add_obj(m, root, "trees"), "user");
+    return m;
+}
+
+static yyjson_mut_val *user_trees(yyjson_mut_doc *m) {
+    return yyjson_mut_obj_get(yyjson_mut_obj_get(yyjson_mut_doc_get_root(m), "trees"), "user");
+}
+
+sh_trees *sh_trees_load(const sh_store *st) {
+    sh_trees *t = sh_xcalloc(1, sizeof *t);
+    t->doc = sources_load(st);
+    t->ix = sh_json_index_new(user_trees(t->doc));
+    return t;
+}
+
+const char *sh_trees_get(const sh_trees *t, const char *name) {
+    yyjson_mut_val *entry = t ? sh_json_index_get(t->ix, name) : NULL;
+    return entry ? sh_json_mut_str(entry, "treeSha") : "";
+}
+
+void sh_trees_free(sh_trees *t) {
+    if (!t) return;
+    sh_json_index_free(t->ix);
+    yyjson_mut_doc_free(t->doc);
+    free(t);
+}
+
+void sh_trees_put_many(sh_store *st, const char *const *names, const char *const *ids, size_t n) {
+    if (n == 0) return;
+    yyjson_mut_doc *m = sources_load(st);
+    yyjson_mut_val *trees = user_trees(m);
+    sh_json_index *ix = sh_json_index_new(trees);
+    bool *keep = last_of_each_name(names, n);
+    for (size_t i = 0; i < n; ++i) {
+        if (!keep[i]) continue;
+        yyjson_mut_val *entry = sh_json_index_get(ix, names[i]);
+        if (!yyjson_mut_is_obj(entry)) {
+            entry = yyjson_mut_obj(m);
+            yyjson_mut_obj_add(trees, yyjson_mut_strcpy(m, names[i]), entry);
+        }
+        sh_json_set_str(m, entry, "treeSha", ids[i]);
+    }
+    char *path = sources_path(st);
+    sh_json_write(path, m, true, true);
+    free(path);
+    free(keep);
+    sh_json_index_free(ix);
+    yyjson_mut_doc_free(m);
 }

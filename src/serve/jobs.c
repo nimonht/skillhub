@@ -189,14 +189,15 @@ static void body_discover(job *j, sh_store *st) {
         }
         yyjson_mut_obj_add_val(j->out, j->extra, "candidates", list);
         yyjson_mut_obj_add_strcpy(j->out, j->extra, "source", found.cands.items[0].slug);
-        yyjson_mut_obj_add_str(j->out, j->extra, "host", "github.com");
-        yyjson_mut_obj_add_str(j->out, j->extra, "sourceType", "github");
+        yyjson_mut_obj_add_strcpy(j->out, j->extra, "host", found.host);
+        yyjson_mut_obj_add_strcpy(j->out, j->extra, "sourceType", found.type);
     }
     sh_discovery_free(&found);
 }
 
 static void body_install(job *j, sh_store *st) {
     const char *source = param_str(j->params, "source");
+    const bool link = strcmp(param_str(j->params, "mode"), "link") == 0;
     sh_strv want = SH_STRV_INIT;
     param_strv(j->params, "skills", &want);
     sh_engine *e = engine_for(j, st);
@@ -210,7 +211,7 @@ static void body_install(job *j, sh_store *st) {
         for (size_t i = 0; i < found.cands.len; ++i)
             if (sh_strv_contains(&want, found.cands.items[i].name)) pick[n++] = &found.cands.items[i];
         bool *done = sh_xcalloc(n + 1, sizeof *done);
-        const int installed = n && !cancelled(j) ? sh_engine_install(e, pick, n, done) : 0;
+        const int installed = n && !cancelled(j) ? sh_engine_install(e, pick, n, link, done) : 0;
         for (size_t i = 0; i < n; ++i) add_result(j, pick[i]->name, done[i], done[i] ? NULL : cancelled(j) ? "cancelled" : "not installed (see the activity log)");
         for (size_t i = 0; i < want.len; ++i) {
             bool offered = false;

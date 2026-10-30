@@ -102,7 +102,7 @@ void sh_strays_free(sh_strays *s) {
 }
 
 void sh_candidate_free(sh_candidate *c) {
-    free(c->name); free(c->description); free(c->dir); free(c->slug); free(c->url);
+    free(c->name); free(c->description); free(c->dir); free(c->slug); free(c->url); free(c->key);
     memset(c, 0, sizeof *c);
 }
 
@@ -149,14 +149,17 @@ void sh_store_scan(const sh_store *st, sh_skills *out) {
     yyjson_mut_val *lock_skills = lock ? yyjson_mut_obj_get(yyjson_mut_doc_get_root(lock), "skills") : NULL;
     sh_json_index *entries = sh_json_index_new(lock_skills);
     sh_strv names = SH_STRV_INIT;
-    sh_list_dir(st->central, SH_LIST_DIRS | SH_LIST_NO_SYMLINKS | SH_SORT_NAME_CI, &names);
+    sh_list_dir(st->central, SH_LIST_DIRS | SH_SORT_NAME_CI, &names);
     out->items = sh_xcalloc(names.len + 1, sizeof *out->items);
     for (size_t i = 0; i < names.len; ++i) {
         const char *name = names.items[i];
         if (hidden_name(name)) continue;
         char *path = sh_path_join(st->central, name);
         char *md = sh_path_join(path, "SKILL.md");
-        if (!sh_exists(md)) {
+        yyjson_mut_val *entry = sh_json_index_get(entries, name);
+        // the only link that is a skill: a live link to a local folder, which the lock file says it is
+        const bool live = strcmp(yyjson_mut_is_obj(entry) ? sh_json_mut_str(entry, "sourceType") : "", "local") == 0;
+        if (!sh_exists(md) || (sh_is_link(path) && !live)) {
             free(md);
             free(path);
             continue;
@@ -170,9 +173,9 @@ void sh_store_scan(const sh_store *st, sh_skills *out) {
         s->description = sh_strdup(sh_fm_value(&fm, "description"));
         sh_fm_free(&fm);
         free(md);
-        yyjson_mut_val *entry = sh_json_index_get(entries, name);
         if (yyjson_mut_is_obj(entry)) sh_source_from_mut_json(entry, &s->src);
         else sh_source_from_json(NULL, &s->src);
+        s->live = sh_is_link(path);
         s->update = sh_source_tracked(&s->src) ? SH_UPDATE_UNKNOWN : SH_UPDATE_UNTRACKED;
         s->new_hash = sh_strdup("");
         s->new_path = sh_strdup("");
@@ -400,61 +403,6 @@ int sh_store_relink(sh_store *st) {
 
 // ---- sources ----
 
-static bool word_char(char c) {
-    return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '.' || c == '-';
-}
-
-static size_t word_run(const char *s) {
-    size_t n = 0;
-    while (word_char(s[n])) ++n;
-    return n;
-}
-
-char *sh_slug_from_input(const char *in, char **url) {
-    char *s = sh_trimmed(in, strlen(in));
-    char *owner = NULL, *repo = NULL;
-    // https://github.com/owner/repo[.git][/anything], git@github.com:owner/repo, www.github.com/...
-    const char *p = s;
-    if (sh_starts_with(p, "https://")) p += 8;
-    else if (sh_starts_with(p, "http://")) p += 7;
-    else if (sh_starts_with(p, "git@")) p += 4;
-    if (sh_starts_with(p, "www.")) p += 4;
-    if (sh_starts_with(p, "github.com") && (p[10] == '/' || p[10] == ':')) {
-        p += 11;
-        const size_t on = word_run(p);
-        if (on > 0 && p[on] == '/') {
-            const char *r = p + on + 1;
-            const size_t max = word_run(r);
-            for (size_t len = 1; len <= max && !repo; ++len) {  // the shortest name that the rest of the URL allows
-                const char *t = r + len;
-                if (!*t || strcmp(t, ".git") == 0 || sh_starts_with(t, ".git/") || *t == '/') {
-                    owner = sh_strndup(p, on);
-                    repo = sh_strndup(r, len);
-                }
-            }
-        }
-    }
-    if (!repo) {  // owner/repo
-        const size_t on = word_run(s);
-        if (on > 0 && s[on] == '/') {
-            const size_t rn = word_run(s + on + 1);
-            if (rn > 0 && s[on + 1 + rn] == '\0') {
-                owner = sh_strndup(s, on);
-                repo = sh_strndup(s + on + 1, rn);
-            }
-        }
-    }
-    char *slug = NULL;
-    if (repo) {
-        slug = sh_strfmt("%s/%s", owner, repo);
-        if (url) *url = sh_strfmt("https://github.com/%s.git", slug);
-    }
-    free(owner);
-    free(repo);
-    free(s);
-    return slug;
-}
-
 // ---- staging and swapping ----
 
 char *sh_store_stage_dir(const sh_store *st, const char *label) {
@@ -462,14 +410,20 @@ char *sh_store_stage_dir(const sh_store *st, const char *label) {
     return sh_strfmt("%s/stage/%s-%ld-%ld", st->cache, label, sh_process_id(), sh_atomic_inc(&counter));
 }
 
-// the backup folder for `name`: the time, plus a counter when that second is taken already
-static char *backup_dir_for(const sh_store *st, const char *name) {
-    char *stamp = sh_stamp();
-    char *bk = sh_strfmt("%s/%s/%s", st->backup, name, stamp);
+// `base` (taken over), plus a counter when that second is taken already
+static char *unused_backup(char *base) {
+    char *bk = sh_strdup(base);
     for (int i = 2; sh_lexists(bk) && i < 1000; ++i) {
         free(bk);
-        bk = sh_strfmt("%s/%s/%s-%d", st->backup, name, stamp, i);
+        bk = sh_strfmt("%s-%d", base, i);
     }
+    free(base);
+    return bk;
+}
+
+static char *backup_dir_for(const sh_store *st, const char *name) {
+    char *stamp = sh_stamp();
+    char *bk = unused_backup(sh_strfmt("%s/%s/%s", st->backup, name, stamp));
     free(stamp);
     return bk;
 }
@@ -496,17 +450,23 @@ static char *journal_write(const sh_store *st, const char *name, const char *des
     return path;
 }
 
-bool sh_store_place(sh_store *st, const char *name, const char *stage) {
-    char *md = sh_path_join(stage, "SKILL.md");
+static bool has_skill_md(const char *folder) {
+    char *md = sh_path_join(folder, "SKILL.md");
     sh_frontmatter fm;
     sh_fm_read(md, &fm);
-    bool ok = sh_exists(md) && *sh_fm_value(&fm, "description");
+    const bool ok = sh_exists(md) && *sh_fm_value(&fm, "description");
     sh_fm_free(&fm);
     free(md);
-    if (!ok) sh_store_log(st, "refusing %s: upstream folder has no valid SKILL.md", name);
+    return ok;
+}
+
+// puts `stage` (or, with `link_to`, a link to that folder) where skill `name` belongs, moving any folder there aside
+static bool swap_in(sh_store *st, const char *name, const char *stage, const char *link_to) {
+    bool ok = true;
     char *dest = sh_path_join(st->central, name), *bk = NULL, *journal = NULL;
     bool moved_aside = false;
-    if (ok && sh_exists(dest)) {
+    const bool was_link = sh_is_link(dest);
+    if (sh_lexists(dest)) {
         bk = backup_dir_for(st, name);
         // SKILLHUB_STATE set but empty: there is no folder to keep a journal in, so the swap goes ahead without one
         const bool journaled = !*st->state || (journal = journal_write(st, name, dest, bk, stage)) != NULL;
@@ -518,20 +478,36 @@ bool sh_store_place(sh_store *st, const char *name, const char *stage) {
     }
     if (ok) {
         sh_mkpath(st->central);
-        if (!sh_move_dir(stage, dest)) {
+        if (link_to ? !sh_make_dir_link(dest, link_to) : !sh_move_dir(stage, dest)) {
             sh_store_log(st, "cannot place %s", dest);
             ok = false;
         } else {
+            if (was_link) sh_remove_link(bk);  // a live link: the folder it led to is still there, nothing to keep
             prune_backups(st->backup, name, 3);
         }
     }
     if (!ok && moved_aside && !sh_lexists(dest)) sh_move_dir(bk, dest);  // the old version goes straight back
-    if (!ok) sh_remove_tree(stage);
-    if (journal && sh_exists(dest)) sh_remove_file(journal);  // otherwise recovery puts the backup back later
+    if (journal && sh_lexists(dest)) sh_remove_file(journal);  // otherwise recovery puts the backup back later
     free(journal);
     free(bk);
     free(dest);
     return ok;
+}
+
+bool sh_store_place(sh_store *st, const char *name, const char *stage) {
+    bool ok = has_skill_md(stage);
+    if (!ok) sh_store_log(st, "refusing %s: upstream folder has no valid SKILL.md", name);
+    else ok = swap_in(st, name, stage, NULL);
+    if (!ok) sh_remove_tree(stage);
+    return ok;
+}
+
+bool sh_store_place_link(sh_store *st, const char *name, const char *target) {
+    if (!has_skill_md(target)) {
+        sh_store_log(st, "refusing %s: upstream folder has no valid SKILL.md", name);
+        return false;
+    }
+    return swap_in(st, name, "", target);
 }
 
 // a path from a journal that may be touched: inside the folder it belongs to
@@ -576,31 +552,49 @@ static int recover_swaps(sh_store *st) {
 
 static bool stale(const char *path) { return sh_now_ms() - sh_mtime_ms(path) > STALE_MS; }
 
-// git lock files that a killed git left in a cache clone nobody uses now
+static void remove_git_locks_of(const char *clone) {
+    char *lock_path = sh_strfmt("%s.lock", clone);
+    sh_flock *idle = sh_flock_take(lock_path, 0);
+    if (idle) {
+        char *dotgit = sh_path_join(clone, ".git");
+        sh_strv entries = SH_STRV_INIT;
+        sh_list_dir(dotgit, SH_LIST_ALL, &entries);
+        for (size_t k = 0; k < entries.len; ++k) {
+            if (!sh_ends_with(entries.items[k], ".lock")) continue;
+            char *f = sh_path_join(dotgit, entries.items[k]);
+            if (stale(f)) sh_remove_file(f);
+            free(f);
+        }
+        sh_strv_free(&entries);
+        free(dotgit);
+        sh_flock_release(idle);
+    }
+    free(lock_path);
+}
+
+// git lock files that a killed git left in a cache clone nobody uses now; clones sit directly in repos/ (GitHub) or in a
+// folder per host
 static void remove_git_locks(const sh_store *st) {
     char *repos = sh_path_join(st->cache, "repos");
     sh_strv names = SH_STRV_INIT;
     sh_list_dir(repos, SH_LIST_DIRS | SH_LIST_NO_SYMLINKS, &names);
     for (size_t i = 0; i < names.len; ++i) {
-        char *clone = sh_path_join(repos, names.items[i]);
-        char *lock_path = sh_strfmt("%s.lock", clone);
-        sh_flock *idle = sh_flock_take(lock_path, 0);
-        if (idle) {
-            char *dotgit = sh_path_join(clone, ".git");
-            sh_strv entries = SH_STRV_INIT;
-            sh_list_dir(dotgit, SH_LIST_ALL, &entries);
-            for (size_t k = 0; k < entries.len; ++k) {
-                if (!sh_ends_with(entries.items[k], ".lock")) continue;
-                char *f = sh_path_join(dotgit, entries.items[k]);
-                if (stale(f)) sh_remove_file(f);
-                free(f);
+        char *path = sh_path_join(repos, names.items[i]);
+        char *dotgit = sh_path_join(path, ".git");
+        if (sh_exists(dotgit)) {
+            remove_git_locks_of(path);
+        } else {
+            sh_strv clones = SH_STRV_INIT;
+            sh_list_dir(path, SH_LIST_DIRS | SH_LIST_NO_SYMLINKS, &clones);
+            for (size_t k = 0; k < clones.len; ++k) {
+                char *clone = sh_path_join(path, clones.items[k]);
+                remove_git_locks_of(clone);
+                free(clone);
             }
-            sh_strv_free(&entries);
-            free(dotgit);
-            sh_flock_release(idle);
+            sh_strv_free(&clones);
         }
-        free(lock_path);
-        free(clone);
+        free(dotgit);
+        free(path);
     }
     sh_strv_free(&names);
     free(repos);
@@ -625,23 +619,25 @@ int sh_store_recover(sh_store *st, bool git_locks) {
 bool sh_store_remove_skill(sh_store *st, const char *name) {
     if (!*name || strchr(name, '/') || hidden_name(name)) return false;
     char *dest = sh_path_join(st->central, name);
-    if (!sh_exists(dest)) {
+    if (!sh_lexists(dest)) {  // lexists: a live link whose folder is gone can still be removed
         free(dest);
         return false;
     }
+    const bool live = sh_is_link(dest);  // only the link goes; the folder is the author's, and needs no backup
     char *stamp = sh_stamp();
-    char *bk = sh_strfmt("%s/_removed/%s-%s", st->backup, name, stamp);
-    const bool moved = sh_move_dir(dest, bk);
+    char *bk = unused_backup(sh_strfmt("%s/_removed/%s-%s", st->backup, name, stamp));
+    const bool gone = live ? sh_remove_link(dest) : sh_move_dir(dest, bk);
     free(bk);
     free(stamp);
     free(dest);
-    if (!moved) return false;
+    if (!gone) return false;
     for (size_t k = 0; k < st->n_agents; ++k) {
         char *lp = sh_path_join(st->agents[k]->dir, name);
         sh_remove_link(lp);
         free(lp);
     }
     sh_lock_put(st, name, NULL);
-    sh_store_log(st, "removed %s (backup in %s/_removed)", name, st->backup);
+    if (live) sh_store_log(st, "removed the link %s", name);
+    else sh_store_log(st, "removed %s (backup in %s/_removed)", name, st->backup);
     return true;
 }

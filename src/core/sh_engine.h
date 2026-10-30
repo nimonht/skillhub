@@ -34,16 +34,19 @@ int sh_engine_update(sh_engine *e, sh_skill *const *todo, size_t n, bool *done);
 
 typedef struct {
     sh_candidates cands;
-    char *err;  // why there are none
+    char *err;         // why there are none
+    const char *type;  // github, gitlab, git or local ("" when the input could not be read)
+    char *host;        // "" for a local folder
 } sh_discovery;
-// The skills each input (owner/repo or a github.com URL) offers, all repositories at once.
+// The skills each input (anything sh_origin_parse reads) offers, all repositories at once.
 void sh_engine_discover(sh_engine *e, const char *const *inputs, size_t n, sh_discovery *out);
 void sh_discovery_free(sh_discovery *d);
-// Installs candidates, each name once (callers drop duplicates first); done[i] tells which ones worked.
-int sh_engine_install(sh_engine *e, const sh_candidate *const *cands, size_t n, bool *done);
+// Installs candidates this engine discovered, each name once (callers drop duplicates first); done[i] tells which ones
+// worked. `link`: skills from a local folder become live links to it instead of copies.
+int sh_engine_install(sh_engine *e, const sh_candidate *const *cands, size_t n, bool link, bool *done);
 
-// The skills of an import file that come from GitHub (checked by the caller before). A skill whose folder moved upstream
-// is found by name. why[i] is set for each one that failed; done[i] tells which ones worked.
+// The skills of an import file that come from a remote repository (checked by the caller before). A skill whose folder
+// moved upstream is found by name. why[i] is set for each one that failed; done[i] tells which ones worked.
 typedef enum { SH_IMPORT_OK, SH_IMPORT_UNREACHABLE, SH_IMPORT_GONE, SH_IMPORT_FAILED } sh_import_why;
 int sh_engine_import(sh_engine *e, const sh_import_item *const *items, size_t n, bool *done, sh_import_why *why,
                      char **errs);

@@ -14,7 +14,7 @@ struct SkillRow {
     QString name, description, source, sourceType, status, note;
     QString path, upstreamPath, hash, installedAt, updatedAt;
     QStringList links;  // per managed agent, in the order of the agent columns
-    bool problem = false, parked = false, localEdits = false, hold = false;
+    bool problem = false, parked = false, localEdits = false, hold = false, live = false;
     int versions = 0;
     // sort keys, folded once here: sorting 10,000 rows compares them hundreds of thousands of times
     QString nameKey, sourceKey;
@@ -38,6 +38,7 @@ struct SkillRow {
         r.parked = o.value(QStringLiteral("parked")).toBool();
         r.localEdits = o.value(QStringLiteral("localEdits")).toBool();
         r.hold = o.value(QStringLiteral("hold")).toBool();
+        r.live = o.value(QStringLiteral("live")).toBool();
         r.versions = o.value(QStringLiteral("versions")).toInt();
         r.nameKey = r.name.toCaseFolded();
         r.sourceKey = r.source.toCaseFolded();

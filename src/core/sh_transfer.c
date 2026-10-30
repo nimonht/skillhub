@@ -13,6 +13,7 @@
 #include "sh_hash.h"
 #include "sh_json.h"
 #include "sh_link.h"
+#include "sh_origin.h"
 #include "sh_path.h"
 #include "sh_store.h"
 #include "sh_time.h"
@@ -34,6 +35,36 @@ static int name_cmp(const char *a, const char *b) {
 #else
     return strcasecmp(a, b);
 #endif
+}
+
+// A URL an export may carry: https, and no user name or token in it.
+static bool plain_https(const char *url) {
+    if (!sh_starts_with(url, "https://")) return false;
+    const char *host = url + 8;
+    const char *at = strchr(host, '@'), *slash = strchr(host, '/');
+    return !at || (slash && slash < at);
+}
+
+// A skill whose source works on another machine: GitHub, or GitLab or git over https. The others travel as files.
+static bool travels(const sh_source *s) {
+    if (!sh_source_runnable(s) || strcmp(s->type, "local") == 0) return false;
+    if (!*s->type || strcmp(s->type, "github") == 0) return true;
+    return plain_https(s->url);
+}
+
+// Import files are untrusted: GitHub as a plain owner/repo (the only kind a version 1 file holds), or GitLab and git over
+// https. Nothing else, so a hostile file cannot make Skill Hub copy a folder from this machine or use its SSH keys.
+// NULL when fine, with *o filled in.
+static const char *remote_problem(const char *source, const char *type, sh_origin *o) {
+    const bool github = !*type || strcmp(type, "github") == 0;
+    const char *const why = github ? "source is not a GitHub repository (owner/repo)" : "only https sources can be imported";
+    memset(o, 0, sizeof *o);
+    if (!github && strcmp(type, "gitlab") != 0 && strcmp(type, "git") != 0) return why;
+    if (!sh_origin_parse(source, o, NULL)) return why;
+    const bool plain = strcmp(o->source, source) == 0 && !*o->subpath && !*o->ref;
+    if (plain && (github ? o->type == SH_ORIGIN_GITHUB : o->type != SH_ORIGIN_GITHUB && o->type != SH_ORIGIN_LOCAL && plain_https(o->url))) return NULL;
+    sh_origin_free(o);
+    return why;
 }
 
 static bool valid_name(const char *n) {
@@ -117,12 +148,14 @@ bool sh_store_write_export(sh_store *st, const char *path, bool include_local, i
         yyjson_mut_val *o = yyjson_mut_obj(d);
         sh_json_set_str(d, o, "name", s->name);
         sh_json_set_str(d, o, "description", s->description);
-        if (sh_source_tracked(&s->src)) {
+        if (travels(&s->src)) {
+            sh_json_set_str(d, o, "sourceType", *s->src.type ? s->src.type : "github");
             sh_json_set_str(d, o, "source", s->src.source);
             char *url = *s->src.url ? sh_strdup(s->src.url) : sh_strfmt("https://github.com/%s.git", s->src.source);
             sh_json_set_str(d, o, "url", url);
             free(url);
             sh_json_set_str(d, o, "path", s->src.skill_path);
+            if (*s->src.ref) sh_json_set_str(d, o, "ref", s->src.ref);
             sh_json_set_str(d, o, "hash", s->src.hash);
             ++n_tracked;
         } else if (include_local) {
@@ -192,7 +225,7 @@ bool sh_store_write_export(sh_store *st, const char *path, bool include_local, i
     created[19] = 'Z';  // seconds precision, as 1.x wrote it
     created[20] = '\0';
     sh_json_set_str(d, root, "format", "skillhub-export");
-    sh_json_set_int(d, root, "version", 1);
+    sh_json_set_int(d, root, "version", 2);
     sh_json_set_str(d, root, "createdAt", created);
     sh_json_set_str(d, root, "createdBy", "skillhub " SKILLHUB_VERSION);
     sh_json_set_val(d, root, "skills", arr);
@@ -214,7 +247,7 @@ bool sh_store_write_export(sh_store *st, const char *path, bool include_local, i
 // ---- import ----
 
 static void item_free(sh_import_item *it) {
-    free(it->name); free(it->description); free(it->source); free(it->url); free(it->skill_path); free(it->problem);
+    free(it->name); free(it->description); free(it->source); free(it->url); free(it->skill_path); free(it->ref); free(it->problem);
     for (size_t i = 0; i < it->n_files; ++i) {
         free(it->files[i].path);
         sh_buf_free(&it->files[i].data);
@@ -269,7 +302,7 @@ void sh_store_read_export_data(const sh_store *st, const char *data, size_t n, s
         return;
     }
     const long long version = sh_json_int(root, "version", 0);
-    if (version != 1) {
+    if (version != 1 && version != 2) {
         if (err) *err = sh_strfmt("this export was made by a newer Skill Hub (format version %lld); update the app", version);
         yyjson_doc_free(doc);
         return;
@@ -294,27 +327,28 @@ void sh_store_read_export_data(const sh_store *st, const char *data, size_t n, s
         it->source = sh_strdup("");
         it->url = sh_strdup("");
         it->skill_path = sh_strdup("");
+        it->ref = sh_strdup("");
         it->problem = sh_strdup("");
         if (!valid_name(it->name)) {
             set(&it->problem, sh_strdup("not a valid skill name"));
         } else if (sh_strv_contains(&seen, it->name)) {
             set(&it->problem, sh_strdup("listed twice"));
         } else if (!it->local) {
-            const char *source = sh_json_str(o, "source");
-            char *url = NULL;
-            char *slug = sh_slug_from_input(source, &url);
+            sh_origin origin;
             const char *p = sh_json_str(o, "path");
-            if (!slug || strcmp(slug, source) != 0) {
-                set(&it->problem, sh_strdup("source is not a GitHub repository (owner/repo)"));
-            } else if (!valid_rel(p) || !(strcmp(p, "SKILL.md") == 0 || sh_ends_with(p, "/SKILL.md"))) {
-                set(&it->problem, sh_strdup("unsafe path inside the repository"));
+            const char *ref = sh_json_str(o, "ref");
+            const char *why = remote_problem(sh_json_str(o, "source"), sh_json_str(o, "sourceType"), &origin);
+            if (!why && !sh_origin_ref_ok(ref)) why = "unsafe branch or tag";
+            if (!why && (!valid_rel(p) || !(strcmp(p, "SKILL.md") == 0 || sh_ends_with(p, "/SKILL.md")))) why = "unsafe path inside the repository";
+            if (why) {
+                set(&it->problem, sh_strdup(why));
             } else {
-                set(&it->source, sh_strdup(slug));
-                set(&it->url, sh_strdup(url));  // always rebuilt from the validated name; the file's own URL is ignored
+                set(&it->source, sh_strdup(origin.source));
+                set(&it->url, sh_strdup(origin.url));  // always rebuilt from the validated source; the file's own URL is ignored
                 set(&it->skill_path, sh_strdup(p));
+                set(&it->ref, sh_strdup(ref));
             }
-            free(slug);
-            free(url);
+            if (origin.source) sh_origin_free(&origin);
         } else {
             yyjson_val *files = sh_json_arr(o, "files");
             const size_t nf = yyjson_arr_size(files);
@@ -419,14 +453,12 @@ static bool import_local(sh_store *st, const sh_import_item *it) {
     return true;
 }
 
-// a skill from GitHub that may be installed: a plain owner/repo source and a sane path inside it
+// a remote skill that may be installed: a source that passes the same checks as in the file, and a sane path inside it
 static bool remote_ok(const sh_import_item *it) {
-    char *url = NULL;
-    char *slug = sh_slug_from_input(it->source, &url);
-    const bool ok = slug && strcmp(slug, it->source) == 0 && valid_rel(it->skill_path);
-    free(slug);
-    free(url);
-    return ok;
+    sh_origin o;
+    const char *why = remote_problem(it->source, sh_starts_with(it->source, "https://") ? "git" : "github", &o);
+    if (!why) sh_origin_free(&o);
+    return !why && valid_rel(it->skill_path);
 }
 
 void sh_store_import_items(sh_store *st, const sh_import_item *const *items, size_t n, int *ok, int *failed) {

@@ -128,6 +128,8 @@ class AppController : public QObject {
     Q_PROPERTY(QVariantList candidates READ candidates NOTIFY candidatesChanged)
     Q_PROPERTY(QString candidateRepo READ candidateRepo NOTIFY candidatesChanged)
     Q_PROPERTY(QString candidateError READ candidateError NOTIFY candidatesChanged)
+    Q_PROPERTY(QString candidateType READ candidateType NOTIFY candidatesChanged)  // github, gitlab, git, local
+    Q_PROPERTY(QString candidateHost READ candidateHost NOTIFY candidatesChanged)
     Q_PROPERTY(bool discovering READ discovering NOTIFY candidatesChanged)
     Q_PROPERTY(bool automationSupported READ automationSupported NOTIFY automationChanged)  // daily timer + stray watcher exist on this system
     Q_PROPERTY(QString timerState READ timerState NOTIFY automationChanged)
@@ -179,6 +181,8 @@ public:
     QVariantList candidates() const { return candidates_; }
     QString candidateRepo() const { return candidateRepo_; }
     QString candidateError() const { return candidateError_; }
+    QString candidateType() const { return candidateType_; }
+    QString candidateHost() const { return candidateHost_; }
     bool discovering() const { return discovering_; }
     bool automationSupported() const { return automationSupported_; }
     QString timerState() const { return timer_; }
@@ -207,7 +211,7 @@ public:
     Q_INVOKABLE void adopt();
     Q_INVOKABLE void select(const QString &name);
     Q_INVOKABLE void discover(const QString &repo);
-    Q_INVOKABLE void installChosen(const QStringList &names);
+    Q_INVOKABLE void installChosen(const QStringList &names, bool live);
     Q_INVOKABLE void closeAdd();
     Q_INVOKABLE void dismiss();
     Q_INVOKABLE void removeSkill(const QString &name);
@@ -273,7 +277,7 @@ private:
     QVariantList importItems_;
     QString importError_, importPath_;
     QString selected_, preview_, focus_, mode_ = QStringLiteral("skill");
-    QString busyText_, candidateRepo_, candidateError_, timer_ = QStringLiteral("off"), watch_ = QStringLiteral("off");
+    QString busyText_, candidateRepo_, candidateError_, candidateType_, candidateHost_, timer_ = QStringLiteral("off"), watch_ = QStringLiteral("off");
     QString themeMode_ = QStringLiteral("system");
     double progress_ = -1;
     bool busy_ = false, discovering_ = false, reduce_ = false, forcedStill_ = false, noHover_ = false, loaded_ = false;

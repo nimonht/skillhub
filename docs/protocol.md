@@ -79,11 +79,13 @@ first scan has finished is answered when it has.
 ```json
 { "name":"gsap-core", "description":"...", "source":"greensock/gsap-skills", "sourceType":"github",
   "status":"available", "note":"", "links":["link","shared","off"], "problem":false,
-  "parked":false, "localEdits":false, "hold":false, "versions":2, "lock":"current",
+  "live":false, "parked":false, "localEdits":false, "hold":false, "versions":2, "lock":"current",
   "path":"~/.agents/skills/gsap-core", "upstreamPath":"skills/gsap-core/SKILL.md", "hash":"<tree id>",
   "installedAt":"<ISO UTC>", "updatedAt":"<ISO UTC>" }
 ```
 
+`sourceType` is `github`, `gitlab`, `git`, `local` or whatever npx wrote for a type Skill Hub does not run (the window
+shows those as managed by npx), and empty without a source. `live` is true for a live link to a local folder.
 `status` is `local`, `tracked`, `current`, `available`, `updated` or `error`, as 1.x shows them. A check result stays
 attached to the lock entry it was made for: when the entry later holds the hash upstream had (another process updated
 the skill), the status becomes `current`; when it changes to anything else, the result is dropped and the status is

@@ -2,6 +2,7 @@
 #include "test.h"
 
 #include "sh_fs.h"
+#include "sh_origin.h"
 #include "sh_link.h"
 #include "sh_path.h"
 #include "sh_str.h"
@@ -98,6 +99,72 @@ static void files(void) {
     free(copied); free(moved); free(copy); free(keep); free(link); free(target); free(deeper); free(a); free(dir);
 }
 
+// where skills come from: the inputs npx skills accepts (src/source-parser.ts)
+static void origins(void) {
+    static const struct { const char *in, *type, *source, *url, *ref, *subpath, *host; } cases[] = {
+        {"acme/skills", "github", "acme/skills", "https://github.com/acme/skills.git", "", "", "github.com"},
+        {"acme/skills.git", "github", "acme/skills", "https://github.com/acme/skills.git", "", "", "github.com"},
+        {"acme/skills/tools/lint", "github", "acme/skills", "https://github.com/acme/skills.git", "", "tools/lint", "github.com"},
+        {"github:acme/skills#v2", "github", "acme/skills", "https://github.com/acme/skills.git", "v2", "", "github.com"},
+        {"https://github.com/acme/skills/tree/dev/skills/a", "github", "acme/skills", "https://github.com/acme/skills.git", "dev", "skills/a", "github.com"},
+        {"git@github.com:acme/skills.git", "github", "acme/skills", "git@github.com:acme/skills.git", "", "", "github.com"},
+        {"gitlab:group/sub/proj", "gitlab", "https://gitlab.com/group/sub/proj.git", "https://gitlab.com/group/sub/proj.git", "", "", "gitlab.com"},
+        {"https://gitlab.com/group/sub/proj", "gitlab", "https://gitlab.com/group/sub/proj.git", "https://gitlab.com/group/sub/proj.git", "", "", "gitlab.com"},
+        {"https://code.example.org/team/proj/-/tree/main/skills", "gitlab", "https://code.example.org/team/proj.git", "https://code.example.org/team/proj.git", "main", "skills", "code.example.org"},
+        {"https://dev.azure.com/org/proj/_git/repo", "git", "https://dev.azure.com/org/proj/_git/repo", "https://dev.azure.com/org/proj/_git/repo", "", "", "dev.azure.com"},
+        {"ssh://git@git.example.org:2222/team/repo.git#v1", "git", "ssh://git@git.example.org:2222/team/repo.git", "ssh://git@git.example.org:2222/team/repo.git", "v1", "", "git.example.org"},
+        {"/opt/skills/mine", "local", "/opt/skills/mine", "/opt/skills/mine", "", "", ""},
+    };
+    for (size_t i = 0; i < sizeof cases / sizeof cases[0]; ++i) {
+        sh_origin o;
+        char *err = NULL;
+        CHECK(sh_origin_parse(cases[i].in, &o, &err));
+        if (err) fprintf(stderr, "%s: %s\n", cases[i].in, err);
+        free(err);
+        CHECK_EQ_STR(sh_origin_type_name(o.type), cases[i].type);
+        CHECK_EQ_STR(o.source, cases[i].source);
+        CHECK_EQ_STR(o.url, cases[i].url);
+        CHECK_EQ_STR(o.ref, cases[i].ref);
+        CHECK_EQ_STR(o.subpath, cases[i].subpath);
+        CHECK_EQ_STR(o.host, cases[i].host);
+        sh_origin_free(&o);
+    }
+    static const char *const bad[] = {"", "-upload-pack=x", "--", "just-a-word", "a/b c", "://..//22", "https://../x/y.git", "https://./x/y.git", "ftp://example.com/x/y.git",
+                                      "file:///etc/x", "ext::sh -c x@y:z", "fd::3", "ssh://-oProxyCommand=x/y", "ssh://-u@example.com/y", "git@-oProxyCommand=x:y"};
+    for (size_t i = 0; i < sizeof bad / sizeof bad[0]; ++i) {
+        sh_origin o;
+        char *err = NULL;
+        CHECK(!sh_origin_parse(bad[i], &o, &err) && err);
+        free(err);
+    }
+    // cache folders: the 1.x key for plain GitHub, a host folder and a hash for the rest
+    sh_origin o;
+    CHECK(sh_origin_parse("https://git.Example.com:8443/group/proj/-/tree/dev/sub", &o, NULL));
+    CHECK_EQ_STR(o.url, "https://git.Example.com:8443/group/proj.git");  // the port stays, and it is no part of the host
+    CHECK_EQ_STR(o.host, "git.example.com");
+    CHECK_EQ_STR(o.ref, "dev");
+    char *ported = sh_origin_cache_dir(&o, "/c");
+    CHECK(sh_starts_with(ported, "/c/repos/git.example.com/group__proj-"));
+    free(ported);
+    sh_origin_free(&o);
+    CHECK(sh_origin_parse("http://gitlab.local/group/proj", &o, NULL));
+    CHECK_EQ_STR(o.url, "http://gitlab.local/group/proj.git");  // a server without https keeps working
+    sh_origin_free(&o);
+    CHECK(sh_origin_parse("acme/skills", &o, NULL));
+    CHECK_STR(sh_origin_cache_dir(&o, "/c"), "/c/repos/acme__skills");
+    sh_origin_free(&o);
+    CHECK(sh_origin_parse("https://GitLab.com/Group/Sub/proj.git/", &o, NULL));
+    char *a = sh_origin_cache_dir(&o, "/c");
+    sh_origin_free(&o);
+    CHECK(sh_origin_parse("gitlab:Group/Sub/proj", &o, NULL));
+    char *b = sh_origin_cache_dir(&o, "/c");
+    sh_origin_free(&o);
+    CHECK(sh_starts_with(a, "/c/repos/gitlab.com/Group__Sub__proj-"));
+    CHECK_EQ_STR(a, b);  // the same repository, typed two ways
+    free(a);
+    free(b);
+}
+
 const sh_test_case sh_tests_paths[] = {
-    {"paths.clean", clean}, {"paths.relative", relative}, {"paths.parts", parts}, {"paths.files", files}, {NULL, NULL},
+    {"paths.clean", clean}, {"paths.relative", relative}, {"paths.parts", parts}, {"paths.files", files}, {"paths.origins", origins}, {NULL, NULL},
 };
