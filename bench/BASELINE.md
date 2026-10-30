@@ -90,4 +90,21 @@ Target: 20 ms or less. Rows arrive already built from the backend client's worke
 once per row, and the backend runs at a lower priority (nice 5; below normal on Windows) so the window gets the CPU first.
 Layout and drawing stay under 4 ms.
 
+## 2.0, with every feature in (2026-10-31)
+
+Three runs, all within 2 % of each other for time; peak memory is the highest of the three.
+
+| 10,000 skills | Time | Peak memory |
+|---|---:|---:|
+| Install all | 4.8 s | 54 MB |
+| Check, nothing changed | 1.5 s | 29 MB |
+| Check, 10 % changed | 3.5 s | 25 MB |
+| Update | 2.3 s | 56 MB |
+
+The longest stall of the interface thread is 4 ms during an update and 21 ms during a check, where it comes as the results
+arrive; while the check itself runs it is 4 ms.
+
+On the real 137-skill library, peak memory measured from a small C parent: `skillhub list` 3.8 MB, against 34.9 MB for
+1.0.1; `skillhub --version` 2.5 MB, against 29.6 MB.
+
 A small run against real GitHub repositories and a Windows run are still to be recorded.

@@ -278,6 +278,7 @@ manager or `sudo cmake --build build --target uninstall`; both remove only files
 ## Status and limits
 
 - Linux is the home platform. **macOS and Windows** run the same program (window and CLI). The macOS and Windows builds are tested by CI (build, command line, window rendering, and what the daily update and the watcher write and run, without running them) but have not been used on real hardware by the author: please report what you find.
+- Blur and Liquid Glass are native on Windows 11 and macOS (Liquid Glass itself on macOS 26). On Linux your compositor does the blurring: Hyprland, Sway with SwayFX and others do, GNOME does not, and KDE needs its own protocol, which this build does not use. Solid always works.
 - Task Scheduler has no file-change trigger, so on Windows the stray watcher is a small program that stays running from logon. On Linux and macOS the system starts it when a folder changes.
 - Windows links agents' folders with symlinks when Windows allows them (Developer Mode or administrator) and with junctions otherwise, so no setting is needed.
 - The catalog is as good as its source. Claude Code and Codex were tested live; Gemini CLI, Antigravity and Zed follow their documentation; for the other agents, where they read skills comes from the skills CLI registry. Report a wrong entry and it will be fixed.

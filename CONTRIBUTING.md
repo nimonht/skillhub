@@ -25,7 +25,8 @@ sh tests/gui-smoke.sh build/skillhub out      # headless render of every page, t
 The C core also builds with sanitizers (`CC=clang cmake -B build-asan -DSKILLHUB_GUI=OFF -DSKILLHUB_SANITIZE=ON`; ThreadSanitizer
 through `-DCMAKE_C_FLAGS=-fsanitize=thread -DCMAKE_EXE_LINKER_FLAGS=-fsanitize=thread`) and with libFuzzer targets for every
 parser of untrusted input (`-DSKILLHUB_FUZZ=ON`, see `tests/fuzz`). `bench/bench.py` and `bench/bench_serve.py` measure the
-command line and the backend against `bench/BASELINE.md`.
+command line and the backend against `bench/BASELINE.md`. `tools/demo-screenshots.sh` remakes the README pictures from a demo
+home; it is optional, and only worth running when the window changes.
 
 Look at the UI without a display: `QT_QPA_PLATFORM=offscreen build/skillhub gui --shot out.png --theme light --size 1000x640
 --select NAME` (also `--agent ID`, `--mode add|review|settings|terminal|onboarding`, `--section NAME`, `--step N`, `--coach N`,
