@@ -56,8 +56,8 @@ that into one directory plus a few symlinks, and tells you the moment something 
   identical duplicates aside and keeps conflicting copies instead of overwriting anything.
 - **Install from GitHub**: name a repository, tick the skills you want from its list, done.
 - **Updates**: compares each skill's folder hash with its upstream repository (git tree SHA), updates one or all, keeps
-  the previous three versions, and can run daily through a systemd user timer.
-- **Stays tidy**: an optional systemd path watcher pulls a skill dropped into an agent folder back into the shared one.
+  the previous three versions, and can run daily: a systemd timer on Linux, a launchd agent on macOS, a scheduled task on Windows.
+- **Stays tidy**: an optional watcher pulls a skill dropped into an agent folder back into the shared one.
 - **Dark and light themes** that follow your system, keyboard-first, readable (contrast is checked in CI).
 - **Compatible with `npx skills`**: reads and writes the same `~/.agents/.skill-lock.json` (v3) lock file.
 
@@ -173,7 +173,7 @@ skillhub check -C ~/work/app                        # -C is short for --project
 skillhub copy my-skill ~/work/app                   # a skill of yours, into a project
 skillhub projects add ~/work/app                    # keep it in the window's list (auto ... on: the daily update too)
 
-skillhub autoupdate on     # daily update via systemd user timer
+skillhub autoupdate on     # daily update (systemd timer, launchd agent or scheduled task)
 skillhub watch on          # auto-adopt strays dropped into agent folders
 ```
 
@@ -228,8 +228,8 @@ are never touched.
 | `add OWNER/REPO [--skill a,b \| --all]` | install skills from a GitHub repository |
 | `remove NAME` | remove a skill everywhere (a copy is kept in the backup folder) |
 | `track NAME OWNER/REPO [PATH]` | set the upstream of a skill you already have |
-| `autoupdate on\|off\|status` | daily update timer (systemd user unit; Linux only) |
-| `watch on\|off\|status` | stray-skill watcher (systemd user path unit; Linux only) |
+| `autoupdate on\|off\|status` | daily update: systemd user timer, launchd agent, or a scheduled task. Automatic runs leave out skills on hold and updates that add or change scripts |
+| `watch on\|off\|status` | stray-skill watcher: systemd path unit, launchd agent, or a task that starts `skillhub watch --run` at logon |
 | `uninstall [--dry-run] [--yes] [--keep-cache]` | remove units, installed files below `$HOME` and the cache; keeps your skills |
 
 ## Uninstall
@@ -239,7 +239,7 @@ skillhub uninstall --dry-run     # show what would be removed
 skillhub uninstall               # asks first; --yes skips the prompt, --keep-cache keeps ~/.cache/skillhub
 ```
 
-This removes the systemd units, the files `make install` put below your home directory (binary, launcher, icons) and the
+This removes the units, LaunchAgents or scheduled tasks, the files `make install` put below your home directory (binary, launcher, icons) and the
 git cache. It **never** touches your skills: `~/.agents/skills`, the lock file, the agent symlinks, the Antigravity entry
 and `~/.agents/.backup` all stay (delete them by hand if you want them gone). For a system-wide install use your package
 manager or `sudo cmake --build build --target uninstall`; both remove only files this project installed.
@@ -257,7 +257,8 @@ manager or `sudo cmake --build build --target uninstall`; both remove only files
 
 ## Status and limits
 
-- Linux is the home platform. **macOS and Windows** run the same program (window and CLI); the daily update timer and the stray watcher are systemd units, so they exist on Linux only for now. The macOS and Windows builds are tested by CI (build, command line, window rendering) but have not been used on real hardware by the author: please report what you find.
+- Linux is the home platform. **macOS and Windows** run the same program (window and CLI). The macOS and Windows builds are tested by CI (build, command line, window rendering, and what the daily update and the watcher write and run, without running them) but have not been used on real hardware by the author: please report what you find.
+- Task Scheduler has no file-change trigger, so on Windows the stray watcher is a small program that stays running from logon. On Linux and macOS the system starts it when a folder changes.
 - Windows links agents' folders with symlinks when Windows allows them (Developer Mode or administrator) and with junctions otherwise, so no setting is needed.
 - The catalog is as good as its source. Claude Code and Codex were tested live; Gemini CLI, Antigravity and Zed follow their documentation; for the other agents, where they read skills comes from the skills CLI registry. Report a wrong entry and it will be fixed.
 - Antigravity wiring follows its documented `skills.json` mechanism; it is the least battle-tested agent here.
@@ -268,7 +269,7 @@ manager or `sudo cmake --build build --target uninstall`; both remove only files
 - [x] Per-agent enable/disable for a skill
 - [x] Project-level skills (`.claude/skills` in a repository), not only user-level ones
 - [x] GitLab / arbitrary git URLs and local-path sources
-- [ ] Daily update and stray watcher on macOS (launchd) and Windows (Task Scheduler)
+- [x] Daily update and stray watcher on macOS (launchd) and Windows (Task Scheduler)
 
 ## Contributing
 

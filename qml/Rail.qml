@@ -120,7 +120,7 @@ Rectangle {
             visible: app.automationSupported
             width: parent.width
             text: "Daily update"
-            hint: "systemd user timer"
+            hint: app.automationMechanism === "launchd" ? "launchd agent" : app.automationMechanism === "Task Scheduler" ? "Task Scheduler" : "systemd user timer"
             checked: app.timerState === "on"
             onToggled: app.setTimer(checked)
         }

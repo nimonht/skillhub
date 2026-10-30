@@ -1,5 +1,4 @@
-// Automation (the daily update timer and the stray watcher) and uninstall. Linux uses systemd user units, written exactly as
-// 1.x wrote them; launchd and Task Scheduler arrive with milestone M3e of the 2.0 plan.
+// Notifications, and removing what Skill Hub put on the machine.
 #include <stdlib.h>
 #include <string.h>
 
@@ -10,13 +9,10 @@
 #include "sh_store.h"
 #include "sh_utf.h"
 
-bool sh_automation_supported(void) {
-#ifdef __linux__
-    return true;
-#else
-    return false;
+#ifdef _WIN32
+#include <windows.h>
+#include <shellapi.h>
 #endif
-}
 
 void sh_notify(const char *title, const char *body) {
 #if defined(__linux__)
@@ -42,163 +38,30 @@ void sh_notify(const char *title, const char *body) {
     const char *argv[] = {"osascript", "-e", sh_buf_str(&script), NULL};
     sh_proc_detach(argv);
     sh_buf_free(&script);
+#elif defined(_WIN32)
+    // a balloon from the tray, which needs a window to belong to; this process is about to end, so it waits for the balloon
+    NOTIFYICONDATAW n;
+    memset(&n, 0, sizeof n);
+    n.cbSize = sizeof n;
+    n.hWnd = CreateWindowExW(0, L"STATIC", L"Skill Hub", 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, NULL, NULL);
+    n.uID = 1;
+    n.uFlags = NIF_INFO | NIF_ICON | NIF_TIP;
+    n.hIcon = LoadIconW(GetModuleHandleW(NULL), MAKEINTRESOURCEW(1));
+    if (!n.hIcon) n.hIcon = LoadIconW(NULL, MAKEINTRESOURCEW(32516));  // IDI_INFORMATION, in its wide form
+    n.dwInfoFlags = NIIF_INFO;
+    MultiByteToWideChar(CP_UTF8, 0, title, -1, n.szInfoTitle, (int)(sizeof n.szInfoTitle / sizeof n.szInfoTitle[0]) - 1);
+    MultiByteToWideChar(CP_UTF8, 0, body, -1, n.szInfo, (int)(sizeof n.szInfo / sizeof n.szInfo[0]) - 1);
+    memcpy(n.szTip, L"Skill Hub", sizeof L"Skill Hub");
+    if (Shell_NotifyIconW(NIM_ADD, &n)) {
+        Sleep(6000);
+        Shell_NotifyIconW(NIM_DELETE, &n);
+    }
+    if (n.hWnd) DestroyWindow(n.hWnd);
 #else
     (void)title;
     (void)body;
 #endif
 }
-
-#ifdef __linux__
-
-static char *unit_dir(const sh_store *st) { return sh_path_join(st->home, ".config/systemd/user"); }
-
-static bool systemctl(const char *a, const char *b, const char *c, char **out, int timeout_ms) {
-    const char *argv[] = {"systemctl", "--user", a, b, c, NULL};
-    const sh_proc_opts o = {NULL, NULL, NULL, 0, timeout_ms ? timeout_ms : 60000, NULL, NULL};
-    sh_proc_result r;
-    const bool ok = sh_proc_run(argv, &o, &r);
-    if (out) *out = sh_trimmed(sh_buf_str(&r.out), r.out.len);
-    sh_proc_result_free(&r);
-    return ok;
-}
-
-// The units run the command line: ~/.local/bin/skillhub when installed there, else this very program.
-static char *exe_for_units(const sh_store *st) {
-    char *installed = sh_path_join(st->home, ".local/bin/skillhub");
-    const bool have = sh_exists(installed);
-    free(installed);
-    if (have) return sh_strdup("%h/.local/bin/skillhub");
-    char self[4096];
-    return sh_exe_path(self, sizeof self) ? sh_strdup(self) : sh_strdup("skillhub");
-}
-
-char *sh_store_unit_state(const sh_store *st, const char *unit) {
-    (void)st;
-    char *out = NULL;
-    const char *argv[] = {"systemctl", "--user", "is-enabled", unit, NULL};
-    const sh_proc_opts o = {NULL, NULL, NULL, 0, 8000, NULL, NULL};
-    sh_proc_result r;
-    sh_proc_run(argv, &o, &r);
-    out = sh_trimmed(sh_buf_str(&r.out), r.out.len);
-    sh_proc_result_free(&r);
-    if (!*out) {
-        free(out);
-        return sh_strdup("not installed");
-    }
-    return out;
-}
-
-bool sh_store_install_units(sh_store *st, bool timer, bool watcher, char **err) {
-    char *exe = exe_for_units(st);
-    char *d = unit_dir(st);
-    bool ok = true;
-    if (timer) {
-        char *service = sh_strfmt("[Unit]\nDescription=Update shared agent skills\nAfter=network-online.target\n\n"
-                                  "[Service]\nType=oneshot\nExecStart=%s update --all --auto --notify\nNice=10\n", exe);
-        const char *timer_text = "[Unit]\nDescription=Daily agent skill update\n\n"
-                                 "[Timer]\nOnCalendar=daily\nPersistent=true\nRandomizedDelaySec=30min\nOnStartupSec=10min\n\n"
-                                 "[Install]\nWantedBy=timers.target\n";
-        char *f1 = sh_path_join(d, "skillhub-update.service"), *f2 = sh_path_join(d, "skillhub-update.timer");
-        ok = sh_write_atomic(f1, service, strlen(service)) && ok;
-        ok = sh_write_atomic(f2, timer_text, strlen(timer_text)) && ok;
-        free(f1);
-        free(f2);
-        free(service);
-    }
-    if (watcher) {
-        sh_strv dirs = SH_STRV_INIT;
-        sh_store_watch_dirs(st, &dirs);
-        if (dirs.len == 0) {
-            if (err) *err = sh_strdup("no coding agents are managed yet, so there is nothing to watch");
-            sh_strv_free(&dirs);
-            free(d);
-            free(exe);
-            return false;
-        }
-        sh_buf paths = SH_BUF_INIT;
-        for (size_t i = 0; i < dirs.len; ++i) sh_buf_printf(&paths, "PathChanged=%s\n", dirs.items[i]);
-        sh_strv_free(&dirs);
-        char *service = sh_strfmt("[Unit]\nDescription=Pull stray agent skills into ~/.agents/skills\n"
-                                  "StartLimitIntervalSec=0\n\n"
-                                  "[Service]\nType=oneshot\nExecStart=%s adopt --notify\n", exe);
-        char *path_unit = sh_strfmt("[Unit]\nDescription=Watch agent skill dirs for stray skills\n\n"
-                                    "[Path]\n%s\n"
-                                    "[Install]\nWantedBy=default.target\n", sh_buf_str(&paths));
-        char *f1 = sh_path_join(d, "skillhub-adopt.service"), *f2 = sh_path_join(d, "skillhub-adopt.path");
-        ok = sh_write_atomic(f1, service, strlen(service)) && ok;
-        ok = sh_write_atomic(f2, path_unit, strlen(path_unit)) && ok;
-        free(f1);
-        free(f2);
-        free(service);
-        free(path_unit);
-        sh_buf_free(&paths);
-    }
-    if (!ok) {
-        if (err) *err = sh_strfmt("cannot write unit files in %s", d);
-        free(d);
-        free(exe);
-        return false;
-    }
-    systemctl("daemon-reload", NULL, NULL, NULL, 0);
-    if (timer) ok = systemctl("enable", "--now", "skillhub-update.timer", NULL, 0) && ok;
-    if (watcher) ok = systemctl("enable", "--now", "skillhub-adopt.path", NULL, 0) && ok;
-    if (!ok && err) *err = sh_strdup("systemctl --user enable failed");
-    free(d);
-    free(exe);
-    return ok;
-}
-
-bool sh_store_remove_units(sh_store *st, bool timer, bool watcher, char **err) {
-    (void)err;
-    char *d = unit_dir(st);
-    if (timer) {
-        systemctl("disable", "--now", "skillhub-update.timer", NULL, 0);
-        char *f1 = sh_path_join(d, "skillhub-update.timer"), *f2 = sh_path_join(d, "skillhub-update.service");
-        sh_remove_file(f1);
-        sh_remove_file(f2);
-        free(f1);
-        free(f2);
-    }
-    if (watcher) {
-        systemctl("disable", "--now", "skillhub-adopt.path", NULL, 0);
-        char *f1 = sh_path_join(d, "skillhub-adopt.path"), *f2 = sh_path_join(d, "skillhub-adopt.service");
-        sh_remove_file(f1);
-        sh_remove_file(f2);
-        free(f1);
-        free(f2);
-    }
-    systemctl("daemon-reload", NULL, NULL, NULL, 0);
-    free(d);
-    return true;
-}
-
-#else
-
-static const char NO_UNITS[] = "daily updates and the stray watcher need systemd user units, which are only available on Linux";
-
-char *sh_store_unit_state(const sh_store *st, const char *unit) {
-    (void)st;
-    (void)unit;
-    return sh_strdup("not available");
-}
-
-bool sh_store_install_units(sh_store *st, bool timer, bool watcher, char **err) {
-    (void)st;
-    (void)timer;
-    (void)watcher;
-    if (err) *err = sh_strdup(NO_UNITS);
-    return false;
-}
-
-bool sh_store_remove_units(sh_store *st, bool timer, bool watcher, char **err) {
-    (void)st;
-    (void)timer;
-    (void)watcher;
-    (void)err;
-    return true;
-}
-
-#endif
 
 // Remove what Skill Hub itself put on the machine: systemd units, installed files below $HOME, the git cache.
 // Never touches skills, the lock file, agent links or the backup folder.
@@ -207,7 +70,7 @@ bool sh_store_uninstall(sh_store *st, bool dry_run, bool keep_cache) {
     bool ok = true;
 #ifdef __linux__
     // 1. systemd user units
-    char *d = unit_dir(st);
+    char *d = sh_path_join(st->home, ".config/systemd/user");
     static const char *const unit_names[] = {"skillhub-update.timer", "skillhub-update.service", "skillhub-adopt.path",
                                              "skillhub-adopt.service"};
     sh_strv units = SH_STRV_INIT;
@@ -274,7 +137,16 @@ bool sh_store_uninstall(sh_store *st, bool dry_run, bool keep_cache) {
     free(home_slash);
     sh_strv_free(&prefixes);
 #else
-    sh_store_log(st, "this system has no Skill Hub units or desktop files to remove; delete the application the way you installed it");
+    // 1. LaunchAgents or scheduled tasks; the application itself goes the way it came
+    for (int timer = 1; timer >= 0; --timer) {
+        char *state = sh_automation_state(st, timer != 0);
+        if (strcmp(state, "not installed") != 0 && strcmp(state, "not available") != 0) {
+            if (!dry_run) sh_store_remove_units(st, timer != 0, timer == 0, NULL);
+            sh_store_log(st, "%s %s", verb, sh_automation_name(timer != 0));
+        }
+        free(state);
+    }
+    sh_store_log(st, "delete the application the way you installed it");
 #endif
 
     // 3. the cache of cloned upstream repositories

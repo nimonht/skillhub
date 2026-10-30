@@ -239,7 +239,10 @@ void sh_import_items_free(sh_import_items *items);
 
 // ---- automation and uninstall (sh_units.c) ----
 bool sh_automation_supported(void);
-char *sh_store_unit_state(const sh_store *st, const char *unit);
+const char *sh_automation_mechanism(void);        // systemd, launchd, Task Scheduler or none
+const char *sh_automation_name(bool timer);       // the unit, agent or task, as shown to the user
+char *sh_automation_state(const sh_store *st, bool timer);  // "enabled", "disabled", "not installed" or "not available"
+void sh_automation_apply_env(void);               // scheduled runs: the variables recorded when automation was switched on
 bool sh_store_install_units(sh_store *st, bool timer, bool watcher, char **err);
 bool sh_store_remove_units(sh_store *st, bool timer, bool watcher, char **err);
 bool sh_store_uninstall(sh_store *st, bool dry_run, bool keep_cache);

@@ -229,11 +229,8 @@ try:
     if states(env)["three"].get("claude-code") != "link":
         fail("a skill added with several repositories is not linked")
 
-    # automation exists only where there are systemd user units
-    if not LINUX:
-        p = run(env, "autoupdate", "status", expect=1)
-        if "not available" not in p.stderr:
-            fail("autoupdate should say it is not available here: " + p.stderr)
+    if "not installed" not in run(env, "autoupdate", "status").stdout and not LINUX:
+        fail("autoupdate status on a machine where it is off")
 
     print("portable smoke test passed (%s)" % sys.platform)
 finally:

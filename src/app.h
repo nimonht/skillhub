@@ -142,6 +142,7 @@ class AppController : public QObject {
     Q_PROPERTY(QVariantList projects READ projects NOTIFY projectsChanged)
     Q_PROPERTY(QStringList suggestedProjects READ suggestedProjects NOTIFY projectsChanged)
     Q_PROPERTY(bool automationSupported READ automationSupported NOTIFY automationChanged)  // daily timer + stray watcher exist on this system
+    Q_PROPERTY(QString automationMechanism READ automationMechanism NOTIFY automationChanged)
     Q_PROPERTY(QString timerState READ timerState NOTIFY automationChanged)
     Q_PROPERTY(QString watcherState READ watcherState NOTIFY automationChanged)
     Q_PROPERTY(QString centralPath READ centralPath NOTIFY countsChanged)
@@ -205,6 +206,7 @@ public:
     QStringList suggestedProjects() const { return suggested_; }
     bool onHold() const { return onHold_; }
     bool automationSupported() const { return automationSupported_; }
+    QString automationMechanism() const { return mechanism_; }
     QString timerState() const { return timer_; }
     QString watcherState() const { return watch_; }
     QString centralPath() const;
@@ -315,7 +317,7 @@ private:
     QVariantMap detail_;
     QVariantList candidates_, reviews_, versions_, projects_;
     QStringList suggested_;
-    QString scope_, scopeCentral_;
+    QString scope_, scopeCentral_, mechanism_;
     QString undoMethod_;       // skills.rollback or skills.restore, for what just happened
     QStringList undoNames_;
     bool reviewOpen_ = false, reviewLoading_ = false, onHold_ = false;
