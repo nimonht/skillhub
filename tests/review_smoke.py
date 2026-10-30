@@ -112,9 +112,11 @@ def main():
     check(os.path.isfile(home + "/.agents/skills/alpha/scripts/more.py") and "on hold" not in run(env, "history", "alpha").stdout, "a manual update ends the hold")
 
     run(env, "rollback", "alpha")
-    write(hub + "/skills/alpha/late.md", "upstream moved on\n")  # not a script: the hold is over, and nothing else stops it
+    write(hub + "/skills/alpha/late.md", "upstream moved on\n")
     commit(hub)
+    write(env["SKILLHUB_CONFIG"] + "/settings.json", '{"version": 1, "updates": {"autoSkipScripts": false}}')  # the update brings more.py back
     run(env, "update", "--all", "--auto")
+    os.remove(env["SKILLHUB_CONFIG"] + "/settings.json")
     check(os.path.isfile(home + "/.agents/skills/alpha/late.md"), "upstream moved past the version rolled back from")
     run(env, "rollback", "alpha", "19990101-000000", expect=1)
     run(env, "rollback", "nosuch", expect=1)

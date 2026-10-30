@@ -224,6 +224,7 @@ public:
     Q_INVOKABLE void rollback(const QString &name, const QString &stamp);
     Q_INVOKABLE void undoLast();
     Q_INVOKABLE void setHold(const QString &name, bool on);
+    Q_INVOKABLE void setAgentEnabled(const QStringList &names, const QString &agent, bool on);  // agent: an id, @shared, @all
     Q_INVOKABLE void updateSkill(const QString &name);
     Q_INVOKABLE void adopt();
     Q_INVOKABLE void select(const QString &name);

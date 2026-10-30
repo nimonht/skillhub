@@ -9,6 +9,7 @@
 #include "sh_fs.h"
 #include "sh_history.h"
 #include "sh_path.h"
+#include "sh_toggle.h"
 
 // ---- reporting from the job's threads ----
 
@@ -278,6 +279,19 @@ static void body_diff(job *j, sh_store *st) {
 }
 
 // `name` with an optional `stamp`, or `names`: each back to its newest kept version (Undo after an update)
+// `names` for `agent` (an id, or @shared, or @all)
+static void body_set_enabled(job *j, sh_store *st) {
+    sh_strv names = SH_STRV_INIT;
+    param_strv(j->params, "names", &names);
+    if (*param_str(j->params, "name")) sh_strv_push(&names, param_str(j->params, "name"));
+    char *err = NULL;
+    if (names.len == 0) fail(j, "name which skill");
+    else if (!sh_skills_set_enabled(st, (const char *const *)names.items, names.len, param_str(j->params, "agent"), param_bool(j->params, "enabled", true), &err)) fail(j, err);
+    free(err);
+    sh_strv_free(&names);
+    j->rescan = true;
+}
+
 static void body_rollback(job *j, sh_store *st) {
     sh_strv names = SH_STRV_INIT;
     param_strv(j->params, "names", &names);
@@ -331,7 +345,7 @@ static void body_discover(job *j, sh_store *st) {
         yyjson_mut_val *list = yyjson_mut_arr(j->out);
         for (size_t i = 0; i < found.cands.len; ++i) {
             const sh_candidate *c = &found.cands.items[i];
-            char *dest = sh_path_join(st->central, c->name);
+            char *dest = sh_store_skill_dir(st, c->name);
             yyjson_mut_val *o = yyjson_mut_obj(j->out);
             yyjson_mut_obj_add_strcpy(j->out, o, "name", c->name);
             yyjson_mut_obj_add_strcpy(j->out, o, "description", c->description);
@@ -478,6 +492,7 @@ static const job_method METHODS[] = {
     {"skills.rollback", "rollback", true, body_rollback, {NULL}},
     {"skills.restore", "restore", true, body_restore, {"name", NULL}},
     {"skills.hold", "hold", true, body_hold, {"name", NULL}},
+    {"skills.setAgentEnabled", "setAgentEnabled", true, body_set_enabled, {"agent", NULL}},
     {"skills.track", "track", true, body_track, {"name", "source", NULL}},
     {"sources.discover", "discover", false, body_discover, {"input", NULL}},
     {"adopt", "adopt", true, body_adopt, {NULL}},

@@ -89,6 +89,8 @@ add_library(skillhub_core STATIC
     src/core/sh_catalog.c
     src/core/sh_collate.c src/core/sh_collate.h
     src/core/sh_history.c src/core/sh_history.h
+    src/core/sh_state.c src/core/sh_state.h
+    src/core/sh_toggle.c src/core/sh_toggle.h
     src/core/sh_review.c src/core/sh_review.h
     src/core/sh_engine.c src/core/sh_engine.h
     src/core/sh_exe.c src/core/sh_exe.h

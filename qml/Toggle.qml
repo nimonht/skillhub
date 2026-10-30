@@ -6,6 +6,7 @@ import "."
 AbstractButton {
     id: root
     property string hint: ""
+    property bool showLabel: true   // the switch alone; `text` still names it for screen readers
     checkable: true
     hoverEnabled: true
     focusPolicy: Qt.StrongFocus
@@ -40,6 +41,7 @@ AbstractButton {
             }
         }
         Column {
+            visible: root.showLabel
             anchors.left: track.right
             anchors.leftMargin: 10
             anchors.right: parent.right

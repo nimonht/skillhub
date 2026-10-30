@@ -3,12 +3,13 @@ import "."
 
 // One instrument per (skill, agent): is this skill visible to that agent, and how.
 // Healthy = a plain lit disc. Only states that need a look get a ring: missing (cross), copy (diamond), foreign (dash), absent (grey dash).
+// Off is a choice, not a fault: a hollow ring and nothing in it.
 Item {
     id: root
-    property string link: "link"      // link | shared | missing | copy | foreign | absent
+    property string link: "link"      // link | shared | off | missing | copy | foreign | absent
     property string agentLabel: ""
     readonly property bool ok: link === "link" || link === "shared"
-    readonly property var words: ({ "link": "linked", "shared": "reads the shared folder", "missing": "missing, not linked",
+    readonly property var words: ({ "link": "linked", "shared": "reads the shared folder", "off": "turned off for this agent", "missing": "missing, not linked",
                                     "copy": "separate copy, not the shared one", "foreign": "link points elsewhere", "absent": "agent not detected" })
     width: 22
     height: 22
@@ -27,7 +28,7 @@ Item {
         width: 18; height: 18; radius: 9
         color: "transparent"
         border.width: 1.5
-        border.color: root.link === "missing" ? Theme.danger : root.link === "absent" ? Theme.lineStrong : Theme.notify
+        border.color: root.link === "missing" ? Theme.danger : root.link === "absent" || root.link === "off" ? Theme.lineStrong : Theme.notify
     }
     Icon { visible: root.link === "missing"; anchors.centerIn: parent; name: "x"; size: 10; weight: 2.4; color: Theme.danger }
     Rectangle {   // copy: diamond

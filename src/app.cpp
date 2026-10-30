@@ -552,6 +552,12 @@ void AppController::rollback(const QString &name, const QString &stamp) {
     startJob(QStringLiteral("skills.rollback"), {{QStringLiteral("name"), name}, {QStringLiteral("stamp"), stamp}}, tr("Rolling back %1").arg(name), QStringLiteral("rollback"), false);
 }
 
+void AppController::setAgentEnabled(const QStringList &names, const QString &agent, bool on) {
+    startJob(QStringLiteral("skills.setAgentEnabled"),
+             {{QStringLiteral("names"), QJsonArray::fromStringList(names)}, {QStringLiteral("agent"), agent}, {QStringLiteral("enabled"), on}},
+             tr("Changing which agents see it"), QStringLiteral("setAgentEnabled"), false);
+}
+
 void AppController::setHold(const QString &name, bool on) {
     startJob(QStringLiteral("skills.hold"), {{QStringLiteral("name"), name}, {QStringLiteral("on"), on}}, tr("Changing the hold"), QStringLiteral("hold"), false);
 }
@@ -588,9 +594,13 @@ QVariantMap AppController::agentDetail() const {
         if (m.value(QStringLiteral("id")).toString() != focus_) continue;
         QVariantMap out = m;
         QStringList issues;
-        for (const SkillRow &s : model_.rows())
+        QVariantList skills;
+        for (const SkillRow &s : model_.rows()) {
             if (k < s.links.size() && SkillRow::badLink(s.links[k])) issues << s.name;
+            skills << QVariantMap{{QStringLiteral("name"), s.name}, {QStringLiteral("state"), k < s.links.size() ? s.links[k] : QStringLiteral("missing")}};
+        }
         out.insert(QStringLiteral("issues"), issues);
+        out.insert(QStringLiteral("skills"), skills);
         return out;
     }
     return {};
@@ -602,7 +612,9 @@ void AppController::rebuildDetail() {
     if (s) {
         QVariantList links;
         for (int k = 0; k < agents_.size(); ++k)
-            links << QVariantMap{{QStringLiteral("label"), agents_[k].toMap().value(QStringLiteral("label"))},
+            links << QVariantMap{{QStringLiteral("id"), agents_[k].toMap().value(QStringLiteral("id"))},
+                                 {QStringLiteral("mode"), agents_[k].toMap().value(QStringLiteral("mode"))},
+                                 {QStringLiteral("label"), agents_[k].toMap().value(QStringLiteral("label"))},
                                  {QStringLiteral("state"), k < s->links.size() ? s->links[k] : QStringLiteral("missing")}};
         detail_ = QVariantMap{{QStringLiteral("name"), s->name},
                               {QStringLiteral("description"), s->description},
@@ -618,6 +630,7 @@ void AppController::rebuildDetail() {
                               {QStringLiteral("updated"), dateOf(s->updatedAt)},
                               {QStringLiteral("tracked"), !s->source.isEmpty()},
                               {QStringLiteral("versions"), s->versions},
+                              {QStringLiteral("parked"), s->parked},
                               {QStringLiteral("links"), links}};
     } else {
         preview_.clear();
@@ -714,7 +727,7 @@ void AppController::jobDone(const QJsonObject &done) {
     } else if (kind == QLatin1String("restore")) {
         msg = done.value(QStringLiteral("ok")).toBool() ? tr("Restored") : error;
         level = done.value(QStringLiteral("ok")).toBool() ? QStringLiteral("ok") : QStringLiteral("error");
-    } else if (kind == QLatin1String("hold") && !error.isEmpty()) {
+    } else if ((kind == QLatin1String("hold") || kind == QLatin1String("setAgentEnabled")) && !error.isEmpty()) {
         msg = error;
         level = QStringLiteral("error");
     } else if (kind == QLatin1String("track")) {

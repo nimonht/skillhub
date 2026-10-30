@@ -13,8 +13,10 @@
 #include "sh_link.h"
 #include "sh_path.h"
 #include "sh_proc.h"
+#include "sh_state.h"
 #include "sh_thread.h"
 #include "sh_time.h"
+#include "sh_toggle.h"
 #include "sh_utf.h"
 
 #ifndef _WIN32
@@ -29,6 +31,7 @@ void sh_store_init(sh_store *st, sh_log_fn log, void *user) {
     st->central = sh_path_join(st->home, ".agents/skills");
     sh_lock_paths_for(st->home, &st->lock_path, &st->lock_other);
     st->backup = sh_path_join(st->home, ".agents/.backup");
+    st->parked = sh_path_join(st->home, ".agents/.parked");
     st->cache = sh_cache_dir();
     st->state = sh_state_dir();
     st->log_lock = sh_mutex_new();
@@ -39,6 +42,7 @@ void sh_store_init(sh_store *st, sh_log_fn log, void *user) {
 void sh_store_free(sh_store *st) {
     free(st->home);
     free(st->central);
+    free(st->parked);
     free(st->lock_path);
     free(st->lock_other);
     free(st->backup);
@@ -115,12 +119,15 @@ void sh_candidates_free(sh_candidates *c) {
 
 // ---- scan ----
 
-static sh_link_state state_for(const sh_agent *a, const char *name, const char *central_skill, const char *central) {
+static sh_link_state state_for(const sh_agent *a, const sh_skill *s, const char *central, const sh_toggles *toggles) {
+    const char *name = s->name;
     if (strcmp(a->mode, "link") == 0) {
         char *lp = sh_path_join(a->dir, name);
+        const bool off = sh_toggles_off(toggles, name, a->dir);
         sh_link_state st;
-        if (sh_is_link(lp)) st = sh_exists(lp) && sh_points_to(lp, central_skill) ? SH_LINK_LINKED : SH_LINK_FOREIGN;
-        else st = sh_exists(lp) ? SH_LINK_COPY : SH_LINK_MISSING;
+        if (sh_is_link(lp)) st = sh_exists(lp) && sh_points_to(lp, s->path) ? (off ? SH_LINK_OFF : SH_LINK_LINKED) : SH_LINK_FOREIGN;
+        else if (sh_exists(lp)) st = SH_LINK_COPY;
+        else st = off ? SH_LINK_OFF : SH_LINK_MISSING;
         free(lp);
         return st;
     }
@@ -134,13 +141,35 @@ static sh_link_state state_for(const sh_agent *a, const char *name, const char *
         free(p);
         if (copy) return SH_LINK_COPY;
     }
-    return SH_LINK_NATIVE;
+    return s->parked ? SH_LINK_OFF : SH_LINK_NATIVE;
 }
 
-static void fill_links(const sh_store *st, sh_skill *s) {
+static void fill_links(const sh_store *st, sh_skill *s, const sh_toggles *toggles) {
     s->n_links = st->n_agents;
     s->links = sh_xcalloc(st->n_agents + 1, sizeof *s->links);
-    for (size_t k = 0; k < st->n_agents; ++k) s->links[k] = state_for(st->agents[k], s->name, s->path, st->central);
+    for (size_t k = 0; k < st->n_agents; ++k) s->links[k] = state_for(st->agents[k], s, st->central, toggles);
+}
+
+char *sh_store_skill_dir(const sh_store *st, const char *name) {
+    char *dir = sh_path_join(st->central, name);
+    if (sh_lexists(dir) || !st->parked) return dir;
+    char *parked = sh_path_join(st->parked, name);
+    if (!sh_lexists(parked)) {
+        free(parked);
+        return dir;
+    }
+    free(dir);
+    return parked;
+}
+
+// the skills in the parked folder, added to `names`; the shared folder wins when both have a name
+static void add_parked(const sh_store *st, sh_strv *names) {
+    sh_strv parked = SH_STRV_INIT;
+    sh_list_dir(st->parked, SH_LIST_ALL, &parked);
+    for (size_t i = 0; i < parked.len; ++i)
+        if (!sh_strv_contains(names, parked.items[i])) sh_strv_push(names, parked.items[i]);
+    if (parked.len) sh_strv_sort(names, sh_compare_ci);
+    sh_strv_free(&parked);
 }
 
 void sh_store_scan(const sh_store *st, sh_skills *out) {
@@ -150,13 +179,25 @@ void sh_store_scan(const sh_store *st, sh_skills *out) {
     sh_json_index *entries = sh_json_index_new(lock_skills);
     sh_strv names = SH_STRV_INIT;
     sh_list_dir(st->central, SH_LIST_DIRS | SH_SORT_NAME_CI, &names);
+    const bool any_parked = st->parked && sh_is_dir(st->parked);
+    if (any_parked) add_parked(st, &names);
+    yyjson_mut_doc *state = any_parked ? sh_state_load(NULL) : NULL;
+    yyjson_mut_val *parked_rows = state ? yyjson_mut_obj_get(yyjson_mut_doc_get_root(state), "parked") : NULL;
+    sh_json_index *parked_ix = sh_json_index_new(parked_rows);
+    sh_toggles *toggles = sh_toggles_load();
     out->items = sh_xcalloc(names.len + 1, sizeof *out->items);
     for (size_t i = 0; i < names.len; ++i) {
         const char *name = names.items[i];
         if (hidden_name(name)) continue;
         char *path = sh_path_join(st->central, name);
+        const bool parked = any_parked && !sh_lexists(path);
+        if (parked) {
+            free(path);
+            path = sh_path_join(st->parked, name);
+        }
         char *md = sh_path_join(path, "SKILL.md");
-        yyjson_mut_val *entry = sh_json_index_get(entries, name);
+        yyjson_mut_val *row = parked ? sh_json_index_get(parked_ix, name) : NULL;
+        yyjson_mut_val *entry = parked ? (row ? yyjson_mut_obj_get(row, "lockEntry") : NULL) : sh_json_index_get(entries, name);
         // the only link that is a skill: a live link to a local folder, which the lock file says it is
         const bool live = strcmp(yyjson_mut_is_obj(entry) ? sh_json_mut_str(entry, "sourceType") : "", "local") == 0;
         if (!sh_exists(md) || (sh_is_link(path) && !live)) {
@@ -168,6 +209,7 @@ void sh_store_scan(const sh_store *st, sh_skills *out) {
         memset(s, 0, sizeof *s);
         s->name = sh_strdup(name);
         s->path = path;
+        s->parked = parked;
         sh_frontmatter fm;
         sh_fm_read(md, &fm);
         s->description = sh_strdup(sh_fm_value(&fm, "description"));
@@ -180,8 +222,11 @@ void sh_store_scan(const sh_store *st, sh_skills *out) {
         s->new_hash = sh_strdup("");
         s->new_path = sh_strdup("");
         s->note = sh_strdup("");
-        fill_links(st, s);
+        fill_links(st, s, toggles);
     }
+    sh_toggles_free(toggles);
+    sh_json_index_free(parked_ix);
+    yyjson_mut_doc_free(state);
     sh_strv_free(&names);
     sh_json_index_free(entries);
     yyjson_mut_doc_free(lock);
@@ -218,7 +263,7 @@ void sh_store_strays(const sh_store *st, sh_strays *out) {
                     s->agent_id = sh_strdup(a->id);
                     s->name = sh_strdup(n);
                     s->path = sh_strdup(path);
-                    char *dest = sh_path_join(st->central, n);
+                    char *dest = sh_store_skill_dir(st, n);
                     s->duplicate = sh_exists(dest);
                     free(dest);
                 }
@@ -314,7 +359,7 @@ int sh_store_adopt(sh_store *st) {
             continue;
         }
         wait_quiet(s->path);
-        char *dest = sh_path_join(st->central, s->name);
+        char *dest = sh_store_skill_dir(st, s->name);
         if (!sh_exists(dest)) {
             if (sh_move_dir(s->path, dest)) {
                 sh_store_log(st, "adopted %s from %s -> central", s->name, agent->label);
@@ -345,9 +390,11 @@ int sh_store_adopt(sh_store *st) {
 
 int sh_store_relink(sh_store *st) {
     int changes = 0;
+    sh_parked_reconcile(st);
     sh_skills skills;
     sh_store_scan(st, &skills);
-    char *central_slash = sh_strfmt("%s/", st->central);
+    sh_toggles *toggles = sh_toggles_load();
+    char *central_slash = sh_strfmt("%s/", st->central), *parked_slash = sh_strfmt("%s/", st->parked);
     for (size_t k = 0; k < st->n_agents; ++k) {
         const sh_agent *a = st->agents[k];
         if (!a->linked || !*a->dir) continue;
@@ -356,6 +403,14 @@ int sh_store_relink(sh_store *st) {
             const sh_skill *s = &skills.items[i];
             char *lp = sh_path_join(a->dir, s->name);
             const bool is_link = sh_is_link(lp);
+            if (sh_toggles_off(toggles, s->name, a->dir)) {  // only a link of ours goes: never a real folder, or someone else's link
+                if (is_link && sh_points_to(lp, s->path) && sh_remove_link(lp)) {
+                    sh_store_log(st, "switched %s off for %s", s->name, a->label);
+                    ++changes;
+                }
+                free(lp);
+                continue;
+            }
             if (is_link || sh_exists(lp)) {
                 if (is_link && !sh_exists(lp)) {  // a broken link with a live target name: point it again
                     sh_remove_link(lp);
@@ -382,7 +437,7 @@ int sh_store_relink(sh_store *st) {
             char *p = sh_path_join(a->dir, n);
             if (sh_is_link(p) && !sh_exists(p) && !hidden_name(n) && !sh_strv_contains(&a->ignore, n)) {
                 char *target = sh_link_target(p);
-                if (target && sh_path_within(target, central_slash) ) {
+                if (target && (sh_path_within(target, central_slash) || sh_path_within(target, parked_slash))) {
                     sh_remove_link(p);
                     sh_store_log(st, "removed dead link %s", p);
                     ++changes;
@@ -393,7 +448,9 @@ int sh_store_relink(sh_store *st) {
         }
         sh_strv_free(&entries);
     }
+    free(parked_slash);
     free(central_slash);
+    sh_toggles_free(toggles);
     sh_skills_free(&skills);
     bool changed = false;
     sh_store_ensure_provider_configs(st, &changed);
@@ -410,13 +467,24 @@ char *sh_store_stage_dir(const sh_store *st, const char *label) {
     return sh_strfmt("%s/stage/%s-%ld-%ld", st->cache, label, sh_process_id(), sh_atomic_inc(&counter));
 }
 
-// `base` (taken over), plus a counter when that second is taken already
+// `base` (taken over), plus a counter when that second is taken already. The counter only grows, also past backups pruned
+// meanwhile: the name is what says which backup is the newest.
 static char *unused_backup(char *base) {
-    char *bk = sh_strdup(base);
-    for (int i = 2; sh_lexists(bk) && i < 1000; ++i) {
-        free(bk);
-        bk = sh_strfmt("%s-%d", base, i);
+    char *parent = sh_path_parent(base);
+    const char *leaf = base + strlen(parent) + 1;
+    const size_t n = strlen(leaf);
+    sh_strv entries = SH_STRV_INIT;
+    sh_list_dir(parent, SH_LIST_ALL, &entries);
+    long top = 0;
+    for (size_t i = 0; i < entries.len; ++i) {
+        const char *e = entries.items[i];
+        if (strncmp(e, leaf, n) != 0) continue;
+        if (!e[n]) top = top < 1 ? 1 : top;
+        else if (e[n] == '-' && e[n + 1] && strspn(e + n + 1, "0123456789") == strlen(e + n + 1) && atol(e + n + 1) > top) top = atol(e + n + 1);
     }
+    sh_strv_free(&entries);
+    free(parent);
+    char *bk = top ? sh_strfmt("%s-%ld", base, top + 1) : sh_strdup(base);
     free(base);
     return bk;
 }
@@ -483,7 +551,7 @@ static void sidecar_write(const char *bk, const char *name, const sh_backup_note
 
 static bool swap_in(sh_store *st, const char *name, const char *stage, const char *link_to, const sh_backup_note *note) {
     bool ok = true;
-    char *dest = sh_path_join(st->central, name), *bk = NULL, *journal = NULL;
+    char *dest = sh_store_skill_dir(st, name), *bk = NULL, *journal = NULL;
     bool moved_aside = false;
     const bool was_link = sh_is_link(dest);
     if (sh_lexists(dest)) {
@@ -556,7 +624,7 @@ static int recover_swaps(sh_store *st) {
         if (sh_ends_with(files.items[i], ".json") && sh_json_read(path, 64 * 1024, &doc) == SH_JSON_OK) {
             yyjson_val *root = yyjson_doc_get_root(doc);
             const char *dest = sh_json_str(root, "dest"), *backup = sh_json_str(root, "backup"), *stage = sh_json_str(root, "stage");
-            if (inside(dest, st->central) && inside(backup, st->backup) && !sh_lexists(dest) && sh_is_dir(backup) &&
+            if ((inside(dest, st->central) || inside(dest, st->parked)) && inside(backup, st->backup) && !sh_lexists(dest) && sh_is_dir(backup) &&
                 sh_move_dir(backup, dest)) {
                 sh_store_log(st, "recovered %s: put back the version an interrupted update had moved aside", sh_json_str(root, "name"));
                 ++put_back;
@@ -646,7 +714,7 @@ int sh_store_recover(sh_store *st, bool git_locks) {
 
 bool sh_store_remove_skill(sh_store *st, const char *name) {
     if (!*name || strchr(name, '/') || hidden_name(name)) return false;
-    char *dest = sh_path_join(st->central, name);
+    char *dest = sh_store_skill_dir(st, name);
     if (!sh_lexists(dest)) {  // lexists: a live link whose folder is gone can still be removed
         free(dest);
         return false;
@@ -676,6 +744,7 @@ bool sh_store_remove_skill(sh_store *st, const char *name) {
         free(lp);
     }
     sh_lock_put(st, name, NULL);
+    sh_toggles_forget(name);
     if (live) sh_store_log(st, "removed the link %s", name);
     else sh_store_log(st, "removed %s (backup in %s/_removed)", name, st->backup);
     return true;

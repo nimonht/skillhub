@@ -165,7 +165,7 @@ Parameters marked `?` are optional. `names` is a list of skill names; an empty o
 | `skills.rollback` | `name` with `stamp?` (newest when missing), or `names` (each to its newest version) | job |
 | `skills.restore` | `name` (from `_removed/`) | job |
 | `skills.hold` | `name`, `on` | job |
-| `skills.setAgentEnabled` | `name`, `agent` (agent id, or `@shared`), `enabled` | job |
+| `skills.setAgentEnabled` | `name` or `names`, `agent` (an agent id, `@shared`, or `@all`), `enabled` | job. All at once: one write of each file, one relink. An agent that reads the shared folder is refused: use `@shared` |
 | `sources.discover` | `input` | job; the results carry `candidates:[{"name","description","dir","installed"}]`, `host`, `sourceType` |
 | `adopt` | none | job |
 | `relink` | none | job |
@@ -196,11 +196,11 @@ Parameters marked `?` are optional. `names` is a list of skill names; an empty o
 
 What 2.0's backend answers today (milestone M1c): `initialize`, `shutdown`, `state.snapshot`, `skills.read`,
 `skills.check`, `skills.update`, `skills.install`, `skills.remove`, `skills.track`, `skills.diff`, `skills.history`,
-`skills.rollback`, `skills.restore`, `skills.hold`, `sources.discover`, `adopt`, `relink`,
+`skills.rollback`, `skills.restore`, `skills.hold`, `skills.setAgentEnabled`, `sources.discover`, `adopt`, `relink`,
 `providers.list`, `providers.setManaged`, `providers.addCustom`, `providers.removeCustom`, `providers.rescan`,
 `transfer.export`, `transfer.preview`, `transfer.import`, `automation.status`, `automation.set`, `settings.get`,
-`settings.set` and `jobs.cancel`. The others arrive with the features they belong to (per-agent switches; projects; the
-terminal and `fetch`; the accent engine) and until then get `-32601`.
+`settings.set` and `jobs.cancel`. The others arrive with the features they belong to (projects; the terminal and `fetch`;
+the accent engine) and until then get `-32601`.
 
 ### Notifications from the backend
 

@@ -8,6 +8,7 @@
 #include "sh_fs.h"
 #include "sh_json.h"
 #include "sh_path.h"
+#include "sh_toggle.h"
 #include "sh_store.h"
 #include "sh_time.h"
 
@@ -219,7 +220,7 @@ static bool *last_of_each_name(const char *const *names, size_t n) {
     return keep;
 }
 
-bool sh_lock_put_many(sh_store *st, const char *const *names, const sh_source *const *srcs, size_t n) {
+bool sh_lock_files_put(sh_store *st, const char *const *names, const sh_source *const *srcs, size_t n) {
     if (n == 0) return true;
     char *err = NULL;
     yyjson_mut_doc *primary = load_file(st->lock_path, &err);
@@ -263,7 +264,29 @@ bool sh_lock_put_many(sh_store *st, const char *const *names, const sh_source *c
     return ok;
 }
 
+// a parked skill's entry stays out of the lock files, or npx would bring the skill back
+bool sh_lock_put_many(sh_store *st, const char *const *names, const sh_source *const *srcs, size_t n) {
+    if (!st->parked || !sh_is_dir(st->parked)) return sh_lock_files_put(st, names, srcs, n);
+    const char **rest = sh_xcalloc(n + 1, sizeof *rest);
+    const sh_source **rest_srcs = sh_xcalloc(n + 1, sizeof *rest_srcs);
+    size_t k = 0;
+    for (size_t i = 0; i < n; ++i) {
+        if (srcs[i] && sh_store_is_parked(st, names[i])) {
+            sh_parked_put(st, names[i], srcs[i]);
+            continue;
+        }
+        if (!srcs[i]) sh_parked_forget(st, names[i]);
+        rest[k] = names[i];
+        rest_srcs[k++] = srcs[i];
+    }
+    const bool ok = sh_lock_files_put(st, rest, rest_srcs, k);
+    free(rest_srcs);
+    free(rest);
+    return ok;
+}
+
 bool sh_lock_entry(const sh_store *st, const char *name, sh_source *out) {
+    if (st->parked && sh_store_is_parked(st, name)) return sh_parked_entry(st, name, out);
     yyjson_mut_doc *m = sh_lock_load(st, NULL);
     yyjson_mut_val *entry = m ? yyjson_mut_obj_get(skills_of(m), name) : NULL;
     const bool found = yyjson_mut_is_obj(entry);

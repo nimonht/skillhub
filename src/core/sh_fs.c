@@ -326,7 +326,7 @@ char *sh_canonical(const char *path) {
 
 // ---- listing ----
 
-static int cmp_ci(const char *a, const char *b) { return sh_casecmp(a, b); }
+int sh_compare_ci(const char *a, const char *b) { return sh_casecmp(a, b); }
 
 bool sh_list_dir(const char *path, int flags, sh_strv *names) {
 #ifdef _WIN32
@@ -373,7 +373,7 @@ bool sh_list_dir(const char *path, int flags, sh_strv *names) {
     }
     closedir(d);
 #endif
-    if (flags & SH_SORT_NAME_CI) sh_strv_sort(names, cmp_ci);
+    if (flags & SH_SORT_NAME_CI) sh_strv_sort(names, sh_compare_ci);
     else if (flags & SH_SORT_NAME) sh_strv_sort(names, strcmp);
     return true;
 }
