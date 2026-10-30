@@ -133,7 +133,7 @@ Flat by default. Depth is tone: each surface is one step lighter (dark) or white
 
 - **Buttons:** primary (mint on dark / ink on light), secondary, danger (outline), ghost. Icon-only variants name themselves on hover. Disabled keeps its shape and loses emphasis.
 - **Status:** an icon and a word, with no badge or outline around it: Update, Current, Updated, Error, Local, Not checked; for agents Healthy, Needs repair, Not found.
-- **Port:** a plain lit disc when the skill is visible; a ring appears only where something needs a look: cross (missing), diamond (separate copy), dash (link elsewhere or agent absent).
+- **Port:** a lit disc when the agent sees the skill, by a link, by reading the shared folder, or through a synced copy. A hollow ring with nothing in it means turned off on purpose, and is no fault. A red cross, an amber diamond or a dash need a look: missing, a separate copy, a link that leads elsewhere.
 - **Agent column:** a 36px tile with the agent's brand mark (monogram when it has none), the short name, `visible / total` in condensed numerals and a 3px ratio bar (mint for the visible share, amber when something needs attention). The inspected column gets corner hooks. The sixth column folds the agents beyond five into "+N more".
 - **Agents manager:** every known agent (75 in the catalog) with how it was found and how it sees skills; one switch to manage or ignore it; your own agents can be added.
 - **Transfer:** export writes one file; import shows what is inside before installing; dropping a file on the window starts it.
