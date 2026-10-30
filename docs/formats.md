@@ -306,14 +306,15 @@ Everything that both the command line and the window need. Missing keys mean the
 ### `toggles.json`
 
 Per-agent switches for user-level skills. Keys are resolved agent folders (with `/`), because some agents share one:
-amp and replit both read `~/.config/agents/skills`, zencoder and zenflow both read `~/.zencoder/skills`. The key `@shared`
-stands for every agent that reads the shared folder itself (and config-mode agents such as Antigravity).
+amp and replit both read `~/.config/agents/skills`, zencoder and zenflow both read `~/.zencoder/skills`. A file that cannot
+be parsed is never overwritten. Agents that read the shared folder have no entry here: where the folder sits says it
+(section 7). Removing a skill forgets its switches.
 
 ```json
 {
   "version": 1,
   "disabled": {
-    "<skill>": ["/home/me/.claude/skills", "@shared"]
+    "<skill>": ["/home/me/.claude/skills"]
   }
 }
 ```
@@ -352,7 +353,7 @@ Durable state that Skill Hub owns and that is not a preference.
 
 ## 7. Parked skills (`<home>/.agents/.parked/<name>`)
 
-A skill switched off for every agent that reads the shared folder is moved here, with its lock entry moved to
+A skill switched off for every agent that reads the shared folder (`@shared`, one switch for all of them) is moved here, with its lock entry moved to
 `state.json`. Link-mode agents that still have it switched on get a relative link to this folder. If the shared folder
 gets a skill of the same name meanwhile (installed by npx, say), the shared folder wins and the parked copy is moved to
 `.backup/.parked-replaced/`.

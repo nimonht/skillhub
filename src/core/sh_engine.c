@@ -665,7 +665,7 @@ static char *copy_folder(const char *from, const char *to) {  // NULL, or why it
 // an automatic update that would bring in new scripts waits for the user to look at it
 static bool held_back(sh_engine *e, placement *p) {
     if (!e->skip_scripts) return false;
-    char *installed = sh_path_join(e->st->central, p->name);
+    char *installed = sh_store_skill_dir(e->st, p->name);
     p->left_out = sh_adds_scripts(p->stage, installed);
     free(installed);
     if (p->left_out) sh_store_log(e->st, "left %s out: the update adds or changes scripts (skillhub update %s --review)", p->name, p->name);
@@ -742,7 +742,7 @@ static void placements_free(placement *p, size_t n) {
 }
 
 static char *placed_hash(const sh_engine *e, const char *name) {
-    char *folder = sh_path_join(e->st->central, name);
+    char *folder = sh_store_skill_dir(e->st, name);
     char *hash = sh_folder_hash(folder);
     free(folder);
     return hash;
@@ -781,7 +781,9 @@ static void updated(sh_engine *e, const repo_slot *s, sh_skill *sk, const char *
     sk->update = SH_UPDATE_CURRENT;
     set_str(&sk->new_hash, "");
     set_str(&sk->new_path, "");
-    char *md = sh_strfmt("%s/%s/SKILL.md", e->st->central, sk->name);
+    char *dir = sh_store_skill_dir(e->st, sk->name);
+    char *md = sh_path_join(dir, "SKILL.md");
+    free(dir);
     sh_frontmatter fm;
     sh_fm_read(md, &fm);
     set_str(&sk->description, sh_fm_value(&fm, "description"));
@@ -888,7 +890,7 @@ static void write_manifest(const char *stage, const char *name, const char *tree
 
 // the upstream version sits in <stage>/new: compares it with a copy of the installed folder
 static void finish_review(sh_engine *e, const repo_slot *s, const sh_skill *sk, sh_review *r, const char *stage, const char *skill_md) {
-    char *old = sh_path_join(stage, "old"), *fresh = sh_path_join(stage, "new"), *installed = sh_path_join(e->st->central, sk->name);
+    char *old = sh_path_join(stage, "old"), *fresh = sh_path_join(stage, "new"), *installed = sh_store_skill_dir(e->st, sk->name);
     r->err = copy_folder(installed, old);
     if (!r->err) sh_review_compare(stage, r);
     sh_remove_tree(old);
@@ -1246,7 +1248,9 @@ int sh_engine_import(sh_engine *e, const sh_import_item *const *in, size_t n, bo
 bool sh_store_track(sh_store *st, const char *name, const char *repo_input, const char *path, char **err) {
     sh_origin o;
     if (!sh_origin_parse(repo_input, &o, err)) return false;
-    char *md = sh_strfmt("%s/%s/SKILL.md", st->central, name);
+    char *dir = sh_store_skill_dir(st, name);
+    char *md = sh_path_join(dir, "SKILL.md");
+    free(dir);
     const bool have = sh_exists(md);
     free(md);
     if (!have) {

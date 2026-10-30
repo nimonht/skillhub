@@ -43,6 +43,9 @@ that into one directory plus a few symlinks, and tells you the moment something 
 - **Shows an update before it happens**: *Review changes* lists the files with a diff, flags scripts and your own edits, and
   applies exactly what you read. *Undo* is one click, every skill keeps its last three versions, and a skill you rolled back
   stays put until upstream moves on.
+- **Per-agent switches**: turn a skill off for one agent and leave it on for the others. Agents that read the shared folder
+  switch together; for them the skill is parked in `~/.agents/.parked`, where `npx skills` leaves it alone, and it keeps
+  getting updates.
 - **Transfer between machines**: *Export* writes one JSON file with every skill (remote skills as their source, local skills
   with their files); *Import* on the other machine shows what is inside, then downloads and installs everything. Drag the
   file onto the window, or use `skillhub export` / `skillhub import`.
@@ -159,6 +162,8 @@ skillhub update my-skill --review                   # show it, ask, then apply e
 skillhub history my-skill                           # the versions that are kept
 skillhub rollback my-skill                          # back to the last one; automatic updates then wait
 skillhub restore my-skill                           # bring back a removed skill
+skillhub disable my-skill --agent claude-code       # one agent stops seeing it (enable brings it back)
+skillhub disable my-skill --shared                  # every agent that reads the shared folder stops seeing it
 
 skillhub autoupdate on     # daily update via systemd user timer
 skillhub watch on          # auto-adopt strays dropped into agent folders
@@ -252,7 +257,7 @@ manager or `sudo cmake --build build --target uninstall`; both remove only files
 ## Roadmap
 
 - [x] Show a diff before applying an update, and one-click rollback in the GUI
-- [ ] Per-agent enable/disable for a skill
+- [x] Per-agent enable/disable for a skill
 - [ ] Project-level skills (`.claude/skills` in a repository), not only user-level ones
 - [x] GitLab / arbitrary git URLs and local-path sources
 - [ ] Daily update and stray watcher on macOS (launchd) and Windows (Task Scheduler)

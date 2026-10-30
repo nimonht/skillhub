@@ -45,6 +45,8 @@ revise 3
 mkdir -p "$H/work/skills/demo/scripts"
 printf '#!/bin/sh\necho setup\n' > "$H/work/skills/demo/scripts/setup.sh"
 revise 4
+"$BIN" disable beta --agent claude-code >/dev/null
+"$BIN" disable alpha --shared >/dev/null
 
 shot() {
   name=$1; shift
@@ -68,5 +70,7 @@ for theme in dark light; do
   shot "$theme-review" --theme "$theme" --size 1280x800 --mode review
   shot "$theme-review-small" --theme "$theme" --size 820x600 --mode review
   shot "$theme-versions" --theme "$theme" --size 1280x800 --select demo
+  shot "$theme-switches" --theme "$theme" --size 1280x800 --select beta
+  shot "$theme-agent-off" --theme "$theme" --size 1280x800 --agent claude-code
 done
 echo "gui smoke test passed (screenshots in $OUT)"

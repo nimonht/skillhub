@@ -8,6 +8,7 @@
 #include "sh_json.h"
 #include "sh_link.h"
 #include "sh_path.h"
+#include "sh_state.h"
 #include "sh_time.h"
 
 // ---- backups ----
@@ -90,7 +91,7 @@ static const char *tree_of(const sh_source *s, const sh_trees *t, const char *na
 static void restore_entry(sh_store *st, const char *name, yyjson_doc *sidecar, sh_source *current) {
     yyjson_val *root = yyjson_doc_get_root(sidecar);
     yyjson_val *entry = root ? yyjson_obj_get(root, "lockEntry") : NULL;
-    char *folder = sh_path_join(st->central, name);
+    char *folder = sh_store_skill_dir(st, name);
     char *content = sh_folder_hash(folder);
     free(folder);
     const char *const names[] = {name};
@@ -113,7 +114,7 @@ static void restore_entry(sh_store *st, const char *name, yyjson_doc *sidecar, s
 }
 
 bool sh_history_rollback(sh_store *st, const char *name, const char *stamp, char **err) {
-    char *dest = plain_name(name) ? sh_path_join(st->central, name) : NULL;
+    char *dest = plain_name(name) ? sh_store_skill_dir(st, name) : NULL;
     if (!dest || !sh_is_dir(dest)) {
         if (err) *err = sh_strfmt("%s is not installed", name);
         free(dest);
@@ -164,7 +165,7 @@ bool sh_history_rollback(sh_store *st, const char *name, const char *stamp, char
 }
 
 bool sh_history_restore(sh_store *st, const char *name, char **err) {
-    char *dest = plain_name(name) ? sh_path_join(st->central, name) : NULL;
+    char *dest = plain_name(name) ? sh_store_skill_dir(st, name) : NULL;
     if (!dest || sh_lexists(dest)) {
         if (err) *err = dest ? sh_strfmt("%s is installed", name) : sh_strfmt("%s is not a skill name", name);
         free(dest);
@@ -214,48 +215,14 @@ struct sh_holds {
     sh_json_index *ix;
 };
 
-static char *state_path(void) {
-    char *config = sh_config_dir();
-    char *p = sh_path_join(config, "state.json");
-    free(config);
-    return p;
-}
-
-// state.json as a document with holds.user present, or NULL with *err when the file exists and cannot be read: it is
-// then never overwritten
-static yyjson_mut_doc *state_load(char **err) {
-    char *path = state_path();
-    yyjson_doc *doc = NULL;
-    const sh_json_status s = sh_json_read(path, 0, &doc);
-    free(path);
-    if (s != SH_JSON_OK && s != SH_JSON_MISSING) {
-        if (err) *err = sh_strdup("state.json cannot be read");
-        return NULL;
-    }
-    yyjson_mut_doc *m = doc ? yyjson_doc_mut_copy(doc, NULL) : yyjson_mut_doc_new(NULL);
-    yyjson_doc_free(doc);
-    if (!yyjson_mut_is_obj(yyjson_mut_doc_get_root(m))) yyjson_mut_doc_set_root(m, yyjson_mut_obj(m));
-    yyjson_mut_val *root = yyjson_mut_doc_get_root(m);
-    if (!yyjson_mut_obj_get(root, "version")) sh_json_set_int(m, root, "version", 1);
-    sh_json_get_or_add_obj(m, sh_json_get_or_add_obj(m, root, "holds"), "user");
-    return m;
-}
-
 static yyjson_mut_val *user_holds(yyjson_mut_doc *m) {
-    return yyjson_mut_obj_get(yyjson_mut_obj_get(yyjson_mut_doc_get_root(m), "holds"), "user");
-}
-
-static bool state_save(yyjson_mut_doc *m) {
-    char *path = state_path();
-    const bool ok = sh_json_write(path, m, true, true);
-    free(path);
-    return ok;
+    return sh_json_get_or_add_obj(m, sh_json_get_or_add_obj(m, yyjson_mut_doc_get_root(m), "holds"), "user");
 }
 
 sh_holds *sh_holds_load(const sh_store *st) {
     (void)st;
     sh_holds *h = sh_xcalloc(1, sizeof *h);
-    h->doc = state_load(NULL);
+    h->doc = sh_state_load(NULL);
     h->ix = sh_json_index_new(h->doc ? user_holds(h->doc) : NULL);
     return h;
 }
@@ -274,7 +241,7 @@ void sh_holds_free(sh_holds *h) {
 
 bool sh_hold_set(sh_store *st, const char *name, const char *from_tree, char **err) {
     (void)st;
-    yyjson_mut_doc *m = state_load(err);
+    yyjson_mut_doc *m = sh_state_load(err);
     if (!m) return false;
     yyjson_mut_val *holds = user_holds(m);
     yyjson_mut_val *entry = yyjson_mut_obj(m);
@@ -283,7 +250,7 @@ bool sh_hold_set(sh_store *st, const char *name, const char *from_tree, char **e
     sh_json_set_str(m, entry, "since", now);
     free(now);
     sh_json_set_val(m, holds, name, entry);
-    const bool ok = state_save(m);
+    const bool ok = sh_state_save(m);
     if (!ok && err) *err = sh_strdup("cannot write state.json");
     yyjson_mut_doc_free(m);
     return ok;
@@ -291,7 +258,7 @@ bool sh_hold_set(sh_store *st, const char *name, const char *from_tree, char **e
 
 bool sh_holds_release(sh_store *st, const char *const *names, size_t n) {
     (void)st;
-    yyjson_mut_doc *m = state_load(NULL);
+    yyjson_mut_doc *m = sh_state_load(NULL);
     if (!m) return false;
     yyjson_mut_val *holds = user_holds(m);
     bool changed = false;
@@ -300,7 +267,7 @@ bool sh_holds_release(sh_store *st, const char *const *names, size_t n) {
         yyjson_mut_obj_remove_str(holds, names[i]);
         changed = true;
     }
-    const bool ok = !changed || state_save(m);
+    const bool ok = !changed || sh_state_save(m);
     yyjson_mut_doc_free(m);
     return ok && changed;
 }

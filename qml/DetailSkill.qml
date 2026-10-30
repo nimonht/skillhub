@@ -6,7 +6,7 @@ import "."
 Flickable {
     id: root
     // defaults for the moment before a skill is selected (older Qt versions warn when undefined is assigned to a string)
-    readonly property var d: Object.assign({ name: "", description: "", state: "", note: "", path: "", source: "", sourceType: "", live: false, upstreamPath: "", hash: "",
+    readonly property var d: Object.assign({ name: "", description: "", state: "", note: "", path: "", source: "", sourceType: "", live: false, parked: false, upstreamPath: "", hash: "",
                                              installed: "", updated: "", tracked: false, links: [] }, app.detail)
     readonly property string sourceText: {
         if (d.source === "") return "none, local skill"
@@ -157,25 +157,72 @@ Flickable {
             spacing: 4
             SectionLabel { width: parent.width; text: "Visible to" }
             Repeater {
-                model: root.d.links
-                delegate: Row {
+                model: root.d.links.filter(function (l) { return l.mode === "link" })
+                delegate: Item {
                     required property var modelData
-                    required property int index
-                    height: 30
-                    spacing: 10
-                    PortDot { link: modelData.state; agentLabel: modelData.label; anchors.verticalCenter: parent.verticalCenter }
-                    Text { text: modelData.label; width: 110; elide: Text.ElideRight; color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsBody; anchors.verticalCenter: parent.verticalCenter }
+                    width: parent.width
+                    height: 32
+                    PortDot { id: dot; link: modelData.state; agentLabel: modelData.label; anchors.verticalCenter: parent.verticalCenter }
+                    Text { x: 32; text: modelData.label; width: 110; elide: Text.ElideRight; color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsBody; anchors.verticalCenter: parent.verticalCenter }
                     Text {
+                        x: 152
+                        width: parent.width - x - agentSwitch.width
+                        elide: Text.ElideRight
                         text: modelData.state === "link" ? "symlink to the shared folder"
-                              : modelData.state === "shared" ? "reads the shared folder"
+                              : modelData.state === "off" ? "turned off for this agent"
                               : modelData.state === "missing" ? "no link, repair needed"
                               : modelData.state === "copy" ? "own copy, not the shared one"
                               : "link points elsewhere"
-                        color: (modelData.state === "link" || modelData.state === "shared") ? Theme.text2 : Theme.notifyText
+                        color: (modelData.state === "link" || modelData.state === "off") ? Theme.text2 : Theme.notifyText
                         font.family: Theme.ui
                         font.pixelSize: Theme.fsSmall
                         anchors.verticalCenter: parent.verticalCenter
                     }
+                    Toggle {
+                        id: agentSwitch
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        implicitWidth: 56
+                        text: modelData.label
+                        showLabel: false
+                        checked: modelData.state !== "off"
+                        enabled: !app.busy
+                        onToggled: app.setAgentEnabled([root.d.name], modelData.id, checked)
+                    }
+                }
+            }
+            Item {   // the agents that read the shared folder see one thing, so they switch together
+                readonly property var readers: root.d.links.filter(function (l) { return l.mode !== "link" })
+                visible: readers.length > 0
+                width: parent.width
+                height: 44
+                PortDot {
+                    link: root.d.parked ? "off" : parent.readers.length > 0 ? parent.readers[0].state : "shared"
+                    agentLabel: "Shared-folder readers"
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+                Column {
+                    x: 32
+                    width: parent.width - x - sharedSwitch.width
+                    anchors.verticalCenter: parent.verticalCenter
+                    Text { width: parent.width; elide: Text.ElideRight; text: "Shared-folder readers (" + parent.parent.readers.length + ")"; color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsBody }
+                    Text {
+                        width: parent.width
+                        elide: Text.ElideRight
+                        text: root.d.parked ? "turned off, the skill is parked" : parent.parent.readers.map(function (l) { return l.label }).join(", ")
+                        color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall
+                    }
+                }
+                Toggle {
+                    id: sharedSwitch
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    implicitWidth: 56
+                    text: "Shared-folder readers"
+                    showLabel: false
+                    checked: !root.d.parked
+                    enabled: !app.busy
+                    onToggled: app.setAgentEnabled([root.d.name], "@shared", checked)
                 }
             }
         }

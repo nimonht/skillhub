@@ -24,6 +24,7 @@ bool sh_lexists(const char *path);   // the entry itself, link or not
 bool sh_is_dir(const char *path);    // follows links
 bool sh_is_file(const char *path);   // follows links
 bool sh_is_executable(const char *path);
+int sh_compare_ci(const char *a, const char *b);  // the order of SH_SORT_NAME_CI
 int64_t sh_file_size(const char *path);
 int64_t sh_mtime_ms(const char *path);  // modification time, no link following; -1 on error
 char *sh_canonical(const char *path);   // links resolved, NULL when it does not exist

@@ -12,6 +12,10 @@
 - **One-click rollback.** Every backup now records its lock entry, so `skillhub rollback` and *Roll back* bring the source back
   too, and *Undo* follows every update and removal. A rollback sets a hold: automatic updates leave the skill alone until
   upstream moves on (`skillhub hold`, `skillhub release`). `skillhub restore` brings back a removed skill.
+- **Per-agent switches.** `skillhub disable` and `enable`, and a switch per agent in the skill's and the agent's detail. Agents
+  that read the shared folder switch together: the skill is parked in `~/.agents/.parked`, with its lock entry kept in
+  `state.json`, so `npx skills update -g` does not bring it back. Parked skills keep updating. Before going back to 1.x, run
+  `skillhub enable --all-parked`.
 - Automatic updates leave out updates that add or change scripts until you review them (`updates.autoSkipScripts`).
 - Export files move to version 2 and carry those sources; version 1 still reads. Import accepts remote sources over https
   only, so a hostile file cannot reach a local folder or use your SSH keys.

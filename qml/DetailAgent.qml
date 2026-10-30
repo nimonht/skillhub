@@ -8,6 +8,10 @@ Flickable {
     readonly property var a: Object.assign({ id: "", label: "", monogram: "", mode: "", mechanism: "", folder: "", detected: true, detectedBy: "",
                                              wired: true, ok: 0, problems: 0, total: 0, health: "ok" }, app.agentDetail)
     readonly property var issues: a.issues ? a.issues : []
+    readonly property var skills: a.skills ? a.skills : []
+    readonly property bool readsShared: a.mode !== "link"
+    readonly property string switchKey: readsShared ? "@shared" : (a.id || "")
+    function names() { return skills.map(function (s) { return s.name }) }
     contentWidth: width
     contentHeight: col.height + 40
     clip: true
@@ -32,7 +36,7 @@ Flickable {
             Tag {
                 kind: root.a.detected === false ? "absent" : root.a.health === "ok" ? "healthy" : "attention"
                 label: root.a.detected === false ? "Not found, managed because you switched it on"
-                       : root.a.health === "ok" ? "All skills visible"
+                       : root.a.health === "ok" ? (root.a.ok === root.a.total ? "All skills visible" : (root.a.total - root.a.ok) + " turned off")
                        : (root.a.problems || 0) > 0 ? root.a.problems + " need repair" : "Not wired up"
             }
             Text { width: parent.width; wrapMode: Text.Wrap; text: root.a.mechanism || ""; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsBody }
@@ -96,6 +100,60 @@ Flickable {
                         Text { text: modelData; color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsBody; anchors.verticalCenter: parent.verticalCenter }
                     }
                     HoverHandler { cursorShape: Qt.PointingHandCursor; enabled: !app.noHover }
+                }
+            }
+        }
+
+        Column {
+            visible: root.skills.length > 0
+            width: parent.width
+            spacing: 6
+            SectionLabel { width: parent.width; text: "Skills"; trailing: root.skills.length }
+            Text {
+                visible: root.readsShared
+                width: parent.width
+                wrapMode: Text.Wrap
+                text: "This agent reads the shared folder, so a switch here applies to every agent that does. A skill turned off moves to the parked folder."
+                color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall; lineHeight: 1.2
+            }
+            Row {
+                spacing: 6
+                Btn { kind: "ghost"; compact: true; text: "Enable all"; enabled: !app.busy; onClicked: app.setAgentEnabled(root.names(), root.switchKey, true) }
+                Btn { kind: "ghost"; compact: true; text: "Disable all"; enabled: !app.busy; onClicked: app.setAgentEnabled(root.names(), root.switchKey, false) }
+            }
+            ListView {
+                width: parent.width
+                height: Math.min(contentHeight, 340)
+                clip: true
+                model: root.skills
+                boundsBehavior: Flickable.StopAtBounds
+                ScrollBar.vertical: Scroll {}
+                Accessible.role: Accessible.List
+                Accessible.name: "Skills of this agent"
+                delegate: Item {
+                    required property var modelData
+                    width: ListView.view.width - 8
+                    height: 34
+                    PortDot { link: modelData.state; agentLabel: root.a.label || ""; anchors.verticalCenter: parent.verticalCenter }
+                    Text {
+                        x: 32
+                        width: parent.width - x - toggle.width
+                        elide: Text.ElideRight
+                        text: modelData.name
+                        color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsBody
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                    Toggle {
+                        id: toggle
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        implicitWidth: 56
+                        text: modelData.name
+                        showLabel: false
+                        checked: modelData.state !== "off"
+                        enabled: !app.busy
+                        onToggled: app.setAgentEnabled([modelData.name], root.switchKey, checked)
+                    }
                 }
             }
         }

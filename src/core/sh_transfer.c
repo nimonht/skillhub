@@ -404,7 +404,7 @@ void sh_store_read_export_data(const sh_store *st, const char *data, size_t n, s
         }
         if (!*it->problem) sh_strv_push(&seen, it->name);
         if (valid_name(it->name)) {
-            char *dest = sh_path_join(st->central, it->name);
+            char *dest = sh_store_skill_dir(st, it->name);
             it->exists = sh_exists(dest);
             free(dest);
         } else if (*it->problem) {
@@ -468,7 +468,7 @@ void sh_store_import_items(sh_store *st, const sh_import_item *const *items, siz
     size_t n_remote = 0;
     for (size_t i = 0; i < n; ++i) {
         const sh_import_item *it = items[i];
-        char *dest = sh_path_join(st->central, it->name);
+        char *dest = sh_store_skill_dir(st, it->name);
         bool go;
         if (*it->problem || !valid_name(it->name)) go = fail(st, it, sh_strdup(*it->problem ? it->problem : "invalid skill"));
         else if (sh_exists(dest) || sh_strv_contains(&taken, it->name)) go = fail(st, it, sh_strdup("already installed (not overwritten)"));

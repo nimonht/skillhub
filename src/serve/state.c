@@ -179,6 +179,7 @@ static const char *link_key(sh_link_state s) {
     case SH_LINK_MISSING: return "missing";
     case SH_LINK_COPY: return "copy";
     case SH_LINK_FOREIGN: return "foreign";
+    case SH_LINK_OFF: return "off";
     }
     return "";
 }
@@ -272,7 +273,7 @@ static yyjson_mut_val *row_json(yyjson_mut_doc *d, const sh_store *st, const sh_
     }
     yyjson_mut_obj_add_val(d, o, "links", links);
     yyjson_mut_obj_add_bool(d, o, "problem", *problem);
-    yyjson_mut_obj_add_bool(d, o, "parked", false);
+    yyjson_mut_obj_add_bool(d, o, "parked", s->parked);
     yyjson_mut_obj_add_bool(d, o, "hold", hold);
     yyjson_mut_obj_add_uint(d, o, "versions", versions);
     yyjson_mut_obj_add_str(d, o, "lock", "current");
@@ -323,10 +324,10 @@ static void build_agents(scan_result *r, const sh_store *st, const sh_skills *sk
     const bool folding = st->n_agents > MAX_COLUMNS;
     for (size_t k = 0; k < st->n_agents; ++k) {
         const sh_agent *a = st->agents[k];
-        int ok = 0, bad = 0;
+        int ok = 0, bad = 0;  // a skill turned off for this agent is neither: nothing is wrong, and the agent does not see it
         for (size_t i = 0; i < sk->len; ++i) {
             if (k < sk->items[i].n_links && bad_link(sk->items[i].links[k])) ++bad;
-            else ++ok;
+            else if (k >= sk->items[i].n_links || sk->items[i].links[k] != SH_LINK_OFF) ++ok;
         }
         const bool wired = sh_store_provider_wired(st, a);
         const char *health = bad > 0 || !wired ? "issue" : "ok";

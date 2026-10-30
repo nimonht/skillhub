@@ -31,7 +31,7 @@ typedef struct sh_agent {
     bool custom;         // added by the user
 } sh_agent;
 
-typedef enum { SH_LINK_NATIVE, SH_LINK_LINKED, SH_LINK_MISSING, SH_LINK_COPY, SH_LINK_FOREIGN } sh_link_state;
+typedef enum { SH_LINK_NATIVE, SH_LINK_LINKED, SH_LINK_MISSING, SH_LINK_COPY, SH_LINK_FOREIGN, SH_LINK_OFF } sh_link_state;
 
 typedef struct sh_source {
     char *type;         // sourceType: "github" (also when empty: 1.x wrote none), "gitlab", "git", "local", or one npx runs
@@ -58,6 +58,7 @@ typedef struct sh_skill {
     char *new_hash;
     char *new_path;  // SKILL.md path upstream when the skill moved
     bool left_out;   // an automatic update passed over it (sh_engine_set_auto)
+    bool parked;     // `path` is in the parked folder (sh_toggle.h)
     char *note;
 } sh_skill;
 
@@ -114,6 +115,7 @@ typedef struct sh_store {
     char *lock_path;      // the lock file new entries go to
     char *lock_other;     // a second lock file that also exists (docs/formats.md, section 2), or NULL
     char *backup;
+    char *parked;         // skills switched off for every agent that reads the shared folder
     char *cache;
     char *state;          // durable internal state: the mutation lock, the swap journal
     sh_agent *providers;  // every agent in the catalog plus the user's own, with the detection result
@@ -164,6 +166,8 @@ bool sh_source_runnable(const sh_source *s);  // a type Skill Hub can update (th
 bool sh_lock_put(sh_store *st, const char *name, const sh_source *src);
 // The same for many entries at once: each lock file is read and written once (the engine's group commits).
 bool sh_lock_put_many(sh_store *st, const char *const *names, const sh_source *const *srcs, size_t n);
+// Below the entries of parked skills are told apart too: they live in state.json (sh_toggle.h). This writes the lock files alone.
+bool sh_lock_files_put(sh_store *st, const char *const *names, const sh_source *const *srcs, size_t n);
 bool sh_lock_entry(const sh_store *st, const char *name, sh_source *out);  // false when the lock has no such entry
 yyjson_mut_val *sh_source_to_json(yyjson_mut_doc *m, const sh_source *src);
 
@@ -184,6 +188,7 @@ void sh_store_strays(const sh_store *st, sh_strays *out);
 int sh_store_adopt(sh_store *st);   // pull stray skills out of agent folders into the shared folder
 int sh_store_relink(sh_store *st);  // point every link-mode agent at the shared folder, drop dead links
 bool sh_store_remove_skill(sh_store *st, const char *name);
+char *sh_store_skill_dir(const sh_store *st, const char *name);  // where the skill sits: shared folder, or parked
 // Set the upstream of a local skill (sh_engine.c: it reads the repository to find the skill by name).
 bool sh_store_track(sh_store *st, const char *name, const char *repo_input, const char *path, char **err);
 char *sh_dir_of(const char *skill_md_path);

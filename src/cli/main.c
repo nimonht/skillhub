@@ -20,6 +20,7 @@
 #include "sh_serve.h"
 #include "sh_store.h"
 #include "sh_str.h"
+#include "sh_toggle.h"
 #include "sh_utf.h"
 
 #ifdef _WIN32
@@ -77,6 +78,7 @@ static const char *link_word(sh_link_state s) {
     case SH_LINK_MISSING: return "MISSING";
     case SH_LINK_COPY: return "COPY";
     case SH_LINK_FOREIGN: return "OTHER";
+    case SH_LINK_OFF: return "off";
     }
     return "";
 }
@@ -108,6 +110,8 @@ static void usage(void) {
         "  skillhub history NAME                   the earlier versions that are kept\n"
         "  skillhub rollback NAME [STAMP]          back to an earlier version; automatic updates then wait\n"
         "  skillhub hold NAME | release NAME       keep automatic updates away from a skill, or let them back\n"
+        "  skillhub disable|enable NAME... [--agent ID]... [--shared] [--all]   per-agent switches (no option: --all)\n"
+        "  skillhub enable --all-parked            bring every parked skill back (do this before going back to 1.x)\n"
         "  skillhub track NAME SOURCE [PATH]       set the upstream of a local skill\n"
         "  skillhub autoupdate on|off|status       daily update timer (Linux: systemd user timer)\n"
         "  skillhub watch on|off|status            auto-adopt strays (Linux: systemd path unit)\n"
@@ -676,6 +680,48 @@ static int cmd_hold(sh_store *st, const char *cmd, const args_t *a) {
     return ok ? 0 : 1;
 }
 
+// skillhub disable|enable NAME... [--agent ID]... [--shared] [--all]
+static int cmd_switch(sh_store *st, const args_t *a, bool on) {
+    if (on && has(a, "--all-parked")) {
+        outf("%d skill(s) back in the shared folder\n", sh_unpark_all(st));
+        return 0;
+    }
+    sh_strv names = SH_STRV_INIT, agents = SH_STRV_INIT;
+    for (int i = 0; i < a->n; ++i) {
+        if (strcmp(a->v[i], "--agent") == 0 && i + 1 < a->n) sh_strv_push(&agents, a->v[++i]);
+        else if (strcmp(a->v[i], "--shared") == 0) sh_strv_push(&agents, SH_AGENTS_SHARED);
+        else if (strcmp(a->v[i], "--all") == 0) sh_strv_push(&agents, SH_AGENTS_ALL);
+        else if (!sh_starts_with(a->v[i], "--")) sh_strv_push(&names, a->v[i]);
+    }
+    if (names.len == 0) {
+        usage();
+        sh_strv_free(&names);
+        sh_strv_free(&agents);
+        return 2;
+    }
+    if (agents.len == 0) sh_strv_push(&agents, SH_AGENTS_ALL);
+    sh_skills sk;
+    sh_store_scan(st, &sk);
+    int rc = 0;
+    for (size_t i = 0; i < names.len; ++i) {
+        if (skill_named(&sk, names.items[i])) continue;
+        errf("no skill named %s\n", names.items[i]);
+        rc = 1;
+    }
+    sh_skills_free(&sk);
+    for (size_t i = 0; rc == 0 && i < agents.len; ++i) {
+        char *err = NULL;
+        if (!sh_skills_set_enabled(st, (const char *const *)names.items, names.len, agents.items[i], on, &err)) {
+            errf("%s\n", err ? err : "");
+            rc = 1;
+        }
+        free(err);
+    }
+    sh_strv_free(&names);
+    sh_strv_free(&agents);
+    return rc;
+}
+
 static int cmd_check_update(sh_store *st, const args_t *a, bool do_update) {
     sh_skills sk;
     sh_store_scan(st, &sk);
@@ -894,7 +940,7 @@ static bool is_any(const char *s, const char *const *words) {
 
 // commands that change skills, links, lock files or config
 static bool mutates(const char *cmd, const args_t *a) {
-    static const char *const always[] = {"adopt", "update", "remove", "restore", "rollback", "hold", "release", "track", "import", "uninstall", NULL};
+    static const char *const always[] = {"adopt", "update", "remove", "restore", "rollback", "hold", "release", "enable", "disable", "track", "import", "uninstall", NULL};
     static const char *const provider_changes[] = {"enable", "disable", "add", "remove", NULL};
     static const char *const switches[] = {"on", "off", NULL};
     if (is_any(cmd, always)) return true;
@@ -980,6 +1026,7 @@ static int run_cli(int argc, char **argv) {
     else if (strcmp(cmd, "rollback") == 0) rc = cmd_rollback(&st, &a);
     else if (strcmp(cmd, "restore") == 0) rc = cmd_restore(&st, &a);
     else if (strcmp(cmd, "hold") == 0 || strcmp(cmd, "release") == 0) rc = cmd_hold(&st, cmd, &a);
+    else if (strcmp(cmd, "disable") == 0 || strcmp(cmd, "enable") == 0) rc = cmd_switch(&st, &a, strcmp(cmd, "enable") == 0);
     else if (strcmp(cmd, "remove") == 0) {
         if (a.n == 0) {
             usage();
