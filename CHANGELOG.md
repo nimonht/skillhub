@@ -23,6 +23,10 @@
   `skillhub watch` as on Linux. Windows has no file-change trigger, so its watcher is `skillhub watch --run`, started at logon.
   Windows now shows notifications. Scheduled runs use the variables recorded when automation was switched on, so
   `CLAUDE_CONFIG_DIR` and the like resolve as they do in your shell.
+- **The window is yours to arrange.** Every panel resizes with the mouse or Ctrl+Alt and the arrows, and keeps its size. The rail
+  collapses to icons, the agent band to tiles. A Settings page (Ctrl+,) holds appearance, layout, updates, projects and more.
+- **Any accent colour**, your own or your desktop's, with every role derived to keep its contrast. **Blur and Liquid Glass**: native
+  on macOS and Windows 11, from your compositor on Linux, down to a tint floor that keeps text readable over anything.
 - Automatic updates leave out updates that add or change scripts until you review them (`updates.autoSkipScripts`).
 - Export files move to version 2 and carry those sources; version 1 still reads. Import accepts remote sources over https
   only, so a hostile file cannot reach a local folder or use your SSH keys.

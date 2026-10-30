@@ -189,7 +189,8 @@ Parameters marked `?` are optional. `names` is a list of skill names; an empty o
 | `settings.get` | none | the whole `settings.json` object |
 | `settings.set` | `patch` (an object merged into the settings; a `null` value removes that key) | the whole object; the backend also sends `settings.changed`. Settings are not skills, so this needs no mutation lock and works while a job runs |
 | `system.info` | none | `{ "user","host","os","kernel","shell","terminal","uptime","paths":{...} }` |
-| `paths.sizes` | none | job; results `{ "skills":bytes, "backups":bytes, "cache":bytes, "disk":{"total":bytes,"free":bytes} }` |
+| `paths.sizes` | none | job; the results carry `sizes:[{"label","path","bytes","size"}]`, `diskTotal`, `diskFree` |
+| `cache.clear` | none | job; removes the cached clones, which can always be made again |
 | `fetch.render` | `cols`, `colors` (`truecolor` or `256`), `icons?` | `{ "ansi": "<the banner as terminal text>" }` |
 | `palette.derive` | `seed` (`#RRGGBB`), `mode` (`dark` or `light`) | `{ "roles":{"action","actionInk","mark","markText","markLow","focus","selected","inkOk"}, "clash":"" }` |
 | `jobs.cancel` | `job` | `{}` |
@@ -199,11 +200,12 @@ Parameters marked `?` are optional. `names` is a list of skill names; an empty o
 What 2.0's backend answers today (milestone M1c): `initialize`, `shutdown`, `state.snapshot`, `skills.read`,
 `skills.check`, `skills.update`, `skills.install`, `skills.remove`, `skills.track`, `skills.diff`, `skills.history`,
 `skills.rollback`, `skills.restore`, `skills.hold`, `skills.setAgentEnabled`, `skills.copyToProject`, `sources.discover`,
-`adopt`, `relink`, `scope.set`, `projects.list`, `projects.add`, `projects.remove`, `projects.setAuto`,
+`adopt`, `relink`, `scope.set`, `projects.list`, `projects.add`, `projects.remove`, `projects.setAuto`, `paths.sizes`,
+`cache.clear`, `palette.derive`,
 `providers.list`, `providers.setManaged`, `providers.addCustom`, `providers.removeCustom`, `providers.rescan`,
 `transfer.export`, `transfer.preview`, `transfer.import`, `automation.status`, `automation.set`, `settings.get`,
-`settings.set` and `jobs.cancel`. The others arrive with the features they belong to (the terminal and `fetch`; the accent
-engine) and until then get `-32601`.
+`settings.set` and `jobs.cancel`. The others arrive with the features they belong to (the terminal and `fetch`) and until
+then get `-32601`.
 
 ### Notifications from the backend
 

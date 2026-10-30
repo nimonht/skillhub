@@ -8,6 +8,7 @@ Rectangle {
     property string level: "ok"
     property string message: ""
     property string action: ""
+    property Item behind: null
     signal acted()
     function show(l, m, a) {
         if (m === "") return
@@ -21,13 +22,14 @@ Rectangle {
     implicitWidth: row.implicitWidth + 32
     implicitHeight: 40
     radius: 4
-    color: Theme.inkBg
+    color: "transparent"
     opacity: 0
     visible: opacity > 0
     Behavior on opacity { NumberAnimation { duration: Theme.dBase } }
     Accessible.role: Accessible.AlertMessage
     Accessible.name: message
 
+    Glass { anchors.fill: parent; behind: root.behind; radius: root.radius; tint: Theme.inkBg }
     Row {
         id: row
         anchors.centerIn: parent

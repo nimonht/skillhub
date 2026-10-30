@@ -44,6 +44,7 @@ static void setup(sh_store *st) {
     st->lock_path = at("lock.json");
     st->parked = at("parked");
     st->scope = sh_strdup("user");
+    st->backups_kept = 3;
 }
 
 static void teardown(sh_store *st) {

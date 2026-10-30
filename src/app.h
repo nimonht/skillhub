@@ -10,6 +10,12 @@
 #include <QVariantList>
 #include <QVariantMap>
 
+#ifdef SKILLHUB_HAVE_DBUS
+#include <QDBusVariant>
+#endif
+
+#include <QQuickWindow>
+
 #include "gui/core_client.h"
 #include "gui/skill_row.h"
 
@@ -141,6 +147,17 @@ class AppController : public QObject {
     Q_PROPERTY(bool inProject READ inProject NOTIFY scopeChanged)
     Q_PROPERTY(QVariantList projects READ projects NOTIFY projectsChanged)
     Q_PROPERTY(QStringList suggestedProjects READ suggestedProjects NOTIFY projectsChanged)
+    Q_PROPERTY(bool accentOn READ accentOn NOTIFY themeChanged)                  // false: the built-in mint
+    Q_PROPERTY(QString material READ material NOTIFY themeChanged)               // solid, blur, glass: what the window really does
+    Q_PROPERTY(bool glassReady READ glassReady CONSTANT)                         // the shader can run here
+    Q_PROPERTY(int settingsRev READ settingsRev NOTIFY settingsChanged)          // bindings on setting() read this too
+    Q_PROPERTY(QVariantMap paletteDark READ paletteDark NOTIFY themeChanged)
+    Q_PROPERTY(QVariantMap paletteLight READ paletteLight NOTIFY themeChanged)
+    Q_PROPERTY(QString systemAccent READ systemAccent NOTIFY themeChanged)       // "": this system does not tell
+    Q_PROPERTY(bool compactDensity READ compactDensity NOTIFY themeChanged)
+    Q_PROPERTY(QVariantList pathSizes READ pathSizes NOTIFY pathSizesChanged)
+    Q_PROPERTY(QString backendInfo READ backendInfo NOTIFY countsChanged)
+    Q_PROPERTY(QString materialNote READ materialNote NOTIFY themeChanged)
     Q_PROPERTY(bool automationSupported READ automationSupported NOTIFY automationChanged)  // daily timer + stray watcher exist on this system
     Q_PROPERTY(QString automationMechanism READ automationMechanism NOTIFY automationChanged)
     Q_PROPERTY(QString timerState READ timerState NOTIFY automationChanged)
@@ -214,6 +231,17 @@ public:
     QString themeMode() const { return themeMode_; }
     void setThemeMode(const QString &m);
     bool reduceMotion() const { return reduce_; }
+    bool accentOn() const { return !paletteDark_.isEmpty(); }
+    int settingsRev() const { return settingsRev_; }
+    QString material() const;
+    bool glassReady() const;
+    QVariantList pathSizes() const { return pathSizes_; }
+    QString backendInfo() const;
+    QString materialNote() const;
+    QVariantMap paletteDark() const { return paletteDark_; }
+    QVariantMap paletteLight() const { return paletteLight_; }
+    QString systemAccent() const;
+    bool compactDensity() const;
     bool stillMotion() const { return reduce_ || forcedStill_; }
     void setReduceMotion(bool on);
     bool loaded() const { return loaded_; }
@@ -236,7 +264,23 @@ public:
     Q_INVOKABLE void rollback(const QString &name, const QString &stamp);
     Q_INVOKABLE void undoLast();
     Q_INVOKABLE void setHold(const QString &name, bool on);
+    // settings.json, one section at a time (docs/formats.md, section 6)
+    Q_INVOKABLE QVariant setting(const QString &section, const QString &key, const QVariant &fallback) const;
+    Q_INVOKABLE void setSetting(const QString &section, const QString &key, const QVariant &value);
+    Q_INVOKABLE QVariant oklch(const QString &hex) const;                       // {l, c, h}
+    Q_INVOKABLE QString hexOf(double l, double c, double h) const;
+    Q_INVOKABLE double contrast(const QColor &a, const QColor &b) const;
+    Q_INVOKABLE QVariantMap derivePalette(const QString &seed, bool dark) const;
+    // sizes of the panels: window state, kept in QSettings, not settings.json
+    Q_INVOKABLE QVariant layoutState(const QString &key) const;
+    Q_INVOKABLE void saveLayout(const QString &key, const QVariant &state);
     Q_INVOKABLE void loadProjects();
+    Q_INVOKABLE void applyMaterial(QQuickWindow *window, bool dark);
+    Q_INVOKABLE void removeProject(const QString &path);
+    Q_INVOKABLE void setProjectAuto(const QString &path, bool on);
+    Q_INVOKABLE void measurePaths();
+    Q_INVOKABLE void clearCache();
+    Q_INVOKABLE void restartBackend();
     Q_INVOKABLE void setScope(const QString &path);
     Q_INVOKABLE void addProject(const QString &path);
     Q_INVOKABLE void copyToProject(const QString &name, const QString &project);
@@ -264,6 +308,16 @@ public:
     Q_INVOKABLE void copyText(const QString &text);
     Q_INVOKABLE QString renderMarkdown(const QString &markdown, bool dark) const;  // styled HTML for the SKILL.md preview
 
+#ifdef SKILLHUB_HAVE_DBUS
+private slots:
+    void onPortalSetting(const QString &group, const QString &key, const QDBusVariant &value);
+
+private:
+    void setPortalAccent(const QVariant &value);
+
+public:
+#endif
+
 signals:
     void busyChanged();
     void countsChanged();
@@ -277,6 +331,9 @@ signals:
     void themeChanged();
     void toast(const QString &level, const QString &text);
     void undoOffered(const QString &text);
+    void settingsChanged();
+    void pathSizesChanged();
+    void showSettings(const QString &section);
     void scopeChanged();
     void projectsChanged();
     void showScopeMenu();
@@ -299,6 +356,8 @@ private:
     void offerUndo(const QString &method, const QStringList &names, const QString &text);
     void refreshAutomation();
     void loadSettings();
+    void applySettings(const QJsonObject &s);
+    void watchPortalAccent();
     void saveSetting(const QString &key, const QJsonValue &value);
     void setBusy(bool busy, const QString &text = {}, double progress = -1);
     QString tilde(const QString &path) const;
@@ -318,6 +377,11 @@ private:
     QVariantList candidates_, reviews_, versions_, projects_;
     QStringList suggested_;
     QString scope_, scopeCentral_, mechanism_;
+    QJsonObject settings_;
+    QVariantList pathSizes_;
+    int settingsRev_ = 0;
+    QString portalAccent_;
+    QVariantMap paletteDark_, paletteLight_;
     QString undoMethod_;       // skills.rollback or skills.restore, for what just happened
     QStringList undoNames_;
     bool reviewOpen_ = false, reviewLoading_ = false, onHold_ = false;

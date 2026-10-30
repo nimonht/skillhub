@@ -19,6 +19,7 @@ jobs:
       - name: Qt (newer than the Qt 6.4 that Ubuntu 24.04 ships; that one is tested in its own job)
         uses: jurplel/install-qt-action@v4
         with:
+          modules: qtshadertools
           version: ${{ env.QT_VERSION }}
           cache: true
       - name: System libraries
@@ -34,7 +35,7 @@ jobs:
       - name: C unit tests
         run: ctest --test-dir build --output-on-failure
       - name: Design token contrast (WCAG)
-        run: python3 tests/contrast.py
+        run: python3 tests/contrast.py build/skillhub
       - name: Smoke test (offline, throw-away HOME)
         run: sh tests/smoke.sh build/skillhub
       - name: Portable CLI test (detection, links, git install/update, export/import)
@@ -77,7 +78,7 @@ jobs:
         run: |
           apt-get update -qq
           DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends build-essential cmake git python3 ca-certificates pkg-config libuv1-dev \
-            qt6-base-dev qt6-declarative-dev libgl-dev qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-templates \
+            qt6-base-dev qt6-declarative-dev qt6-shadertools-dev libgl-dev qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-templates \
             qml6-module-qtquick-shapes qml6-module-qtquick-window qml6-module-qtqml-workerscript qml6-module-qtquick-dialogs fonts-dejavu-core
       - uses: actions/checkout@v4
       - name: Build
@@ -161,6 +162,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: jurplel/install-qt-action@v4
         with:
+          modules: qtshadertools
           version: ${{ env.QT_VERSION }}
           cache: true
       - name: Build
@@ -204,6 +206,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: jurplel/install-qt-action@v4
         with:
+          modules: qtshadertools
           version: ${{ env.QT_VERSION }}
           arch: win64_msvc2022_64
           cache: true

@@ -52,6 +52,8 @@ bool sh_move_dir(const char *from, const char *to);
 bool sh_copy_file(const char *from, const char *to);  // keeps the permission bits
 bool sh_copy_tree(const char *from, const char *to);  // links are skipped
 bool sh_set_executable(const char *path, bool exec);  // rw-r--r-- or rwxr-xr-x
+int64_t sh_tree_bytes(const char *dir);               // the size of everything below it; links are not followed
+bool sh_disk_usage(const char *path, int64_t *total, int64_t *free_bytes);
 int64_t sh_newest_mtime_ms(const char *dir);          // newest modification time of the folder and anything below it
 
 // A file written in pieces, as git streams a skill folder: created or truncated; false from sh_file_close when any write

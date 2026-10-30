@@ -139,7 +139,7 @@ Item {
                         color: cand.on ? Theme.mark : "transparent"
                         border.color: cand.on ? Theme.mark : Theme.lineInput
                         border.width: 1.5
-                        Icon { visible: cand.on; anchors.centerIn: parent; name: "check"; size: 14; weight: 2.6; color: Theme.dark ? "#04251A" : "#FFFFFF" }
+                        Icon { visible: cand.on; anchors.centerIn: parent; name: "check"; size: 14; weight: 2.6; color: Theme.inkOnMark }
                     }
                     Column {
                         x: 58

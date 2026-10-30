@@ -48,7 +48,7 @@ Item {
             text: root.wide ? (app.updateCount > 0 ? "Update all  " + app.updateCount : "Up to date") : (app.updateCount > 0 ? "" + app.updateCount : "")
             Accessible.name: app.updateCount > 0 ? "Update all " + app.updateCount + " skills" : "Everything is up to date"
             enabled: app.updateCount > 0 && !app.busy
-            onClicked: app.reviewAll()
+            onClicked: app.setting("updates", "reviewBeforeUpdate", true) ? app.reviewAll() : app.updateAll()
         }
     }
 }

@@ -36,3 +36,19 @@ bool sh_state_save(yyjson_mut_doc *m) {
     free(path);
     return ok;
 }
+
+long long sh_setting_int(const char *section, const char *key, long long fallback) {
+    char *config = sh_config_dir();
+    char *path = sh_path_join(config, "settings.json");
+    free(config);
+    yyjson_doc *doc = NULL;
+    long long value = fallback;
+    if (sh_json_read(path, 0, &doc) == SH_JSON_OK) {
+        yyjson_val *part = yyjson_obj_get(yyjson_doc_get_root(doc), section);
+        yyjson_val *v = part ? yyjson_obj_get(part, key) : NULL;
+        if (yyjson_is_num(v)) value = (long long)yyjson_get_num(v);
+        yyjson_doc_free(doc);
+    }
+    free(path);
+    return value;
+}

@@ -2,13 +2,14 @@ import QtQuick
 import QtQuick.Controls.Basic
 import "."
 
-// Left rail: brand, quick filters with real counts, automation switches, appearance.
+// Left rail: brand, whose skills, quick filters with real counts, automation switches, settings. Dragged narrow it keeps the
+// icons alone, and each says what it is on hover.
 Rectangle {
     id: root
     color: Theme.bg1
     implicitWidth: Theme.railW
-
-    Rectangle { anchors.right: parent.right; width: 1; height: parent.height; color: Theme.line }
+    signal settingsRequested()
+    readonly property bool compact: width < 120
 
     component FilterItem: AbstractButton {
         id: item
@@ -44,8 +45,9 @@ Rectangle {
             }
         }
         contentItem: Item {
-            Icon { x: 12; anchors.verticalCenter: parent.verticalCenter; name: item.iconName; size: 17; color: item.on ? Theme.markText : Theme.text2 }
+            Icon { x: root.compact ? (parent.width - width) / 2 : 12; anchors.verticalCenter: parent.verticalCenter; name: item.iconName; size: 17; color: item.on ? Theme.markText : Theme.text2 }
             Text {
+                visible: !root.compact
                 x: 40
                 anchors.verticalCenter: parent.verticalCenter
                 text: item.text
@@ -55,7 +57,7 @@ Rectangle {
                 font.weight: item.on ? Font.DemiBold : Font.Medium
             }
             NumText {
-                visible: !item.hideCount
+                visible: !item.hideCount && !root.compact
                 anchors.right: parent.right
                 anchors.rightMargin: 12
                 anchors.verticalCenter: parent.verticalCenter
@@ -67,6 +69,9 @@ Rectangle {
             }
         }
         HoverHandler { cursorShape: Qt.PointingHandCursor; enabled: !app.noHover }
+        ToolTip.visible: root.compact && item.hovered
+        ToolTip.text: item.hideCount ? item.text : item.text + "  " + item.count
+        ToolTip.delay: 300
     }
 
     Flickable {   // short windows scroll the rail instead of overlapping it; the appearance block stays pinned when there is room
@@ -81,15 +86,16 @@ Rectangle {
 
     Column {
         id: topCol
-        x: 12
-        width: scroller.width - 24
+        x: root.compact ? 6 : 12
+        width: scroller.width - 2 * x
         spacing: 2
 
         Item {   // brand
             width: parent.width
             height: 64
-            Logo { x: 4; anchors.verticalCenter: parent.verticalCenter; size: 34 }
+            Logo { x: root.compact ? (parent.width - width) / 2 : 4; anchors.verticalCenter: parent.verticalCenter; size: 34 }
             Text {
+                visible: !root.compact
                 x: 48
                 anchors.verticalCenter: parent.verticalCenter
                 text: "Skill Hub"
@@ -100,24 +106,24 @@ Rectangle {
             }
         }
 
-        ScopeMenu { width: parent.width }
+        ScopeMenu { width: parent.width; compact: root.compact }
         Item { width: 1; height: 8 }
 
-        SectionLabel { width: parent.width; text: "Skills" }
+        SectionLabel { visible: !root.compact; width: parent.width; text: "Skills" }
         FilterItem { text: "All skills"; mode: "all"; iconName: "all"; count: app.skillCount }
         FilterItem { text: "Updates"; mode: "updates"; iconName: "upgrade"; count: app.updateCount; countColor: Theme.notifyText }
         FilterItem { text: "Local only"; mode: "local"; iconName: "folder"; count: app.localCount }
         FilterItem { text: "Link problems"; mode: "problems"; iconName: "alert"; count: app.problemCount; countColor: Theme.dangerText }
 
         Item { width: 1; height: 10 }
-        SectionLabel { width: parent.width; text: "Tools" }
+        SectionLabel { visible: !root.compact; width: parent.width; text: "Tools" }
         FilterItem { text: "Agents"; mode: "@providers"; iconName: "sliders"; count: app.agents.length; asAction: true; onTriggered: app.detailMode = "providers"; on: app.detailMode === "providers" }
         FilterItem { visible: !app.inProject; text: "Transfer skills"; mode: "@transfer"; iconName: "export"; count: 0; asAction: true; hideCount: true; onTriggered: app.detailMode = "transfer"; on: app.detailMode === "transfer" }
 
-        Item { width: 1; height: 10; visible: app.automationSupported }
-        SectionLabel { width: parent.width; text: "Automation"; visible: app.automationSupported }
+        Item { width: 1; height: 10; visible: app.automationSupported && !root.compact }
+        SectionLabel { width: parent.width; text: "Automation"; visible: app.automationSupported && !root.compact }
         Toggle {
-            visible: app.automationSupported
+            visible: app.automationSupported && !root.compact
             width: parent.width
             text: "Daily update"
             hint: app.automationMechanism === "launchd" ? "launchd agent" : app.automationMechanism === "Task Scheduler" ? "Task Scheduler" : "systemd user timer"
@@ -125,7 +131,7 @@ Rectangle {
             onToggled: app.setTimer(checked)
         }
         Toggle {
-            visible: app.automationSupported
+            visible: app.automationSupported && !root.compact
             width: parent.width
             text: "Adopt strays"
             hint: "watch agent folders"
@@ -136,19 +142,14 @@ Rectangle {
 
     Column {
         id: bottomCol
-        x: 16
-        width: scroller.width - 32
+        x: root.compact ? 6 : 12
+        width: scroller.width - 2 * x
         y: Math.max(topCol.height + 16, scroller.height - height - 16)
         spacing: 10
-        SectionLabel { width: parent.width; text: "Appearance" }
-        Segmented {
-            width: parent.width
-            options: [ { value: "system", label: "Auto", icon: "auto" }, { value: "dark", label: "Dark", icon: "moon" }, { value: "light", label: "Light", icon: "sun" } ]
-            current: app.themeMode
-            onPicked: (v) => app.themeMode = v
-        }
-        Toggle { width: parent.width + 8; x: -8; text: "Reduce motion"; checked: app.reduceMotion; onToggled: app.reduceMotion = checked }
+        FilterItem { text: "Settings"; mode: "@settings"; iconName: "sliders"; asAction: true; hideCount: true; onTriggered: root.settingsRequested() }
         NumText {
+            visible: !root.compact
+            x: 4
             text: "Skill Hub " + app.version
             color: Theme.text3
             font.family: Theme.ui

@@ -58,7 +58,9 @@ that into one directory plus a few symlinks, and tells you the moment something 
 - **Updates**: compares each skill's folder hash with its upstream repository (git tree SHA), updates one or all, keeps
   the previous three versions, and can run daily: a systemd timer on Linux, a launchd agent on macOS, a scheduled task on Windows.
 - **Stays tidy**: an optional watcher pulls a skill dropped into an agent folder back into the shared one.
-- **Dark and light themes** that follow your system, keyboard-first, readable (contrast is checked in CI).
+- **Yours to arrange**: every panel resizes and remembers its size, the rail shrinks to icons, and **Settings** holds it all:
+  dark, light or system, any accent colour (or your desktop's), blur or Liquid Glass where your system offers it, density and
+  scale. Whatever colour you pick stays readable: contrast is computed, and checked in CI for 72 hues.
 - **Compatible with `npx skills`**: reads and writes the same `~/.agents/.skill-lock.json` (v3) lock file.
 
 <table>

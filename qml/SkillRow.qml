@@ -16,7 +16,8 @@ Item {
     readonly property bool selected: ListView.isCurrentItem
     readonly property int shown: app.hiddenCount > 0 ? app.columnCount - 1 : app.columnCount
     readonly property real portsX: width - Theme.padR - app.columnCount * app.portW
-    readonly property real statusX: portsX - Theme.statusW
+    readonly property bool tight: portsX - Theme.statusW - 36 < 140   // near the minimum the status drops to its icon
+    readonly property real statusX: portsX - (tight ? 40 : Theme.statusW)
     signal activated(int index)
 
     width: ListView.view ? ListView.view.width : 600
@@ -97,6 +98,7 @@ Item {
         x: row.statusX
         anchors.verticalCenter: parent.verticalCenter
         kind: row.status
+        iconOnly: row.tight
     }
     Repeater {
         model: row.shown

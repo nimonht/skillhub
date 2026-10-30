@@ -12,6 +12,7 @@
 #include "sh_json.h"
 #include "sh_origin.h"
 #include "sh_path.h"
+#include "sh_state.h"
 #include "sh_thread.h"
 #include "sh_time.h"
 #include "sh_utf.h"
@@ -62,6 +63,7 @@ struct sh_engine {
     size_t n_pending, cap_pending;
     int64_t last_commit;
     sh_trees *trees;  // what GitLab and git skills were installed from; read-only while tasks run
+    int workers;      // repositories handled at once
     bool auto_mode;
     bool skip_scripts;
     long cancelled;  // read and written through sh_atomic_*
@@ -101,7 +103,11 @@ void sh_engine_on_progress(sh_engine *e, sh_engine_progress fn, void *user) {
 sh_engine *sh_engine_new(sh_store *st) {
     sh_engine *e = sh_xcalloc(1, sizeof *e);
     e->st = st;
-    e->fetches = sh_limiter_new(FETCHES_PER_HOST);
+    e->workers = (int)sh_setting_int("updates", "parallel", WORKERS);
+    if (e->workers < 1) e->workers = 1;
+    if (e->workers > 64) e->workers = 64;
+    const long long per_host = sh_setting_int("updates", "parallelPerHost", FETCHES_PER_HOST);
+    e->fetches = sh_limiter_new(per_host < 1 ? 1 : per_host > 64 ? 64 : (int)per_host);
     e->m = sh_mutex_new();
     e->last_commit = sh_mono_ms();
     return e;
@@ -551,7 +557,7 @@ static void on_idle(void *arg) { maybe_commit(((job *)arg)->e); }
 
 static void run_job(job *j) {
     for (size_t i = 0; i < j->g.n; ++i) j->total += (long)j->g.groups[i].n;
-    const int workers = j->g.n < WORKERS ? (int)j->g.n : WORKERS;
+    const int workers = j->g.n < (size_t)j->e->workers ? (int)j->g.n : j->e->workers;
     sh_parallel_for(j->g.n, workers, run_task, j, on_idle, 250);
     commit_pending(j->e);
 }

@@ -104,7 +104,9 @@ Colour has jobs, never decoration. Every state also carries an icon or a word.
 - **Red (broken).** A missing link, a failed update, destructive actions.
 - **Neutrals.** Window < rail/console < list surface < raised < selected, separated by tone steps and 1px quiet lines. Dark is smoked charcoal, light is paper over concrete; light is tuned on its own, not inverted.
 
-All text pairs are checked at 4.5:1 and graphics and control boundaries at 3:1 by `tests/contrast.py`. Cyan, blue and purple are deliberately unused.
+All text pairs are checked at 4.5:1 and graphics and control boundaries at 3:1 by `tests/contrast.py`.
+
+**The accent.** Mint is the default, and any hue can replace it. `src/core/sh_palette.c` keeps the seed's hue, limits its chroma and walks lightness until each role meets its target, so a chosen colour can never break contrast: the gate checks 72 hues at three chroma levels in both modes. Only the mint roles follow the accent (`action`, `mark`, `markText`, `markLow`, `focus`, the selected row in light mode). Neutrals stay, and so do amber, lime and red, because those mean something; a hue close to one of them gets a warning in Settings, not a refusal.
 
 ## Typography
 
@@ -116,7 +118,9 @@ Rail (216) | centre | detail (380) under a 64px top bar and a 34px status bar, w
 
 ## Elevation & Depth
 
-Flat. Depth is tone: each surface is one step lighter (dark) or whiter (light) than the one below, and controls are tone fills with no outline. The only floating things are the toast and tooltips; they use an inverted surface (`inkBg`) so they need neither border nor shadow. Keyboard focus is the one place an outline appears: a 2px ring in `focus`, drawn outside the shape so nothing clips it.
+Flat by default. Depth is tone: each surface is one step lighter (dark) or whiter (light) than the one below, and controls are tone fills with no outline. The only floating things are the toast and tooltips; they use an inverted surface (`inkBg`) so they need neither border nor shadow.
+
+**Materials.** Solid is the default and always correct. Blur and Liquid Glass let the desktop show through the panels, down to a tint floor: the lowest alpha at which every text colour still reaches 4.5:1 over pure black and pure white (`alphaFloor`, checked by the gate). In those materials `text3` gives way to `text2`, and light mode darkens its coloured text, because there is no contrast to spare. Glass is for floating surfaces, never for reading surfaces, and it falls back to a plain tint wherever its shader cannot run. Keyboard focus is the one place an outline appears: a 2px ring in `focus`, drawn outside the shape so nothing clips it.
 
 ## Shapes
 

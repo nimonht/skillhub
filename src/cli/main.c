@@ -16,6 +16,7 @@
 #include "sh_fs.h"
 #include "sh_history.h"
 #include "sh_json.h"
+#include "sh_palette.h"
 #include "sh_path.h"
 #include "sh_projects.h"
 #include "sh_serve.h"
@@ -109,6 +110,7 @@ static void usage(void) {
         "                                          list add remove check update diff history rollback restore hold release adopt doctor\n"
         "  skillhub projects list [--json] | add PATH | remove PATH | auto PATH on|off   the projects known here; auto: the daily update\n"
         "  skillhub copy NAME PATH                 copy a skill of yours into a project, with its source\n"
+        "  skillhub palette --seed #RRGGBB[,...] [--mode dark|light]   the accent roles derived from a colour, as JSON\n"
         "  skillhub remove NAME\n"
         "  skillhub restore NAME                   bring back a removed skill\n"
         "  skillhub diff NAME [--stat]             what an update would change, against the files on disk\n"
@@ -999,6 +1001,47 @@ static int cmd_copy(sh_store *st, const args_t *a) {
     return ok ? 0 : 1;
 }
 
+static int cmd_palette(const args_t *a) {
+    sh_strv seeds = SH_STRV_INIT;
+    comma_list(after(a, "--seed"), &seeds);
+    const char *mode = after(a, "--mode");
+    yyjson_mut_doc *d = yyjson_mut_doc_new(NULL);
+    yyjson_mut_val *arr = yyjson_mut_arr(d);
+    yyjson_mut_doc_set_root(d, arr);
+    int rc = seeds.len ? 0 : 2;
+    for (size_t i = 0; i < seeds.len; ++i) {
+        for (int dark = 1; dark >= 0; --dark) {
+            sh_palette p;
+            if (mode && strcmp(mode, dark ? "dark" : "light") != 0) continue;
+            if (!sh_palette_derive(seeds.items[i], dark, &p)) {
+                errf("%s is not a #RRGGBB colour\n", seeds.items[i]);
+                rc = 1;
+                continue;
+            }
+            yyjson_mut_val *o = yyjson_mut_obj(d);
+            yyjson_mut_obj_add_strcpy(d, o, "seed", seeds.items[i]);
+            yyjson_mut_obj_add_str(d, o, "mode", dark ? "dark" : "light");
+            yyjson_mut_obj_add_strcpy(d, o, "action", p.action);
+            yyjson_mut_obj_add_strcpy(d, o, "actionInk", p.action_ink);
+            yyjson_mut_obj_add_strcpy(d, o, "mark", p.mark);
+            yyjson_mut_obj_add_strcpy(d, o, "markText", p.mark_text);
+            yyjson_mut_obj_add_strcpy(d, o, "markLow", p.mark_low);
+            yyjson_mut_obj_add_strcpy(d, o, "focus", p.focus);
+            yyjson_mut_obj_add_strcpy(d, o, "selected", p.selected);
+            yyjson_mut_obj_add_strcpy(d, o, "inkOk", p.ink_ok);
+            yyjson_mut_obj_add_str(d, o, "clash", p.clash);
+            yyjson_mut_arr_append(arr, o);
+        }
+    }
+    char *json = yyjson_mut_write(d, YYJSON_WRITE_PRETTY_TWO_SPACES, NULL);
+    outf("%s\n", json);
+    free(json);
+    yyjson_mut_doc_free(d);
+    sh_strv_free(&seeds);
+    if (rc == 2) usage();
+    return rc;
+}
+
 static int cmd_uninstall(sh_store *st, const args_t *a) {
     const bool dry = has(a, "--dry-run");
     if (!dry && !has(a, "--yes")) {
@@ -1124,6 +1167,13 @@ static int run_cli(int argc, char **argv) {
         errf("%s does not work with --project\n", *cmd ? cmd : "this");
         free(args);
         return 2;
+    }
+    if (strcmp(cmd, "palette") == 0) {
+        const args_t pa = {argv + 2, argc > 2 ? argc - 2 : 0};
+        const int rc = cmd_palette(&pa);
+        fflush(stdout);
+        free(args);
+        return rc;
     }
     if (strcmp(cmd, "projects") == 0) {
         const args_t pa = {argv + 2, argc > 2 ? argc - 2 : 0};

@@ -6,6 +6,7 @@ Item {
     id: root
     property string kind: "current"   // available | current | updated | error | local | tracked | healthy | attention | absent
     property string label: ""
+    property bool iconOnly: false
 
     readonly property var spec: ({
         "available": { text: "Update",       icon: "upgrade", fg: Theme.notifyText, strong: true },
@@ -31,6 +32,7 @@ Item {
         spacing: 6
         Icon { name: root.s.icon; size: 15; weight: 2; color: root.s.fg; anchors.verticalCenter: parent.verticalCenter }
         Text {
+            visible: !root.iconOnly
             text: root.label !== "" ? root.label : root.s.text
             color: root.s.fg
             font.family: Theme.ui

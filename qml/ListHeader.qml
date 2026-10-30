@@ -7,7 +7,8 @@ Item {
     id: root
     implicitHeight: 36
     readonly property real portsX: width - Theme.padR - app.columnCount * app.portW
-    readonly property real statusX: portsX - Theme.statusW
+    readonly property bool tight: portsX - Theme.statusW - 36 < 140
+    readonly property real statusX: portsX - (tight ? 40 : Theme.statusW)
 
     Rectangle { anchors.fill: parent; color: Theme.bg1 }
     Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Theme.line }
@@ -54,7 +55,7 @@ Item {
 
     Cell { text: "Skill"; sortKey: "name"; x: 12; width: Math.max(80, root.statusX - 12 - 8) }
     Rectangle { x: root.statusX - 1; y: 8; width: 1; height: root.height - 16; color: Theme.line }
-    Cell { text: "Status"; sortKey: "status"; x: root.statusX; width: Theme.statusW }
+    Cell { text: root.tight ? "" : "Status"; sortKey: "status"; x: root.statusX; width: root.tight ? 40 : Theme.statusW; Accessible.name: "Sort by status" }
     Rectangle { visible: app.columnCount > 0; x: root.portsX - 1; y: 8; width: 1; height: root.height - 16; color: Theme.line }
     Text {
         visible: app.columnCount > 0
