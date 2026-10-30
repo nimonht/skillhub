@@ -38,7 +38,9 @@
         <file alias="ProviderBand.qml">qml/ProviderBand.qml</file>
         <file alias="Rail.qml">qml/Rail.qml</file>
         <file alias="Scroll.qml">qml/Scroll.qml</file>
+        <file alias="Onboarding.qml">qml/Onboarding.qml</file>
         <file alias="PaneHandle.qml">qml/PaneHandle.qml</file>
+        <file alias="TourTarget.qml">qml/TourTarget.qml</file>
         <file alias="ReviewPage.qml">qml/ReviewPage.qml</file>
         <file alias="DockPanel.qml">qml/DockPanel.qml</file>
         <file alias="Glass.qml">qml/Glass.qml</file>

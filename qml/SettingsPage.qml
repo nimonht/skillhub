@@ -447,6 +447,7 @@ Rectangle {
                 Logo { size: 48 }
                 Text { text: "Skill Hub " + app.version; color: Theme.text; font.family: Theme.display; font.pixelSize: Theme.fsHead; font.weight: Font.Bold }
                 Line { text: "One skills folder for every coding agent. MIT licence. Third-party licences are listed in NOTICE.md, next to the program." }
+                Btn { iconName: "refresh"; text: "Take the tour again"; onClicked: { root.closeRequested(); app.startTour(0, 0) } }
             }
         }
     }

@@ -99,6 +99,7 @@ int main(int argc, char **argv) {
         engine.load(QUrl(QStringLiteral("qrc:/qml/Main.qml")));
         if (engine.rootObjects().isEmpty()) return 1;
         auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
+        if (shotFile.isEmpty() && !args.contains(QStringLiteral("--bench")) && controller.tourNeeded()) QTimer::singleShot(400, &controller, [&controller] { emit controller.startTour(0, 0); });
 
         // skillhub gui --bench: the longest the interface thread goes without running its event loop, first while the
         // first check's delta changes every row, then while everything available is updated (bench/bench_gui.py)
@@ -187,6 +188,7 @@ int main(int argc, char **argv) {
                     if (!opt("--scope").isEmpty()) controller.setScope(opt("--scope"));
                     if (opt("--action") == QLatin1String("scopes")) emit controller.showScopeMenu();
                     if (opt("--mode") == QLatin1String("review")) controller.reviewAll();
+                    if (opt("--mode") == QLatin1String("onboarding")) emit controller.startTour(opt("--step").toInt(), opt("--coach").toInt());
                     if (opt("--mode") == QLatin1String("terminal")) emit controller.showTerminal();
                     if (opt("--mode") == QLatin1String("settings")) emit controller.showSettings(opt("--section").isEmpty() ? QStringLiteral("appearance") : opt("--section"));
                     if (opt("--action") == QLatin1String("update-all")) controller.updateAll();
@@ -198,7 +200,7 @@ int main(int argc, char **argv) {
                 if (*ticks - *armed < (opt("--settle").isEmpty() ? 4 : opt("--settle").toInt())) return;  // let layout, transitions and toasts settle
                 if (opt("--mode") == QLatin1String("terminal") && !*typed) {   // a real round trip through the shell, then a look at the screen
                     *typed = true;
-                    QMetaObject::invokeMethod(window, "typeInTerminal", Q_ARG(QVariant, opt("--terminal-run") + QStringLiteral("\n")));
+                    QMetaObject::invokeMethod(window, "typeInTerminal", Q_ARG(QVariant, opt("--terminal-run") + QStringLiteral("\r")));
                     *armed = *ticks;
                     return;
                 }

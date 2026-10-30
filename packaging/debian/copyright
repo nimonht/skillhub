@@ -7,6 +7,18 @@ Files: *
 Copyright: 2026 nimonht
 License: Expat
 
+Files: third_party/libvterm/*
+Copyright: 2008 Paul Evans <leonerd@leonerd.org.uk>
+License: Expat
+
+Files: third_party/stb/*
+Copyright: 2017 Sean Barrett
+License: Expat
+
+Files: third_party/yyjson/*
+Copyright: 2020 YaoYuan <ibireme@gmail.com>
+License: Expat
+
 Files: fonts/*
 Copyright: 2017 The Barlow Project Authors (https://github.com/jpt/barlow)
 License: OFL-1.1

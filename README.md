@@ -117,7 +117,7 @@ renamed its Qt libraries (`libqt6core6t64`); installing the wrong one just fails
 
 ### Build from source
 
-Needs CMake 3.22 or newer, Qt 6.4 or newer (Qt Quick, Quick Controls 2), `git`, C17 / C++17 compilers and, on Linux, libuv
+Needs CMake 3.22 or newer, Qt 6.4 or newer (Qt Quick, Quick Controls 2; Qt ShaderTools for Liquid Glass), `git`, C17 / C++17 compilers and, on Linux, libuv
 1.44 or newer with `pkg-config`. macOS and Windows builds download and compile libuv 1.51.0 by themselves (offline:
 `-DSKILLHUB_LIBUV_TARBALL=PATH` to a downloaded copy of its release archive).
 

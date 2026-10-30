@@ -90,6 +90,12 @@ grep -q 'pty-42' "$OUT/terminal.txt" || fail "the shell did not answer through t
 SHELL=/bin/sh shot "light-terminal" --theme light --size 1000x640 --mode terminal --terminal-run 'printf "\\033[1;31mred\\033[0m\\n"' --settle 10
 for theme in dark light; do shot "$theme-settings-terminal" --theme "$theme" --size 1280x800 --mode settings --section terminal; done
 
+# the tour: every step, every coach mark, on the real window
+for step in 0 1 2 3 5; do shot "dark-tour-$step" --theme dark --size 1280x800 --mode onboarding --step "$step"; done
+for coach in 0 1 2 3 4 5 6; do shot "dark-coach-$coach" --theme dark --size 1280x800 --mode onboarding --step 4 --coach "$coach"; done
+shot "light-tour-3" --theme light --size 1000x640 --mode onboarding --step 3
+shot "light-coach-1" --theme light --size 1000x640 --mode onboarding --step 4 --coach 1
+
 # a custom accent, end to end: settings.json, the derived roles, every token that follows them
 mkdir -p "$H/.config/skillhub"
 printf '{"version":1,"appearance":{"accent":{"source":"custom","color":"#8B6CF6"}}}\n' > "$H/.config/skillhub/settings.json"

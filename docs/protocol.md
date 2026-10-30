@@ -191,6 +191,7 @@ Parameters marked `?` are optional. `names` is a list of skill names; an empty o
 | `system.info` | none | `{ "user","host","os","kernel","shell","terminal","uptime","shells":[{"name","path"}] }` |
 | `paths.sizes` | none | job; the results carry `sizes:[{"label","path","bytes","size"}]`, `diskTotal`, `diskFree` |
 | `cache.clear` | none | job; removes the cached clones, which can always be made again |
+| `lock.merge` | none | job; the one-time merge of the two user lock files (`docs/formats.md` section 2), with backups of both |
 | `fetch.render` | `colors?` (`truecolor` or `256`), `icons?`, `logo?` | `{ "ansi": "<the banner as terminal text>" }` |
 | `palette.derive` | `seed` (`#RRGGBB`), `mode` (`dark` or `light`) | `{ "roles":{"action","actionInk","mark","markText","markLow","focus","selected","inkOk"}, "clash":"" }` |
 | `jobs.cancel` | `job` | `{}` |
@@ -201,7 +202,7 @@ What 2.0's backend answers today (milestone M1c): `initialize`, `shutdown`, `sta
 `skills.check`, `skills.update`, `skills.install`, `skills.remove`, `skills.track`, `skills.diff`, `skills.history`,
 `skills.rollback`, `skills.restore`, `skills.hold`, `skills.setAgentEnabled`, `skills.copyToProject`, `sources.discover`,
 `adopt`, `relink`, `scope.set`, `projects.list`, `projects.add`, `projects.remove`, `projects.setAuto`, `paths.sizes`,
-`cache.clear`, `palette.derive`, `fetch.render`, `system.info`,
+`cache.clear`, `lock.merge`, `palette.derive`, `fetch.render`, `system.info`,
 `providers.list`, `providers.setManaged`, `providers.addCustom`, `providers.removeCustom`, `providers.rescan`,
 `transfer.export`, `transfer.preview`, `transfer.import`, `automation.status`, `automation.set`, `settings.get`,
 `settings.set`, `jobs.cancel`, and `doctor`, which only the command line has so far (`-32601`).

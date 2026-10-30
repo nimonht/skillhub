@@ -21,9 +21,15 @@ Rectangle {
     function begin() {
         if (!visible || started || width <= 0) return
         started = true
-        if (Theme.setting("terminal", "banner", true)) app.requestBanner()
-        else go()
+        // ConPTY clears the screen as it starts, so on Windows the shell itself prints the banner
+        if (Theme.setting("terminal", "banner", true) && Qt.platform.os !== "windows") {
+            app.requestBanner()
+            late.start()
+        } else {
+            go()
+        }
     }
+    Timer { id: late; interval: 2500; onTriggered: if (!term.running) root.go() }   // no banner, then: the shell matters more
     function go() {
         term.program = app.terminalShell()
         term.arguments = app.terminalArguments()
@@ -35,6 +41,7 @@ Rectangle {
         target: app
         function onBannerReady(text) {
             if (root.started && !term.running) {
+                late.stop()
                 term.feed(text)
                 root.go()
             }

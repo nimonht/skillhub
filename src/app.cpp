@@ -17,6 +17,7 @@
 #include <QDateTime>
 #include <QDesktopServices>
 #include <QDir>
+#include <QCoreApplication>
 #include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
@@ -382,9 +383,11 @@ QString AppController::terminalShell() const {
 #endif
 }
 
+static QStringList bannerArguments(const QString &shell);
+
 QStringList AppController::terminalArguments() const {
 #ifdef Q_OS_WIN
-    return {};
+    return setting(QStringLiteral("terminal"), QStringLiteral("banner"), true).toBool() ? bannerArguments(terminalShell()) : QStringList{};
 #else
     const QString name = terminalShell().section(QLatin1Char('/'), -1);
     return name == QLatin1String("sh") || name == QLatin1String("dash") ? QStringList{} : QStringList{QStringLiteral("-l")};
@@ -427,7 +430,11 @@ QVariantList AppController::externalTerminals() const {
 // what a shell runs to show the banner and stay open
 static QStringList bannerArguments(const QString &shell) {
     const QString name = shell.section(QLatin1Char('/'), -1).section(QLatin1Char('\\'), -1).toLower();
+#ifdef Q_OS_WIN
+    const QString fetch = QLatin1Char('"') + QDir::toNativeSeparators(QCoreApplication::applicationDirPath() + QStringLiteral("/skillhub-cli.exe")) + QStringLiteral("\" fetch");
+#else
     const QString fetch = QStringLiteral("skillhub fetch");
+#endif
     if (name.startsWith(QLatin1String("fish"))) return {QStringLiteral("-C"), fetch};
     if (name.startsWith(QLatin1String("nu"))) return {QStringLiteral("-e"), fetch};
     if (name.startsWith(QLatin1String("pwsh")) || name.startsWith(QLatin1String("powershell"))) return {QStringLiteral("-NoExit"), QStringLiteral("-Command"), fetch};
@@ -478,6 +485,13 @@ void AppController::openExternalTerminal(const QString &id) {
     }
     if (program.isEmpty() || !QProcess::startDetached(program, args, dir)) emit toast(QStringLiteral("error"), tr("Could not start %1").arg(id));
 }
+
+// window state, not a setting: this machine has seen the tour of this version
+bool AppController::tourNeeded() const { return !QSettings().contains(QStringLiteral("tour/completedVersion")); }
+
+void AppController::tourDone() { QSettings().setValue(QStringLiteral("tour/completedVersion"), QStringLiteral(SKILLHUB_VERSION)); }
+
+void AppController::mergeLocks() { startJob(QStringLiteral("lock.merge"), {}, tr("Merging the lock files"), QStringLiteral("mergeLocks"), false); }
 
 void AppController::measurePaths() { startJob(QStringLiteral("paths.sizes"), {}, tr("Measuring folders"), QStringLiteral("sizes"), false); }
 
@@ -623,6 +637,9 @@ void AppController::onNotification(const QString &method, const QJsonObject &par
         }
     } else if (method == QLatin1String("event.jobDone") && params.value(QStringLiteral("job")).toString() == job_) {
         jobDone(params);
+    } else if (method == QLatin1String("lock.split")) {
+        lockSplit_ = params.value(QStringLiteral("onlyInOther")).toInt();
+        emit lockSplitChanged();
     } else if (method == QLatin1String("settings.changed")) {
         applySettings(params.value(QStringLiteral("settings")).toObject());
     }
@@ -1065,6 +1082,13 @@ void AppController::jobDone(const QJsonObject &done) {
     } else if (kind == QLatin1String("restore")) {
         msg = done.value(QStringLiteral("ok")).toBool() ? tr("Restored") : error;
         level = done.value(QStringLiteral("ok")).toBool() ? QStringLiteral("ok") : QStringLiteral("error");
+    } else if (kind == QLatin1String("mergeLocks")) {
+        msg = error.isEmpty() ? tr("Lock files merged. Backups of both are next to them") : error;
+        level = error.isEmpty() ? QStringLiteral("ok") : QStringLiteral("error");
+        if (error.isEmpty()) {
+            lockSplit_ = -1;
+            emit lockSplitChanged();
+        }
     } else if (kind == QLatin1String("sizes")) {
         pathSizes_ = done.value(QStringLiteral("sizes")).toArray().toVariantList();
         emit pathSizesChanged();

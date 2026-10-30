@@ -155,6 +155,7 @@ class AppController : public QObject {
     Q_PROPERTY(QVariantMap paletteLight READ paletteLight NOTIFY themeChanged)
     Q_PROPERTY(QString systemAccent READ systemAccent NOTIFY themeChanged)       // "": this system does not tell
     Q_PROPERTY(bool compactDensity READ compactDensity NOTIFY themeChanged)
+    Q_PROPERTY(int lockSplit READ lockSplit NOTIFY lockSplitChanged)   // entries only in the second lock file; -1: there is just one
     Q_PROPERTY(QVariantList pathSizes READ pathSizes NOTIFY pathSizesChanged)
     Q_PROPERTY(QVariantList shells READ shells NOTIFY countsChanged)                  // of this machine, from the backend
     Q_PROPERTY(QVariantList externalTerminals READ externalTerminals CONSTANT)
@@ -237,6 +238,7 @@ public:
     int settingsRev() const { return settingsRev_; }
     QString material() const;
     bool glassReady() const;
+    int lockSplit() const { return lockSplit_; }
     QVariantList pathSizes() const { return pathSizes_; }
     QVariantList shells() const { return shells_; }
     QVariantList externalTerminals() const;
@@ -279,6 +281,9 @@ public:
     Q_INVOKABLE QVariant layoutState(const QString &key) const;
     Q_INVOKABLE void saveLayout(const QString &key, const QVariant &state);
     Q_INVOKABLE void loadProjects();
+    Q_INVOKABLE void mergeLocks();
+    Q_INVOKABLE void tourDone();
+    bool tourNeeded() const;
     Q_INVOKABLE QString terminalShell() const;
     Q_INVOKABLE QStringList terminalArguments() const;
     Q_INVOKABLE QString terminalFolder() const;
@@ -341,6 +346,8 @@ signals:
     void themeChanged();
     void toast(const QString &level, const QString &text);
     void undoOffered(const QString &text);
+    void lockSplitChanged();
+    void startTour(int step, int coach);
     void bannerReady(const QString &text);
     void showTerminal();
     void settingsChanged();
@@ -391,7 +398,7 @@ private:
     QString scope_, scopeCentral_, mechanism_;
     QJsonObject settings_;
     QVariantList pathSizes_, shells_;
-    int settingsRev_ = 0;
+    int settingsRev_ = 0, lockSplit_ = -1;
     QString portalAccent_;
     QVariantMap paletteDark_, paletteLight_;
     QString undoMethod_;       // skills.rollback or skills.restore, for what just happened
