@@ -36,7 +36,9 @@ bool sh_is_risky_file(const char *rel, const char *full) {
     const char *dot = strrchr(rel, '.');
     for (size_t i = 0; dot && i < sizeof scripts / sizeof scripts[0]; ++i)
         if (strcasecmp(dot, scripts[i]) == 0) return true;
-    if (sh_is_executable(full)) return true;
+#ifndef _WIN32
+    if (sh_is_executable(full)) return true;  // Windows has no such bit: every file passes
+#endif
     sh_buf b = SH_BUF_INIT;
     const bool shebang = sh_read_file(full, 2, &b) && b.len >= 2 && b.data[0] == '#' && b.data[1] == '!';
     sh_buf_free(&b);
