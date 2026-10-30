@@ -1,12 +1,13 @@
 {
  "format": "skillhub-providers",
- "version": 1,
+ "version": 2,
  "source": "vercel-labs/skills src/agents.ts @ a80e4c9 (MIT) with skillhub overrides",
  "providers": [
   {
    "id": "claude-code",
    "label": "Claude Code",
    "dir": "${CLAUDE_CONFIG_DIR:-~/.claude}/skills",
+   "projectDir": ".claude/skills",
    "detect": [
     "${CLAUDE_CONFIG_DIR:-~/.claude}"
    ],
@@ -23,6 +24,7 @@
    "id": "codex",
    "label": "Codex",
    "dir": "~/.agents/skills",
+   "projectDir": ".agents/skills",
    "detect": [
     "${CODEX_HOME:-~/.codex}"
    ],
@@ -41,6 +43,7 @@
    "id": "gemini-cli",
    "label": "Gemini CLI",
    "dir": "~/.agents/skills",
+   "projectDir": ".agents/skills",
    "detect": [
     "~/.gemini/settings.json",
     "~/.gemini/oauth_creds.json",
@@ -59,6 +62,7 @@
    "id": "antigravity",
    "label": "Antigravity",
    "dir": "",
+   "projectDir": ".agents/skills",
    "mode": "config",
    "configFile": "~/.gemini/config/skills.json",
    "detect": [
@@ -80,6 +84,7 @@
    "id": "cursor",
    "label": "Cursor",
    "dir": "~/.cursor/skills",
+   "projectDir": ".agents/skills",
    "detect": [
     "~/.cursor"
    ],
@@ -94,6 +99,7 @@
    "id": "github-copilot",
    "label": "GitHub Copilot",
    "dir": "~/.copilot/skills",
+   "projectDir": ".agents/skills",
    "detect": [
     "~/.copilot"
    ],
@@ -108,6 +114,7 @@
    "id": "opencode",
    "label": "OpenCode",
    "dir": "${XDG_CONFIG_HOME:-~/.config}/opencode/skills",
+   "projectDir": ".agents/skills",
    "detect": [
     "${XDG_CONFIG_HOME:-~/.config}/opencode"
    ],
@@ -122,6 +129,7 @@
    "id": "windsurf",
    "label": "Windsurf",
    "dir": "~/.codeium/windsurf/skills",
+   "projectDir": ".windsurf/skills",
    "detect": [
     "~/.codeium/windsurf"
    ],
@@ -136,6 +144,7 @@
    "id": "zed",
    "label": "Zed",
    "dir": "~/.agents/skills",
+   "projectDir": ".agents/skills",
    "detect": [
     "${XDG_CONFIG_HOME:-~/.config}/zed"
    ],
@@ -151,6 +160,7 @@
    "id": "amp",
    "label": "Amp",
    "dir": "${XDG_CONFIG_HOME:-~/.config}/agents/skills",
+   "projectDir": ".agents/skills",
    "detect": [
     "${XDG_CONFIG_HOME:-~/.config}/amp"
    ],
@@ -163,6 +173,7 @@
    "id": "goose",
    "label": "Goose",
    "dir": "${XDG_CONFIG_HOME:-~/.config}/goose/skills",
+   "projectDir": ".goose/skills",
    "detect": [
     "${XDG_CONFIG_HOME:-~/.config}/goose"
    ],
@@ -177,6 +188,7 @@
    "id": "kiro-cli",
    "label": "Kiro CLI",
    "dir": "~/.kiro/skills",
+   "projectDir": ".kiro/skills",
    "detect": [
     "~/.kiro"
    ],
@@ -191,6 +203,7 @@
    "id": "qwen-code",
    "label": "Qwen Code",
    "dir": "~/.qwen/skills",
+   "projectDir": ".qwen/skills",
    "detect": [
     "~/.qwen"
    ],
@@ -205,6 +218,7 @@
    "id": "cline",
    "label": "Cline",
    "dir": "~/.agents/skills",
+   "projectDir": ".agents/skills",
    "detect": [
     "~/.cline"
    ],
@@ -217,6 +231,7 @@
    "id": "roo",
    "label": "Roo Code",
    "dir": "~/.roo/skills",
+   "projectDir": ".roo/skills",
    "detect": [
     "~/.roo"
    ],
@@ -229,6 +244,7 @@
    "id": "kilo",
    "label": "Kilo Code",
    "dir": "~/.kilo/skills",
+   "projectDir": ".agents/skills",
    "detect": [
     "~/.kilo",
     "~/.kilocode"
@@ -242,6 +258,7 @@
    "id": "junie",
    "label": "Junie",
    "dir": "~/.junie/skills",
+   "projectDir": ".junie/skills",
    "detect": [
     "~/.junie"
    ],
@@ -254,6 +271,7 @@
    "id": "droid",
    "label": "Droid",
    "dir": "~/.agents/skills",
+   "projectDir": ".agents/skills",
    "detect": [
     "~/.factory"
    ],
@@ -270,6 +288,7 @@
    "id": "openhands",
    "label": "OpenHands",
    "dir": "~/.openhands/skills",
+   "projectDir": ".openhands/skills",
    "detect": [
     "~/.openhands"
    ],
@@ -284,6 +303,7 @@
    "id": "continue",
    "label": "Continue",
    "dir": "~/.continue/skills",
+   "projectDir": ".continue/skills",
    "detect": [
     "~/.continue"
    ],
@@ -296,6 +316,7 @@
    "id": "adal",
    "label": "AdaL",
    "dir": "~/.adal/skills",
+   "projectDir": ".adal/skills",
    "detect": [
     "~/.adal"
    ],
@@ -308,6 +329,7 @@
    "id": "aider-desk",
    "label": "AiderDesk",
    "dir": "~/.aider-desk/skills",
+   "projectDir": ".aider-desk/skills",
    "detect": [
     "~/.aider-desk"
    ],
@@ -320,6 +342,7 @@
    "id": "astrbot",
    "label": "AstrBot",
    "dir": "~/.astrbot/data/skills",
+   "projectDir": "data/skills",
    "detect": [
     "~/.astrbot"
    ],
@@ -332,6 +355,7 @@
    "id": "augment",
    "label": "Augment",
    "dir": "~/.augment/skills",
+   "projectDir": ".augment/skills",
    "detect": [
     "~/.augment"
    ],
@@ -346,6 +370,7 @@
    "id": "autohand-code",
    "label": "Autohand Code CLI",
    "dir": "${AUTOHAND_HOME:-~/.autohand}/skills",
+   "projectDir": ".autohand/skills",
    "detect": [
     "${AUTOHAND_HOME:-~/.autohand}"
    ],
@@ -358,6 +383,7 @@
    "id": "bob",
    "label": "IBM Bob",
    "dir": "~/.bob/skills",
+   "projectDir": ".bob/skills",
    "detect": [
     "~/.bob"
    ],
@@ -370,6 +396,7 @@
    "id": "codearts-agent",
    "label": "CodeArts Agent",
    "dir": "~/.codeartsdoer/skills",
+   "projectDir": ".codeartsdoer/skills",
    "detect": [
     "~/.codeartsdoer"
    ],
@@ -382,6 +409,7 @@
    "id": "codebuddy",
    "label": "CodeBuddy",
    "dir": "~/.codebuddy/skills",
+   "projectDir": ".codebuddy/skills",
    "detect": [
     "~/.codebuddy"
    ],
@@ -394,6 +422,7 @@
    "id": "codemaker",
    "label": "Codemaker",
    "dir": "~/.codemaker/skills",
+   "projectDir": ".codemaker/skills",
    "detect": [
     "~/.codemaker"
    ],
@@ -406,6 +435,7 @@
    "id": "codestudio",
    "label": "Code Studio",
    "dir": "~/.codestudio/skills",
+   "projectDir": ".codestudio/skills",
    "detect": [
     "~/.codestudio"
    ],
@@ -418,6 +448,7 @@
    "id": "command-code",
    "label": "Command Code",
    "dir": "~/.commandcode/skills",
+   "projectDir": ".commandcode/skills",
    "detect": [
     "~/.commandcode"
    ],
@@ -430,6 +461,7 @@
    "id": "cortex",
    "label": "Cortex Code",
    "dir": "~/.snowflake/cortex/skills",
+   "projectDir": ".cortex/skills",
    "detect": [
     "~/.snowflake/cortex"
    ],
@@ -442,6 +474,7 @@
    "id": "crush",
    "label": "Crush",
    "dir": "~/.config/crush/skills",
+   "projectDir": ".crush/skills",
    "detect": [
     "~/.config/crush"
    ],
@@ -454,6 +487,7 @@
    "id": "deepagents",
    "label": "Deep Agents",
    "dir": "~/.deepagents/agent/skills",
+   "projectDir": ".agents/skills",
    "detect": [
     "~/.deepagents"
    ],
@@ -466,6 +500,7 @@
    "id": "devin",
    "label": "Devin for Terminal",
    "dir": "${XDG_CONFIG_HOME:-~/.config}/devin/skills",
+   "projectDir": ".devin/skills",
    "detect": [
     "${XDG_CONFIG_HOME:-~/.config}/devin"
    ],
@@ -478,6 +513,7 @@
    "id": "dexto",
    "label": "Dexto",
    "dir": "~/.agents/skills",
+   "projectDir": ".agents/skills",
    "detect": [
     "~/.dexto"
    ],
@@ -490,6 +526,7 @@
    "id": "firebender",
    "label": "Firebender",
    "dir": "~/.firebender/skills",
+   "projectDir": ".agents/skills",
    "detect": [
     "~/.firebender"
    ],
@@ -502,6 +539,7 @@
    "id": "forgecode",
    "label": "ForgeCode",
    "dir": "~/.forge/skills",
+   "projectDir": ".forge/skills",
    "detect": [
     "~/.forge"
    ],
@@ -514,6 +552,7 @@
    "id": "fx",
    "label": "fx",
    "dir": "~/.agents/skills",
+   "projectDir": ".agents/skills",
    "detect": [
     "~/.fx"
    ],
@@ -526,6 +565,7 @@
    "id": "grok",
    "label": "Grok Build",
    "dir": "${GROK_HOME:-~/.grok}/skills",
+   "projectDir": ".grok/skills",
    "detect": [
     "${GROK_HOME:-~/.grok}"
    ],
@@ -538,6 +578,7 @@
    "id": "hermes-agent",
    "label": "Hermes Agent",
    "dir": "${HERMES_HOME:-~/.hermes}/skills",
+   "projectDir": ".hermes/skills",
    "detect": [
     "${HERMES_HOME:-~/.hermes}"
    ],
@@ -550,6 +591,7 @@
    "id": "iflow-cli",
    "label": "iFlow CLI",
    "dir": "~/.iflow/skills",
+   "projectDir": ".iflow/skills",
    "detect": [
     "~/.iflow"
    ],
@@ -562,6 +604,7 @@
    "id": "inference-sh",
    "label": "inference.sh",
    "dir": "~/.inferencesh/skills",
+   "projectDir": ".inferencesh/skills",
    "detect": [
     "~/.inferencesh"
    ],
@@ -574,6 +617,7 @@
    "id": "jazz",
    "label": "Jazz",
    "dir": "~/.jazz/skills",
+   "projectDir": ".jazz/skills",
    "detect": [
     "~/.jazz"
    ],
@@ -586,6 +630,7 @@
    "id": "kimchi",
    "label": "Kimchi",
    "dir": "~/.config/kimchi/harness/skills",
+   "projectDir": ".kimchi/skills",
    "detect": [
     "~/.config/kimchi"
    ],
@@ -598,6 +643,7 @@
    "id": "kimi-code-cli",
    "label": "Kimi Code CLI",
    "dir": "~/.agents/skills",
+   "projectDir": ".agents/skills",
    "detect": [
     "~/.kimi-code",
     "~/.kimi"
@@ -611,6 +657,7 @@
    "id": "kode",
    "label": "Kode",
    "dir": "~/.kode/skills",
+   "projectDir": ".kode/skills",
    "detect": [
     "~/.kode"
    ],
@@ -623,6 +670,7 @@
    "id": "lingma",
    "label": "Lingma",
    "dir": "~/.lingma/skills",
+   "projectDir": ".lingma/skills",
    "detect": [
     "~/.lingma"
    ],
@@ -635,6 +683,7 @@
    "id": "loaf",
    "label": "Loaf",
    "dir": "~/.agents/skills",
+   "projectDir": ".agents/skills",
    "detect": [
     "~/.loaf"
    ],
@@ -647,6 +696,7 @@
    "id": "mcpjam",
    "label": "MCPJam",
    "dir": "~/.mcpjam/skills",
+   "projectDir": ".mcpjam/skills",
    "detect": [
     "~/.mcpjam"
    ],
@@ -659,6 +709,7 @@
    "id": "minimax-code",
    "label": "MiniMax Code",
    "dir": "~/.minimax/skills",
+   "projectDir": ".minimax/skills",
    "detect": [
     "~/.minimax"
    ],
@@ -671,6 +722,7 @@
    "id": "mistral-vibe",
    "label": "Mistral Vibe",
    "dir": "${VIBE_HOME:-~/.vibe}/skills",
+   "projectDir": ".vibe/skills",
    "detect": [
     "${VIBE_HOME:-~/.vibe}"
    ],
@@ -683,6 +735,7 @@
    "id": "moxby",
    "label": "Moxby",
    "dir": "~/.moxby/skills",
+   "projectDir": ".moxby/skills",
    "detect": [
     "~/.moxby"
    ],
@@ -695,6 +748,7 @@
    "id": "mux",
    "label": "Mux",
    "dir": "~/.mux/skills",
+   "projectDir": ".mux/skills",
    "detect": [
     "~/.mux"
    ],
@@ -707,6 +761,7 @@
    "id": "neovate",
    "label": "Neovate",
    "dir": "~/.neovate/skills",
+   "projectDir": ".neovate/skills",
    "detect": [
     "~/.neovate"
    ],
@@ -719,6 +774,7 @@
    "id": "ona",
    "label": "Ona",
    "dir": "~/.ona/skills",
+   "projectDir": ".ona/skills",
    "detect": [
     "~/.ona"
    ],
@@ -731,6 +787,7 @@
    "id": "openclaw",
    "label": "OpenClaw",
    "dir": "~/.openclaw/skills",
+   "projectDir": "skills",
    "detect": [
     "~/.openclaw",
     "~/.clawdbot",
@@ -745,6 +802,7 @@
    "id": "pi",
    "label": "Pi",
    "dir": "~/.agents/skills",
+   "projectDir": ".agents/skills",
    "detect": [
     "~/.pi/agent"
    ],
@@ -757,6 +815,7 @@
    "id": "pochi",
    "label": "Pochi",
    "dir": "~/.pochi/skills",
+   "projectDir": ".pochi/skills",
    "detect": [
     "~/.pochi"
    ],
@@ -769,6 +828,7 @@
    "id": "posit-assistant",
    "label": "Posit Assistant",
    "dir": "~/.posit/assistant/skills",
+   "projectDir": ".posit/assistant/skills",
    "detect": [
     "~/.posit/assistant",
     "~/.positai"
@@ -782,6 +842,7 @@
    "id": "qoder",
    "label": "Qoder",
    "dir": "~/.qoder/skills",
+   "projectDir": ".qoder/skills",
    "detect": [
     "~/.qoder"
    ],
@@ -794,6 +855,7 @@
    "id": "qoder-cn",
    "label": "Qoder CN",
    "dir": "~/.qoder-cn/skills",
+   "projectDir": ".qoder/skills",
    "detect": [
     "~/.qoder-cn"
    ],
@@ -806,6 +868,7 @@
    "id": "reasonix",
    "label": "Reasonix",
    "dir": "~/.reasonix/skills",
+   "projectDir": ".reasonix/skills",
    "detect": [
     "~/.reasonix"
    ],
@@ -818,6 +881,7 @@
    "id": "replit",
    "label": "Replit",
    "dir": "${XDG_CONFIG_HOME:-~/.config}/agents/skills",
+   "projectDir": ".agents/skills",
    "detect": [
     "${XDG_CONFIG_HOME:-~/.config}/agents"
    ],
@@ -830,6 +894,7 @@
    "id": "rovodev",
    "label": "Rovo Dev",
    "dir": "~/.rovodev/skills",
+   "projectDir": ".rovodev/skills",
    "detect": [
     "~/.rovodev"
    ],
@@ -842,6 +907,7 @@
    "id": "sarvam-code",
    "label": "Sarvam Code",
    "dir": "~/.agents/skills",
+   "projectDir": ".agents/skills",
    "detect": [
     "${SARVAM_HOME:-~/.sarvam}"
    ],
@@ -854,6 +920,7 @@
    "id": "tabnine-cli",
    "label": "Tabnine CLI",
    "dir": "~/.tabnine/agent/skills",
+   "projectDir": ".tabnine/agent/skills",
    "detect": [
     "~/.tabnine"
    ],
@@ -866,6 +933,7 @@
    "id": "terramind",
    "label": "Terramind",
    "dir": "~/.terramind/skills",
+   "projectDir": ".terramind/skills",
    "detect": [
     "~/.terramind"
    ],
@@ -878,6 +946,7 @@
    "id": "tinycloud",
    "label": "Tinycloud",
    "dir": "~/.tinycloud/skills",
+   "projectDir": ".tinycloud/skills",
    "detect": [
     "~/.tinycloud"
    ],
@@ -890,6 +959,7 @@
    "id": "trae",
    "label": "Trae",
    "dir": "~/.trae/skills",
+   "projectDir": ".trae/skills",
    "detect": [
     "~/.trae"
    ],
@@ -902,6 +972,7 @@
    "id": "trae-cn",
    "label": "Trae CN",
    "dir": "~/.trae-cn/skills",
+   "projectDir": ".trae/skills",
    "detect": [
     "~/.trae-cn"
    ],
@@ -914,6 +985,7 @@
    "id": "warp",
    "label": "Warp",
    "dir": "~/.agents/skills",
+   "projectDir": ".agents/skills",
    "detect": [
     "~/.warp"
    ],
@@ -926,6 +998,7 @@
    "id": "zcode",
    "label": "ZCode",
    "dir": "~/.zcode/skills",
+   "projectDir": ".zcode/skills",
    "detect": [
     "~/.zcode"
    ],
@@ -938,6 +1011,7 @@
    "id": "zencoder",
    "label": "Zencoder",
    "dir": "~/.zencoder/skills",
+   "projectDir": ".zencoder/skills",
    "detect": [
     "~/.zencoder"
    ],
@@ -950,6 +1024,7 @@
    "id": "zenflow",
    "label": "Zenflow",
    "dir": "~/.zencoder/skills",
+   "projectDir": ".zencoder/skills",
    "detect": [
     "~/.zencoder"
    ],

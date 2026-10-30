@@ -43,6 +43,7 @@ static void setup(sh_store *st) {
     st->state = at("state");
     st->lock_path = at("lock.json");
     st->parked = at("parked");
+    st->scope = sh_strdup("user");
 }
 
 static void teardown(sh_store *st) {
@@ -52,6 +53,7 @@ static void teardown(sh_store *st) {
     free(st->state);
     free(st->lock_path);
     free(st->parked);
+    free(st->scope);
     sh_remove_tree(root);
     free(root);
 }

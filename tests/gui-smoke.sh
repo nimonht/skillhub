@@ -45,6 +45,9 @@ revise 3
 mkdir -p "$H/work/skills/demo/scripts"
 printf '#!/bin/sh\necho setup\n' > "$H/work/skills/demo/scripts/setup.sh"
 revise 4
+mkdir -p "$H/app" "$H/Projects/site/.agents/skills/x"
+"$BIN" add acme/demo --all --project "$H/app" >/dev/null
+"$BIN" projects add "$H/app"
 "$BIN" disable beta --agent claude-code >/dev/null
 "$BIN" disable alpha --shared >/dev/null
 
@@ -72,5 +75,7 @@ for theme in dark light; do
   shot "$theme-versions" --theme "$theme" --size 1280x800 --select demo
   shot "$theme-switches" --theme "$theme" --size 1280x800 --select beta
   shot "$theme-agent-off" --theme "$theme" --size 1280x800 --agent claude-code
+  shot "$theme-project" --theme "$theme" --size 1280x800 --scope "$H/app" --select demo --settle 12
+  shot "$theme-scopes" --theme "$theme" --size 1280x800 --action scopes
 done
 echo "gui smoke test passed (screenshots in $OUT)"

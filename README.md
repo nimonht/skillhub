@@ -46,6 +46,9 @@ that into one directory plus a few symlinks, and tells you the moment something 
 - **Per-agent switches**: turn a skill off for one agent and leave it on for the others. Agents that read the shared folder
   switch together; for them the skill is parked in `~/.agents/.parked`, where `npx skills` leaves it alone, and it keeps
   getting updates.
+- **Project skills**: a repository's own `.agents/skills`, with relative links for the agents that need them and a
+  `skills-lock.json` that `npx skills` reads too. Switch to a project at the top of the rail, or add `--project PATH` to a
+  command. Copy a skill of yours into a project in one click.
 - **Transfer between machines**: *Export* writes one JSON file with every skill (remote skills as their source, local skills
   with their files); *Import* on the other machine shows what is inside, then downloads and installs everything. Drag the
   file onto the window, or use `skillhub export` / `skillhub import`.
@@ -165,6 +168,11 @@ skillhub restore my-skill                           # bring back a removed skill
 skillhub disable my-skill --agent claude-code       # one agent stops seeing it (enable brings it back)
 skillhub disable my-skill --shared                  # every agent that reads the shared folder stops seeing it
 
+skillhub add acme/skills --all --project .          # into this repository: .agents/skills and skills-lock.json
+skillhub check -C ~/work/app                        # -C is short for --project
+skillhub copy my-skill ~/work/app                   # a skill of yours, into a project
+skillhub projects add ~/work/app                    # keep it in the window's list (auto ... on: the daily update too)
+
 skillhub autoupdate on     # daily update via systemd user timer
 skillhub watch on          # auto-adopt strays dropped into agent folders
 ```
@@ -258,7 +266,7 @@ manager or `sudo cmake --build build --target uninstall`; both remove only files
 
 - [x] Show a diff before applying an update, and one-click rollback in the GUI
 - [x] Per-agent enable/disable for a skill
-- [ ] Project-level skills (`.claude/skills` in a repository), not only user-level ones
+- [x] Project-level skills (`.claude/skills` in a repository), not only user-level ones
 - [x] GitLab / arbitrary git URLs and local-path sources
 - [ ] Daily update and stray watcher on macOS (launchd) and Windows (Task Scheduler)
 

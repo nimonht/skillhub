@@ -6,10 +6,10 @@ import "."
 // Off is a choice, not a fault: a hollow ring and nothing in it.
 Item {
     id: root
-    property string link: "link"      // link | shared | off | missing | copy | foreign | absent
+    property string link: "link"      // link | shared | synced | off | missing | copy | foreign | absent
     property string agentLabel: ""
-    readonly property bool ok: link === "link" || link === "shared"
-    readonly property var words: ({ "link": "linked", "shared": "reads the shared folder", "off": "turned off for this agent", "missing": "missing, not linked",
+    readonly property bool ok: link === "link" || link === "shared" || link === "synced"
+    readonly property var words: ({ "link": "linked", "shared": "reads the shared folder", "synced": "a copy kept identical", "off": "turned off for this agent", "missing": "missing, not linked",
                                     "copy": "separate copy, not the shared one", "foreign": "link points elsewhere", "absent": "agent not detected" })
     width: 22
     height: 22

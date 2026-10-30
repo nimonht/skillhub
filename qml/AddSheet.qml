@@ -94,7 +94,7 @@ Item {
         SectionLabel { id: lbl; x: 24; width: parent.width - 48; text: "Skills in " + app.candidateRepo + (root.origin !== "" ? " · " + root.origin : ""); trailing: app.candidates.length }
         Toggle {
             id: liveToggle
-            visible: app.candidateType === "local"
+            visible: app.candidateType === "local" && !app.inProject
             anchors.top: lbl.bottom
             anchors.topMargin: 8
             x: 24

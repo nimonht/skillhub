@@ -86,7 +86,9 @@ typedef struct {
 } scan_result;
 
 // Runs on the scanner thread: the whole state from a fresh store, with the check results applied.
-scan_result *scan_build(const check_map *checks, const sh_strv *just_updated);
+scan_result *scan_build(const char *project, const check_map *checks, const sh_strv *just_updated);
+// the store of a scope: a project's, or (`project` NULL, or a folder that went away) the user's own
+void scope_store(const char *project, sh_store *st, sh_log_fn log, void *user);
 void scan_result_free(scan_result *r);
 // The state.delta params between two scans, or NULL when nothing changed. `d` owns the result.
 yyjson_mut_val *scan_delta(yyjson_mut_doc *d, const scan_result *before, const scan_result *after, long base_rev, long rev);
@@ -118,6 +120,7 @@ struct job {
     char *error;
     check_map checks;       // check results to remember
     sh_strv updated;        // skills this job updated
+    char *project;          // the scope it runs in; NULL: the user's own skills
     bool rescan;            // the shared folder may have changed
 };
 
@@ -155,6 +158,7 @@ struct server {
     sh_rpc_msg *shutdown_msg;  // answered once the running job has stopped
 
     // state
+    char *project;        // the scope the window shows; NULL: the user's own skills
     scan_result *state;
     long rev;
     check_map checks;

@@ -275,7 +275,7 @@ static bool unpark_many(sh_store *st, const char *const *names, size_t n, char *
 }
 
 void sh_parked_reconcile(sh_store *st) {
-    if (!sh_is_dir(st->parked)) return;
+    if (!st->parked || !sh_is_dir(st->parked)) return;
     sh_strv names = SH_STRV_INIT;
     sh_list_dir(st->parked, SH_LIST_ALL, &names);
     for (size_t i = 0; i < names.len; ++i) {
@@ -317,6 +317,10 @@ int sh_unpark_all(sh_store *st) {
 // ---- switching ----
 
 bool sh_skills_set_enabled(sh_store *st, const char *const *names, size_t n, const char *agent, bool on, char **err) {
+    if (st->project) {
+        if (err) *err = sh_strdup("a project's skills are shared with its team: they have no personal switches");
+        return false;
+    }
     const bool all = strcmp(agent, SH_AGENTS_ALL) == 0;
     bool shared = all || strcmp(agent, SH_AGENTS_SHARED) == 0;
     const sh_agent *one = NULL;

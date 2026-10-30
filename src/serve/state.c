@@ -180,6 +180,7 @@ static const char *link_key(sh_link_state s) {
     case SH_LINK_COPY: return "copy";
     case SH_LINK_FOREIGN: return "foreign";
     case SH_LINK_OFF: return "off";
+    case SH_LINK_SYNCED: return "synced";
     }
     return "";
 }
@@ -420,9 +421,9 @@ static void build_watches(scan_result *r, const sh_store *st) {
     free(config);
 }
 
-scan_result *scan_build(const check_map *checks, const sh_strv *just_updated) {
+scan_result *scan_build(const char *project, const check_map *checks, const sh_strv *just_updated) {
     sh_store st;
-    sh_store_init(&st, NULL, NULL);
+    scope_store(project, &st, NULL, NULL);
     sh_skills sk;
     sh_store_scan(&st, &sk);
     sh_strays strays;

@@ -136,6 +136,11 @@ class AppController : public QObject {
     Q_PROPERTY(QVariantList reviews READ reviews NOTIFY reviewChanged)
     Q_PROPERTY(QVariantList versions READ versions NOTIFY versionsChanged)  // of the selected skill, newest first
     Q_PROPERTY(bool onHold READ onHold NOTIFY versionsChanged)
+    Q_PROPERTY(QString scope READ scope NOTIFY scopeChanged)               // a project's folder; "": the user's own skills
+    Q_PROPERTY(QString scopeLabel READ scopeLabel NOTIFY scopeChanged)
+    Q_PROPERTY(bool inProject READ inProject NOTIFY scopeChanged)
+    Q_PROPERTY(QVariantList projects READ projects NOTIFY projectsChanged)
+    Q_PROPERTY(QStringList suggestedProjects READ suggestedProjects NOTIFY projectsChanged)
     Q_PROPERTY(bool automationSupported READ automationSupported NOTIFY automationChanged)  // daily timer + stray watcher exist on this system
     Q_PROPERTY(QString timerState READ timerState NOTIFY automationChanged)
     Q_PROPERTY(QString watcherState READ watcherState NOTIFY automationChanged)
@@ -193,6 +198,11 @@ public:
     bool reviewLoading() const { return reviewLoading_; }
     QVariantList reviews() const { return reviews_; }
     QVariantList versions() const { return versions_; }
+    QString scope() const { return scope_; }
+    QString scopeLabel() const;
+    bool inProject() const { return !scope_.isEmpty(); }
+    QVariantList projects() const { return projects_; }
+    QStringList suggestedProjects() const { return suggested_; }
     bool onHold() const { return onHold_; }
     bool automationSupported() const { return automationSupported_; }
     QString timerState() const { return timer_; }
@@ -224,6 +234,10 @@ public:
     Q_INVOKABLE void rollback(const QString &name, const QString &stamp);
     Q_INVOKABLE void undoLast();
     Q_INVOKABLE void setHold(const QString &name, bool on);
+    Q_INVOKABLE void loadProjects();
+    Q_INVOKABLE void setScope(const QString &path);
+    Q_INVOKABLE void addProject(const QString &path);
+    Q_INVOKABLE void copyToProject(const QString &name, const QString &project);
     Q_INVOKABLE void setAgentEnabled(const QStringList &names, const QString &agent, bool on);  // agent: an id, @shared, @all
     Q_INVOKABLE void updateSkill(const QString &name);
     Q_INVOKABLE void adopt();
@@ -261,6 +275,9 @@ signals:
     void themeChanged();
     void toast(const QString &level, const QString &text);
     void undoOffered(const QString &text);
+    void scopeChanged();
+    void projectsChanged();
+    void showScopeMenu();
     void reviewChanged();
     void versionsChanged();
     void customProviderAdded(const QString &error);  // "" when it worked
@@ -296,7 +313,9 @@ private:
     bool loading_ = false, stale_ = false;
     QString job_, jobKind_, jobName_;  // the running job: its id, kind, and the skill it is about
     QVariantMap detail_;
-    QVariantList candidates_, reviews_, versions_;
+    QVariantList candidates_, reviews_, versions_, projects_;
+    QStringList suggested_;
+    QString scope_, scopeCentral_;
     QString undoMethod_;       // skills.rollback or skills.restore, for what just happened
     QStringList undoNames_;
     bool reviewOpen_ = false, reviewLoading_ = false, onHold_ = false;

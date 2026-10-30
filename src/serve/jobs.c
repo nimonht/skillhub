@@ -278,6 +278,17 @@ static void body_diff(job *j, sh_store *st) {
     sh_strv_free(&names);
 }
 
+static void body_copy(job *j, sh_store *st) {
+    const char *name = param_str(j->params, "name");
+    char *err = NULL;
+    sh_engine *e = engine_for(j, st);
+    const bool ok = sh_engine_copy_to_project(e, name, param_str(j->params, "project"), &err);
+    engine_done(j, e);
+    add_result(j, name, ok, err);
+    if (!ok) fail(j, err);
+    free(err);
+}
+
 // `name` with an optional `stamp`, or `names`: each back to its newest kept version (Undo after an update)
 // `names` for `agent` (an id, or @shared, or @all)
 static void body_set_enabled(job *j, sh_store *st) {
@@ -492,6 +503,7 @@ static const job_method METHODS[] = {
     {"skills.rollback", "rollback", true, body_rollback, {NULL}},
     {"skills.restore", "restore", true, body_restore, {"name", NULL}},
     {"skills.hold", "hold", true, body_hold, {"name", NULL}},
+    {"skills.copyToProject", "copy", true, body_copy, {"name", "project", NULL}},
     {"skills.setAgentEnabled", "setAgentEnabled", true, body_set_enabled, {"agent", NULL}},
     {"skills.track", "track", true, body_track, {"name", "source", NULL}},
     {"sources.discover", "discover", false, body_discover, {"input", NULL}},
@@ -525,7 +537,7 @@ static const char *missing_param(const char *kind, yyjson_val *params) {
 static void job_main(void *arg) {
     job *j = arg;
     sh_store st;
-    sh_store_init(&st, job_log, j);
+    scope_store(j->project, &st, job_log, j);
     if (j->mutating) sh_store_recover(&st, false);  // the lock is ours: a dead process's half-done swap is put right first
     j->body(j, &st);
     if (cancelled(j)) j->ok = false;
@@ -537,6 +549,7 @@ static void job_main(void *arg) {
 }
 
 static void job_free(job *j) {
+    free(j->project);
     yyjson_doc_free(j->params_doc);
     yyjson_mut_doc_free(j->out);
     free(j->error);
@@ -581,6 +594,7 @@ void job_start(server *sv, sh_rpc_msg *m, const char *kind, bool mutating, job_b
     j->mutating = mutating;
     j->lock = lock;
     j->body = body;
+    j->project = sv->project ? sh_strdup(sv->project) : NULL;
     j->m = sh_mutex_new();
     j->out = yyjson_mut_doc_new(NULL);
     j->summary = yyjson_mut_obj(j->out);

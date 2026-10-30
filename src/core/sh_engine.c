@@ -140,7 +140,10 @@ void sh_engine_free(sh_engine *e) {
 
 static bool is_local(const repo_slot *s) { return s->o.type == SH_ORIGIN_LOCAL; }
 
-static bool remembers_tree(const repo_slot *s) { return s->o.type == SH_ORIGIN_GITLAB || s->o.type == SH_ORIGIN_GIT; }
+// the lock says nothing about a tree: GitLab and git entries and everything in a project hold a hash of the files
+static bool remembers_tree(const sh_engine *e, const repo_slot *s) {
+    return !is_local(s) && (e->st->project || s->o.type == SH_ORIGIN_GITLAB || s->o.type == SH_ORIGIN_GIT);
+}
 
 // the slot of a repository, added on first use (calling thread only, before any task runs)
 static size_t slot_for(sh_engine *e, const sh_origin *o) {
@@ -174,7 +177,7 @@ static ptrdiff_t slot_with_key(const sh_engine *e, const char *key) {
 }
 
 // the origin of a lock entry whose type is one Skill Hub runs; false when the entry cannot be used
-static bool origin_of(const sh_source *src, sh_origin *o) {
+static bool origin_of(const sh_store *st, const sh_source *src, sh_origin *o) {
     memset(o, 0, sizeof *o);
     if (src->ref && !sh_origin_ref_ok(src->ref)) return false;
     const char *ref = src->ref ? src->ref : "";
@@ -189,6 +192,15 @@ static bool origin_of(const sh_source *src, sh_origin *o) {
     }
     sh_origin_type type;
     if (!sh_origin_type_from_name(src->type, &type) || !sh_origin_parse(*src->url ? src->url : src->source, o, NULL)) return false;
+    if (type == SH_ORIGIN_LOCAL && st->project) {  // the lock came with the repository: it may not read other folders of this machine
+        char *inside = sh_strfmt("%s/", st->project);
+        const bool ok = sh_path_within(o->url, inside);
+        free(inside);
+        if (!ok) {
+            sh_origin_free(o);
+            return false;
+        }
+    }
     o->type = type;  // what the entry says, not what the URL looks like
     free(o->source);
     free(o->ref);
@@ -562,8 +574,9 @@ static void check_skill(sh_engine *e, repo_slot *s, sh_skill *sk) {
     set_str(&sk->new_hash, id);
     // what the installed copy came from: the lock says it, except that for GitLab and git it holds a hash of the files,
     // which says nothing about a tree; an empty hash means the content is unknown, whatever was recorded
-    const char *had = remembers_tree(s) && *sk->src.hash ? sh_trees_get(e->trees, sk->name) : sk->src.hash;
-    sk->update = strcmp(id, had) == 0 && !*sk->new_path ? SH_UPDATE_CURRENT : SH_UPDATE_AVAILABLE;
+    const char *had = remembers_tree(e, s) && *sk->src.hash ? sh_trees_get(e->trees, sk->name) : sk->src.hash;
+    // the same files elsewhere upstream are worth an update, for the path; a local folder has no path on record in a project
+    sk->update = strcmp(id, had) == 0 && (!*sk->new_path || is_local(s)) ? SH_UPDATE_CURRENT : SH_UPDATE_AVAILABLE;
     free(id);
     free(dir);
 }
@@ -598,7 +611,7 @@ int sh_engine_check(sh_engine *e, sh_skills *skills, const sh_strv *only) {
         }
         if (!sh_source_runnable(&s->src)) continue;  // managed by npx: a kind of source Skill Hub does not run
         sh_origin o;
-        if (!origin_of(&s->src, &o)) {
+        if (!origin_of(e->st, &s->src, &o)) {
             s->update = SH_UPDATE_ERROR;
             set_str(&s->note, "its source cannot be used");
             continue;
@@ -749,11 +762,13 @@ static char *placed_hash(const sh_engine *e, const char *name) {
 }
 
 // what the lock holds for a placed skill, as npx writes it: the git tree id for GitHub, the SHA-256 folder hash otherwise
-static const char *lock_hash(const repo_slot *s, const char *content, const char *id) { return s->o.type == SH_ORIGIN_GITHUB ? id : content; }
+static const char *lock_hash(const sh_engine *e, const repo_slot *s, const char *content, const char *id) {
+    return s->o.type == SH_ORIGIN_GITHUB && !e->st->project ? id : content;
+}
 
 // the upstream tree id the installed skill came from
 static const char *installed_tree(const sh_engine *e, const repo_slot *s, const sh_skill *sk) {
-    return remembers_tree(s) ? sh_trees_get(e->trees, sk->name) : sk->src.hash;
+    return remembers_tree(e, s) ? sh_trees_get(e->trees, sk->name) : sk->src.hash;
 }
 
 // ---- update ----
@@ -769,12 +784,12 @@ static void updated(sh_engine *e, const repo_slot *s, sh_skill *sk, const char *
     if (!*src.url) set_str(&src.url, s->o.url);
     set_str(&src.skill_path, skill_md);
     char *content = placed_hash(e, sk->name);
-    set_str(&src.hash, lock_hash(s, content, id));
+    set_str(&src.hash, lock_hash(e, s, content, id));
     char *now = sh_now_iso();
     if (!*src.installed_at) set_str(&src.installed_at, now);
     set_str(&src.updated_at, now);
     free(now);
-    queue_entry(e, sk->name, &src, remembers_tree(s) ? id : "", content);
+    queue_entry(e, sk->name, &src, remembers_tree(e, s) ? id : "", content);
     free(content);
     sh_source_free(&sk->src);
     sk->src = src;
@@ -841,7 +856,7 @@ int sh_engine_update(sh_engine *e, sh_skill *const *todo, size_t n, bool *done) 
     for (size_t i = 0; i < n; ++i) {
         done[i] = false;
         sh_origin o;
-        if (!sh_source_runnable(&todo[i]->src) || todo[i]->live || on_hold(e, holds, todo[i]) || !origin_of(&todo[i]->src, &o)) continue;
+        if (!sh_source_runnable(&todo[i]->src) || todo[i]->live || on_hold(e, holds, todo[i]) || !origin_of(e->st, &todo[i]->src, &o)) continue;
         group_add(&j.g, slot_for(e, &o), i);
         sh_origin_free(&o);
     }
@@ -866,7 +881,7 @@ typedef struct {
 
 static bool edited_since_placed(const sh_engine *e, const repo_slot *s, const sh_skill *sk) {
     const char *placed = sh_trees_content(e->trees, sk->name);
-    if (!*placed && s->o.type != SH_ORIGIN_GITHUB) placed = sk->src.hash;  // npx's own hash of the files
+    if (!*placed && (s->o.type != SH_ORIGIN_GITHUB || e->st->project)) placed = sk->src.hash;  // npx's own hash of the files
     if (!*placed) return false;
     char *now = placed_hash(e, sk->name);
     const bool edited = strcmp(now, placed) != 0;
@@ -984,7 +999,7 @@ void sh_engine_diff(sh_engine *e, sh_skill *const *todo, size_t n, sh_review *ou
         if (!sh_source_tracked(&sk->src)) out[i].err = sh_strfmt("%s has no upstream", sk->name);
         else if (!sh_source_runnable(&sk->src)) out[i].err = sh_strfmt("%s is managed by npx", sk->name);
         else if (sk->live) out[i].err = sh_strfmt("%s is a live link: it always shows what its folder holds", sk->name);
-        else if (!origin_of(&sk->src, &o)) out[i].err = sh_strfmt("%s has a source that cannot be read", sk->name);
+        else if (!origin_of(e->st, &sk->src, &o)) out[i].err = sh_strfmt("%s has a source that cannot be read", sk->name);
         else {
             group_add(&j.g, slot_for(e, &o), i);
             sh_origin_free(&o);
@@ -1002,7 +1017,7 @@ static bool apply_one(sh_engine *e, sh_skill *sk, const char *stage) {
     yyjson_doc *doc = NULL;
     sh_origin o = {0};
     bool ok = false;
-    if (!ours || sh_json_read(manifest, 64 * 1024, &doc) != SH_JSON_OK || !origin_of(&sk->src, &o)) {
+    if (!ours || sh_json_read(manifest, 64 * 1024, &doc) != SH_JSON_OK || !origin_of(e->st, &sk->src, &o)) {
         sh_store_log(e->st, "the review of %s is gone: review it again", sk->name);
     } else {
         yyjson_val *root_val = yyjson_doc_get_root(doc);
@@ -1141,10 +1156,10 @@ static void installed(sh_engine *e, const repo_slot *s, const install_item *it, 
     src.url = sh_strdup(s->o.url);
     src.skill_path = *dir ? sh_strfmt("%s/SKILL.md", dir) : sh_strdup("SKILL.md");
     char *content = placed_hash(e, it->name);
-    src.hash = sh_strdup(lock_hash(s, content, id));
+    src.hash = sh_strdup(lock_hash(e, s, content, id));
     src.installed_at = sh_now_iso();
     src.updated_at = sh_strdup(src.installed_at);
-    queue_entry(e, it->name, &src, remembers_tree(s) ? id : "", content);
+    queue_entry(e, it->name, &src, remembers_tree(e, s) ? id : "", content);
     free(content);
     sh_source_free(&src);
     sh_store_log(e->st, it->link ? "linked %s to %s" : "installed %s from %s", it->name, s->o.source);
@@ -1204,7 +1219,7 @@ int sh_engine_install(sh_engine *e, const sh_candidate *const *cands, size_t n, 
     for (size_t i = 0; i < n; ++i) {
         const ptrdiff_t at = slot_with_key(e, cands[i]->key);  // the engine that discovered it
         slots[i] = at < 0 ? SIZE_MAX : (size_t)at;
-        items[i] = (install_item){cands[i]->name, cands[i]->dir, false, link && at >= 0 && is_local(&e->slots[at]), false, SH_IMPORT_OK};
+        items[i] = (install_item){cands[i]->name, cands[i]->dir, false, link && !e->st->project && at >= 0 && is_local(&e->slots[at]), false, SH_IMPORT_OK};
     }
     const int ok = install_items(e, items, slots, n);
     for (size_t i = 0; i < n; ++i) done[i] = items[i].done;
@@ -1240,6 +1255,56 @@ int sh_engine_import(sh_engine *e, const sh_import_item *const *in, size_t n, bo
     free(dirs);
     free(slots);
     free(items);
+    return ok;
+}
+
+// ---- copy to a project ----
+
+bool sh_engine_copy_to_project(sh_engine *e, const char *name, const char *project, char **err) {
+    sh_store p;
+    if (!sh_store_init_project(&p, project, e->st->log, e->st->log_user, err)) return false;
+    char *from = sh_store_skill_dir(e->st, name), *to = sh_store_skill_dir(&p, name);
+    sh_source src;
+    const bool tracked = sh_lock_entry(e->st, name, &src);
+    bool ok = false;
+    if (!sh_is_dir(from)) {
+        if (err) *err = sh_strfmt("no skill named %s", name);
+    } else if (sh_lexists(to)) {
+        if (err) *err = sh_strfmt("%s is in that project already", name);
+    } else {
+        char *stage = sh_store_stage_dir(&p, name);
+        char *why = copy_folder(from, stage);
+        ok = !why && sh_store_place(&p, name, stage, NULL);
+        if (why) {
+            if (err) *err = why;
+            else free(why);
+            sh_remove_tree(stage);
+        } else if (!ok && err) {
+            *err = sh_strfmt("cannot place %s", name);
+        }
+        free(stage);
+    }
+    if (ok && tracked && strcmp(src.type, "local") != 0) {  // a folder of this machine means nothing to the team
+        sh_trees *t = sh_trees_load(e->st);
+        const bool github = !*src.type || strcmp(src.type, "github") == 0;
+        char *tree = sh_strdup(github ? src.hash : sh_trees_get(t, name));
+        sh_trees_free(t);
+        char *content = sh_folder_hash(to);
+        free(src.hash);
+        src.hash = sh_strdup(content);
+        sh_lock_put(&p, name, &src);
+        const char *const names[] = {name};
+        const char *const trees[] = {tree};
+        const char *const contents[] = {content};
+        sh_trees_put_many(&p, names, trees, contents, 1);
+        free(content);
+        free(tree);
+    }
+    if (ok) sh_store_relink(&p);
+    if (tracked) sh_source_free(&src);
+    free(to);
+    free(from);
+    sh_store_free(&p);
     return ok;
 }
 

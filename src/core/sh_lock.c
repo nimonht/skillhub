@@ -84,7 +84,8 @@ void sh_source_from_mut_json(yyjson_mut_val *o, sh_source *out) {
     out->source = sh_strdup(sh_json_mut_str(o, "source"));
     out->url = sh_strdup(sh_json_mut_str(o, "sourceUrl"));
     out->skill_path = sh_strdup(sh_json_mut_str(o, "skillPath"));
-    out->hash = sh_strdup(sh_json_mut_str(o, "skillFolderHash"));
+    const char *hash = sh_json_mut_str(o, "skillFolderHash");
+    out->hash = sh_strdup(*hash ? hash : sh_json_mut_str(o, "computedHash"));  // a project lock has this one
     out->installed_at = sh_strdup(sh_json_mut_str(o, "installedAt"));
     out->updated_at = sh_strdup(sh_json_mut_str(o, "updatedAt"));
 }
@@ -95,13 +96,14 @@ void sh_source_from_json(yyjson_val *o, sh_source *out) {
     out->source = sh_strdup(sh_json_str(o, "source"));
     out->url = sh_strdup(sh_json_str(o, "sourceUrl"));
     out->skill_path = sh_strdup(sh_json_str(o, "skillPath"));
-    out->hash = sh_strdup(sh_json_str(o, "skillFolderHash"));
+    const char *hash = sh_json_str(o, "skillFolderHash");
+    out->hash = sh_strdup(*hash ? hash : sh_json_str(o, "computedHash"));  // a project lock has this one
     out->installed_at = sh_strdup(sh_json_str(o, "installedAt"));
     out->updated_at = sh_strdup(sh_json_str(o, "updatedAt"));
 }
 
 // One lock file as a mutable document with `version` and `skills` present, or NULL with *err when it must not be used.
-static yyjson_mut_doc *load_file(const char *path, char **err) {
+static yyjson_mut_doc *load_file(const char *path, long long fresh_version, char **err) {
     yyjson_doc *doc = NULL;
     sh_json_status s = sh_json_read(path, 0, &doc);
     if (s == SH_JSON_INVALID || s == SH_JSON_UNREADABLE) {  // npx writes in place: we may have read half a file
@@ -133,10 +135,12 @@ static yyjson_mut_doc *load_file(const char *path, char **err) {
         yyjson_mut_doc_set_root(m, yyjson_mut_obj(m));
     }
     yyjson_mut_val *root = yyjson_mut_doc_get_root(m);
-    if (!yyjson_mut_obj_get(root, "version")) sh_json_set_int(m, root, "version", 3);
+    if (!yyjson_mut_obj_get(root, "version")) sh_json_set_int(m, root, "version", fresh_version);
     sh_json_get_or_add_obj(m, root, "skills");
     return m;
 }
+
+static long long version_of(const sh_store *st) { return st->project ? 1 : 3; }
 
 static yyjson_mut_val *skills_of(yyjson_mut_doc *m) { return yyjson_mut_obj_get(yyjson_mut_doc_get_root(m), "skills"); }
 
@@ -146,9 +150,9 @@ static const char *updated_at(yyjson_mut_val *entry) {
 }
 
 yyjson_mut_doc *sh_lock_load(const sh_store *st, char **err) {
-    yyjson_mut_doc *view = load_file(st->lock_path, err);
+    yyjson_mut_doc *view = load_file(st->lock_path, version_of(st), err);
     if (!view || !st->lock_other) return view;
-    yyjson_mut_doc *other = load_file(st->lock_other, NULL);  // the second file only adds to the view; a broken one is skipped
+    yyjson_mut_doc *other = load_file(st->lock_other, 3, NULL);  // the second file only adds to the view; a broken one is skipped
     if (!other) return view;
     yyjson_mut_val *mine = skills_of(view);
     sh_json_index *ix = sh_json_index_new(mine);
@@ -180,7 +184,30 @@ static void fill_entry(yyjson_mut_doc *m, yyjson_mut_val *entry, const sh_source
     sh_json_set_str(m, entry, "updatedAt", src->updated_at);
 }
 
-static void set_entry(yyjson_mut_doc *m, const char *name, yyjson_mut_val *entry, const sh_source *src) {
+// As npx writes skills-lock.json (src/local-lock.ts): no timestamps, so two branches merge cleanly; a local source is relative
+// to the project, with no URL or path inside it.
+static void fill_project_entry(yyjson_mut_doc *m, yyjson_mut_val *entry, const sh_source *src, const char *project) {
+    const bool local = src->type && strcmp(src->type, "local") == 0;
+    if (local) {
+        char *rel = sh_path_relative(project, src->source);
+        char *shown = sh_starts_with(rel, "../") || sh_path_is_absolute(rel) ? sh_strdup(rel) : sh_strfmt("./%s", rel);
+        sh_json_set_str(m, entry, "source", shown);
+        free(shown);
+        free(rel);
+    } else {
+        sh_json_set_str(m, entry, "source", src->source);
+    }
+    sh_json_set_str(m, entry, "sourceType", src->type && *src->type ? src->type : "github");
+    if (src->ref && *src->ref) sh_json_set_str(m, entry, "ref", src->ref);
+    else yyjson_mut_obj_remove_str(entry, "ref");
+    if (!local) {
+        sh_json_set_str(m, entry, "sourceUrl", src->url);
+        sh_json_set_str(m, entry, "skillPath", src->skill_path);
+    }
+    sh_json_set_str(m, entry, "computedHash", src->hash);
+}
+
+static void set_entry(yyjson_mut_doc *m, const char *name, yyjson_mut_val *entry, const sh_source *src, const char *project) {
     yyjson_mut_val *skills = skills_of(m);
     if (!entry) {
         entry = yyjson_mut_obj(m);
@@ -189,11 +216,27 @@ static void set_entry(yyjson_mut_doc *m, const char *name, yyjson_mut_val *entry
         entry = yyjson_mut_obj(m);
         sh_json_set_val(m, skills, name, entry);
     }
-    fill_entry(m, entry, src);
+    if (project) fill_project_entry(m, entry, src, project);
+    else fill_entry(m, entry, src);
+}
+
+// names sorted, so the file's diffs stay small and a merge stays clean (npx does the same)
+static void sort_skills(yyjson_mut_doc *m) {
+    yyjson_mut_val *skills = skills_of(m);
+    sh_strv names = SH_STRV_INIT;
+    size_t i, n;
+    yyjson_mut_val *key, *val;
+    yyjson_mut_obj_foreach(skills, i, n, key, val) sh_strv_push(&names, yyjson_mut_get_str(key));
+    sh_strv_sort(&names, strcmp);
+    yyjson_mut_val *sorted = yyjson_mut_obj(m);
+    for (size_t k = 0; k < names.len; ++k) yyjson_mut_obj_add(sorted, yyjson_mut_strcpy(m, names.items[k]), yyjson_mut_val_mut_copy(m, yyjson_mut_obj_get(skills, names.items[k])));
+    sh_strv_free(&names);
+    sh_json_set_val(m, yyjson_mut_doc_get_root(m), "skills", sorted);
 }
 
 static bool write_lock(sh_store *st, const char *path, yyjson_mut_doc *m) {
-    const bool ok = sh_json_write(path, m, true, false);  // as npx writes it: two spaces, no final newline
+    if (st->project) sort_skills(m);
+    const bool ok = sh_json_write(path, m, true, st->project != NULL);  // as npx writes each: two spaces, a final newline only in a project
     if (!ok) sh_store_log(st, "FAILED to write %s", path);
     return ok;
 }
@@ -223,13 +266,13 @@ static bool *last_of_each_name(const char *const *names, size_t n) {
 bool sh_lock_files_put(sh_store *st, const char *const *names, const sh_source *const *srcs, size_t n) {
     if (n == 0) return true;
     char *err = NULL;
-    yyjson_mut_doc *primary = load_file(st->lock_path, &err);
+    yyjson_mut_doc *primary = load_file(st->lock_path, version_of(st), &err);
     if (!primary) {
         for (size_t i = 0; i < n; ++i) sh_store_log(st, "FAILED to record %s: %s", names[i], err);
         free(err);
         return false;
     }
-    yyjson_mut_doc *other = st->lock_other ? load_file(st->lock_other, NULL) : NULL;
+    yyjson_mut_doc *other = st->lock_other ? load_file(st->lock_other, 3, NULL) : NULL;
     sh_json_index *ip = sh_json_index_new(skills_of(primary)), *io = sh_json_index_new(other ? skills_of(other) : NULL);
     bool *keep = last_of_each_name(names, n);  // the tables stay exact: each name is looked up and changed once
     bool primary_changed = false, other_changed = false;
@@ -245,11 +288,11 @@ bool sh_lock_files_put(sh_store *st, const char *const *names, const sh_source *
         }
         // the files that hold the entry get the change; a new entry goes to the primary file
         if (in_primary || !in_other) {
-            set_entry(primary, names[i], in_primary, srcs[i]);
+            set_entry(primary, names[i], in_primary, srcs[i], st->project);
             primary_changed = true;
         }
         if (in_other) {
-            set_entry(other, names[i], in_other, srcs[i]);
+            set_entry(other, names[i], in_other, srcs[i], st->project);
             other_changed = true;
         }
     }
@@ -290,9 +333,20 @@ bool sh_lock_entry(const sh_store *st, const char *name, sh_source *out) {
     yyjson_mut_doc *m = sh_lock_load(st, NULL);
     yyjson_mut_val *entry = m ? yyjson_mut_obj_get(skills_of(m), name) : NULL;
     const bool found = yyjson_mut_is_obj(entry);
-    if (found) sh_source_from_mut_json(entry, out);
+    if (found) {
+        sh_source_from_mut_json(entry, out);
+        sh_source_resolve(st, out);
+    }
     yyjson_mut_doc_free(m);
     return found;
+}
+
+void sh_source_resolve(const sh_store *st, sh_source *s) {
+    if (!st->project || strcmp(s->type, "local") != 0 || sh_path_is_absolute(s->source)) return;
+    char *full = sh_path_join(st->project, s->source);
+    free(s->source);
+    s->source = sh_path_clean(full);
+    free(full);
 }
 
 yyjson_mut_val *sh_source_to_json(yyjson_mut_doc *m, const sh_source *src) {
@@ -310,7 +364,7 @@ bool sh_lock_put(sh_store *st, const char *name, const sh_source *src) {
 bool sh_lock_split(const sh_store *st, size_t *only_other) {
     if (only_other) *only_other = 0;
     if (!st->lock_other) return false;
-    yyjson_mut_doc *primary = load_file(st->lock_path, NULL), *other = load_file(st->lock_other, NULL);
+    yyjson_mut_doc *primary = load_file(st->lock_path, 3, NULL), *other = load_file(st->lock_other, 3, NULL);
     if (primary && other && only_other) {
         size_t i, n;
         yyjson_mut_val *key, *val;
@@ -324,9 +378,9 @@ bool sh_lock_split(const sh_store *st, size_t *only_other) {
 
 bool sh_lock_migrate(sh_store *st, char **err) {
     if (!st->lock_other) return true;
-    yyjson_mut_doc *primary = load_file(st->lock_path, err);
+    yyjson_mut_doc *primary = load_file(st->lock_path, 3, err);
     if (!primary) return false;
-    yyjson_mut_doc *other = load_file(st->lock_other, err);
+    yyjson_mut_doc *other = load_file(st->lock_other, 3, err);
     if (!other) {
         yyjson_mut_doc_free(primary);
         return false;
@@ -411,18 +465,18 @@ static yyjson_mut_doc *sources_load(const sh_store *st) {
     if (!read) yyjson_mut_doc_set_root(m, yyjson_mut_obj(m));
     yyjson_mut_val *root = yyjson_mut_doc_get_root(m);
     if (!yyjson_mut_obj_get(root, "version")) sh_json_set_int(m, root, "version", 1);
-    sh_json_get_or_add_obj(m, sh_json_get_or_add_obj(m, root, "trees"), "user");
+    sh_json_get_or_add_obj(m, sh_json_get_or_add_obj(m, root, "trees"), st->scope);
     return m;
 }
 
-static yyjson_mut_val *user_trees(yyjson_mut_doc *m) {
-    return yyjson_mut_obj_get(yyjson_mut_obj_get(yyjson_mut_doc_get_root(m), "trees"), "user");
+static yyjson_mut_val *scope_trees(yyjson_mut_doc *m, const sh_store *st) {
+    return yyjson_mut_obj_get(yyjson_mut_obj_get(yyjson_mut_doc_get_root(m), "trees"), st->scope);
 }
 
 sh_trees *sh_trees_load(const sh_store *st) {
     sh_trees *t = sh_xcalloc(1, sizeof *t);
     t->doc = sources_load(st);
-    t->ix = sh_json_index_new(user_trees(t->doc));
+    t->ix = sh_json_index_new(scope_trees(t->doc, st));
     return t;
 }
 
@@ -446,7 +500,7 @@ void sh_trees_free(sh_trees *t) {
 void sh_trees_put_many(sh_store *st, const char *const *names, const char *const *ids, const char *const *contents, size_t n) {
     if (n == 0) return;
     yyjson_mut_doc *m = sources_load(st);
-    yyjson_mut_val *trees = user_trees(m);
+    yyjson_mut_val *trees = scope_trees(m, st);
     sh_json_index *ix = sh_json_index_new(trees);
     bool *keep = last_of_each_name(names, n);
     for (size_t i = 0; i < n; ++i) {
