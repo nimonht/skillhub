@@ -54,7 +54,7 @@ that into one directory plus a few symlinks, and tells you the moment something 
   file onto the window, or use `skillhub export` / `skillhub import`.
 - **Adopts the mess**: finds real skill folders sitting in agent directories, moves them into the shared folder, sets
   identical duplicates aside and keeps conflicting copies instead of overwriting anything.
-- **Install from GitHub**: name a repository, tick the skills you want from its list, done.
+- **Install from anywhere**: name a repository or a folder, tick the skills you want from its list, done.
 - **Updates**: compares each skill's folder hash with its upstream repository (git tree SHA), updates one or all, keeps
   the previous three versions, and can run daily: a systemd timer on Linux, a launchd agent on macOS, a scheduled task on Windows.
 - **Stays tidy**: an optional watcher pulls a skill dropped into an agent folder back into the shared one.
@@ -67,6 +67,14 @@ that into one directory plus a few symlinks, and tells you the moment something 
 - **Compatible with `npx skills`**: reads and writes the same `~/.agents/.skill-lock.json` (v3) lock file.
 
 <table>
+  <tr>
+    <td width="50%"><img src="docs/screenshot-review.png" alt="The Review page: the changed files of a skill beside a unified diff with plus and minus marks"></td>
+    <td width="50%"><img src="docs/screenshot-terminal.png" alt="The built-in terminal in the bottom dock, with the Skill Hub banner above a shell prompt"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Review an update before it happens: what changes, what is a script, what you edited.</sub></td>
+    <td align="center"><sub>A terminal in the dock, with the state of your skills at the top of every shell.</sub></td>
+  </tr>
   <tr>
     <td width="50%"><img src="docs/screenshot-agents.png" alt="The Agents manager: detected agents with a switch each, and the rest of the catalog"></td>
     <td width="50%"><img src="docs/screenshot-transfer.png" alt="Transfer panel: export the skill set, import a file with a preview of what will be installed"></td>
@@ -81,9 +89,11 @@ that into one directory plus a few symlinks, and tells you the moment something 
   </tr>
   <tr>
     <td align="center"><sub>Light theme, one agent inspected: what it can't see, and a one-click repair.</sub></td>
-    <td align="center"><sub>Add from GitHub: read a repo, tick the skills you want.</sub></td>
+    <td align="center"><sub>Add from anywhere: read a source, tick the skills you want.</sub></td>
   </tr>
 </table>
+
+<sub>The screenshots show demo data, made by <code>tools/demo-screenshots.sh</code>.</sub>
 
 <sub>Screenshots use a demo setup with a handful of public skills; two are deliberately stale and one agent link was
 removed to show the states.</sub>
