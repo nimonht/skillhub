@@ -6,6 +6,8 @@ import "."
 Item {
     id: root
     implicitHeight: 128
+    readonly property int compactHeight: 84
+    readonly property bool compact: height < implicitHeight
     readonly property var agents: app.agents
     readonly property int cols: app.columnCount
     readonly property real colW: app.portW

@@ -278,6 +278,38 @@ static void body_diff(job *j, sh_store *st) {
     sh_strv_free(&names);
 }
 
+static void add_size(job *j, yyjson_mut_val *list, const char *label, const char *path) {
+    const int64_t bytes = sh_tree_bytes(path);
+    char *shown = bytes >= 1024 * 1024 ? sh_strfmt("%.1f MB", (double)bytes / (1024 * 1024)) : sh_strfmt("%lld KB", (long long)(bytes / 1024));
+    yyjson_mut_val *o = yyjson_mut_obj(j->out);
+    yyjson_mut_obj_add_strcpy(j->out, o, "label", label);
+    yyjson_mut_obj_add_strcpy(j->out, o, "path", path);
+    yyjson_mut_obj_add_int(j->out, o, "bytes", bytes);
+    yyjson_mut_obj_add_strcpy(j->out, o, "size", shown);
+    yyjson_mut_arr_append(list, o);
+    free(shown);
+}
+
+static void body_sizes(job *j, sh_store *st) {
+    yyjson_mut_val *list = yyjson_mut_arr(j->out);
+    add_size(j, list, "Skills", st->central);
+    add_size(j, list, "Backups", st->backup);
+    add_size(j, list, "Cache", st->cache);
+    yyjson_mut_obj_add_val(j->out, j->extra, "sizes", list);
+    int64_t total = 0, free_bytes = 0;
+    if (sh_disk_usage(st->central, &total, &free_bytes)) {
+        yyjson_mut_obj_add_int(j->out, j->extra, "diskTotal", total);
+        yyjson_mut_obj_add_int(j->out, j->extra, "diskFree", free_bytes);
+    }
+}
+
+// the clones can always be made again; the stage folders and records stay
+static void body_clear_cache(job *j, sh_store *st) {
+    char *repos = sh_path_join(st->cache, "repos");
+    if (!sh_remove_tree(repos) && sh_exists(repos)) fail(j, "could not remove the cache");
+    free(repos);
+}
+
 static void body_copy(job *j, sh_store *st) {
     const char *name = param_str(j->params, "name");
     char *err = NULL;
@@ -504,6 +536,8 @@ static const job_method METHODS[] = {
     {"skills.restore", "restore", true, body_restore, {"name", NULL}},
     {"skills.hold", "hold", true, body_hold, {"name", NULL}},
     {"skills.copyToProject", "copy", true, body_copy, {"name", "project", NULL}},
+    {"paths.sizes", "sizes", false, body_sizes, {NULL}},
+    {"cache.clear", "clearCache", true, body_clear_cache, {NULL}},
     {"skills.setAgentEnabled", "setAgentEnabled", true, body_set_enabled, {"agent", NULL}},
     {"skills.track", "track", true, body_track, {"name", "source", NULL}},
     {"sources.discover", "discover", false, body_discover, {"input", NULL}},

@@ -76,6 +76,24 @@ for theme in dark light; do
   shot "$theme-switches" --theme "$theme" --size 1280x800 --select beta
   shot "$theme-agent-off" --theme "$theme" --size 1280x800 --agent claude-code
   shot "$theme-project" --theme "$theme" --size 1280x800 --scope "$H/app" --select demo --settle 12
+  shot "$theme-collapsed" --theme "$theme" --size 1280x800 --layout rail=64 --select alpha
+  shot "$theme-resized" --theme "$theme" --size 1600x900 --layout rail=300,detail=560,dock=260 --select alpha
+  for section in appearance layout updates projects advanced about; do
+    shot "$theme-settings-$section" --theme "$theme" --size 1280x800 --mode settings --section "$section"
+  done
   shot "$theme-scopes" --theme "$theme" --size 1280x800 --action scopes
+done
+# a custom accent, end to end: settings.json, the derived roles, every token that follows them
+mkdir -p "$H/.config/skillhub"
+printf '{"version":1,"appearance":{"accent":{"source":"custom","color":"#8B6CF6"}}}\n' > "$H/.config/skillhub/settings.json"
+for theme in dark light; do
+  shot "$theme-accent" --theme "$theme" --size 1280x800 --select demo
+  shot "$theme-accent-settings" --theme "$theme" --size 1280x800 --mode settings
+done
+# what translucency does to the tokens; the software renderer has no shaders, so glass falls back to a plain surface here
+for material in blur glass; do
+  printf '{"version":1,"appearance":{"material":"%s","intensity":1,"tintSurfaces":true}}\n' "$material" > "$H/.config/skillhub/settings.json"
+  SKILLHUB_FORCE_TRANSLUCENT=1 shot "dark-$material" --theme dark --size 1280x800 --select demo
+  SKILLHUB_FORCE_TRANSLUCENT=1 shot "light-$material" --theme light --size 1280x800 --mode settings
 done
 echo "gui smoke test passed (screenshots in $OUT)"

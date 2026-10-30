@@ -35,7 +35,7 @@ AbstractButton {
                 width: 14; height: 14; radius: 2
                 y: 3
                 x: root.checked ? parent.width - width - 3 : 3
-                color: root.checked ? (Theme.dark ? "#04251A" : "#FFFFFF") : Theme.text2
+                color: root.checked ? Theme.inkOnMark : Theme.text2
                 Behavior on x { NumberAnimation { duration: Theme.dBase; easing.type: Easing.OutCubic } }
                 Icon { visible: root.checked; anchors.centerIn: parent; name: "check"; size: 10; weight: 3; color: Theme.mark }
             }

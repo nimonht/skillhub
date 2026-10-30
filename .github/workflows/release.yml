@@ -81,6 +81,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: jurplel/install-qt-action@v4
         with:
+          modules: qtshadertools
           version: ${{ env.QT_VERSION }}
           cache: true
       - name: Build
@@ -118,6 +119,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: jurplel/install-qt-action@v4
         with:
+          modules: qtshadertools
           version: ${{ env.QT_VERSION }}
           arch: win64_msvc2022_64
           cache: true

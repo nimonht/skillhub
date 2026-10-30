@@ -104,6 +104,7 @@ add_library(skillhub_core STATIC
     src/core/sh_lock.c
     src/core/sh_origin.c src/core/sh_origin.h
     src/core/sh_projects.c src/core/sh_projects.h
+    src/core/sh_palette.c src/core/sh_palette.h
     src/core/sh_path.c src/core/sh_path.h
     src/core/sh_proc.c src/core/sh_proc.h
     src/core/sh_rpc.c src/core/sh_rpc.h
@@ -122,6 +123,8 @@ find_package(Threads REQUIRED)
 target_link_libraries(skillhub_core PUBLIC skillhub_yyjson Threads::Threads)
 if(WIN32)
     target_link_libraries(skillhub_core PUBLIC shell32 ole32 uuid user32)
+else()
+    target_link_libraries(skillhub_core PUBLIC m)
 endif()
 
 # `skillhub serve` (src/serve): the backend the window talks to. The only part that needs libuv, so it is linked into the
@@ -202,6 +205,8 @@ if(SKILLHUB_GUI)
     qt_add_executable(skillhub_gui WIN32 MACOSX_BUNDLE
         src/main.cpp src/app.cpp src/app.h
         src/gui/core_client.cpp src/gui/core_client.h src/gui/skill_row.h
+        src/gui/window_effects.cpp src/gui/window_effects.h
+        src/core/sh_palette.c
         resources.qrc)
     # the window runs the command line as its backend: build it too, so a fresh build starts
     add_dependencies(skillhub_gui skillhub_cli)
@@ -209,6 +214,33 @@ if(SKILLHUB_GUI)
         add_dependencies(skillhub_gui skillhub_cliw)
     endif()
     target_link_libraries(skillhub_gui PRIVATE Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2)
+    target_include_directories(skillhub_gui PRIVATE src src/core)
+    if(APPLE)
+        target_sources(skillhub_gui PRIVATE src/gui/window_effects_mac.mm)
+        target_link_libraries(skillhub_gui PRIVATE "-framework AppKit")
+    elseif(WIN32)
+        target_link_libraries(skillhub_gui PRIVATE dwmapi)
+    else()
+        find_package(PkgConfig QUIET)
+        if(PkgConfig_FOUND)
+            pkg_check_modules(SKILLHUB_XCB QUIET IMPORTED_TARGET xcb)
+        endif()
+        if(SKILLHUB_XCB_FOUND)
+            target_link_libraries(skillhub_gui PRIVATE PkgConfig::SKILLHUB_XCB)
+            target_compile_definitions(skillhub_gui PRIVATE SKILLHUB_HAVE_XCB)
+        endif()
+    endif()
+    # Liquid Glass inside the window; without ShaderTools the build simply has none, and floating surfaces stay plain
+    find_package(Qt6 QUIET COMPONENTS ShaderTools)
+    if(Qt6ShaderTools_FOUND)
+        qt_add_shaders(skillhub_gui "skillhub_shaders" PREFIX "/" FILES shaders/glass.frag)
+        target_compile_definitions(skillhub_gui PRIVATE SKILLHUB_HAVE_SHADERS)
+    endif()
+    find_package(Qt6 QUIET COMPONENTS DBus)
+    if(Qt6DBus_FOUND AND UNIX AND NOT APPLE)
+        target_link_libraries(skillhub_gui PRIVATE Qt6::DBus)
+        target_compile_definitions(skillhub_gui PRIVATE SKILLHUB_HAVE_DBUS)
+    endif()
     target_compile_definitions(skillhub_gui PRIVATE SKILLHUB_VERSION="${SKILLHUB_VERSION}")
     set_target_properties(skillhub_gui PROPERTIES OUTPUT_NAME skillhub-gui)
     if(MSVC)

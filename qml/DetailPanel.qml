@@ -13,7 +13,7 @@ Rectangle {
                                  : app.detailMode === "agent" && app.focusAgent !== "" ? "agent"
                                  : app.selected !== "" ? "skill" : "empty"
 
-    Rectangle { anchors.left: parent.left; width: 1; height: parent.height; color: Theme.line }
+    Rectangle { visible: root.showClose; anchors.left: parent.left; width: 1; height: parent.height; color: Theme.line }
 
     EmptyDetail { anchors.fill: parent; visible: root.view === "empty" }
     DetailSkill { anchors.fill: parent; anchors.leftMargin: 1; visible: root.view === "skill" }

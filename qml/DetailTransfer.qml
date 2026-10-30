@@ -136,7 +136,7 @@ Flickable {
                             color: it.on ? Theme.mark : "transparent"
                             border.color: it.on ? Theme.mark : Theme.lineInput
                             border.width: 1.5
-                            Icon { visible: it.on; anchors.centerIn: parent; name: "check"; size: 14; weight: 2.6; color: Theme.dark ? "#04251A" : "#FFFFFF" }
+                            Icon { visible: it.on; anchors.centerIn: parent; name: "check"; size: 14; weight: 2.6; color: Theme.inkOnMark }
                         }
                         Icon { visible: !modelData.installable; x: 8; anchors.verticalCenter: parent.verticalCenter; size: 20; name: modelData.problem !== "" ? "alert" : "check"; color: modelData.problem !== "" ? Theme.dangerText : Theme.text3 }
                         Column {

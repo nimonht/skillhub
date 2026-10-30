@@ -36,6 +36,8 @@ void sh_store_init(sh_store *st, sh_log_fn log, void *user) {
     st->cache = sh_cache_dir();
     st->state = sh_state_dir();
     st->log_lock = sh_mutex_new();
+    const long long kept = sh_setting_int("updates", "backupsKept", 3);
+    st->backups_kept = kept < 1 ? 1 : kept > 20 ? 20 : (size_t)kept;
     sh_git_program();  // found once here, before any worker thread asks for it
     sh_store_reload_providers(st);
 }
@@ -715,7 +717,7 @@ static bool swap_in(sh_store *st, const char *name, const char *stage, const cha
         } else {
             if (was_link) sh_remove_link(bk);  // a live link: the folder it led to is still there, nothing to keep
             else if (moved_aside && note) sidecar_write(st, bk, name, note);
-            prune_backups(st->backup, name, 3);
+            prune_backups(st->backup, name, st->backups_kept);
         }
     }
     if (!ok && moved_aside && !sh_lexists(dest)) sh_move_dir(bk, dest);  // the old version goes straight back

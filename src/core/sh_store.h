@@ -121,6 +121,7 @@ typedef struct sh_store {
     char *parked;         // skills switched off for every agent that reads the shared folder
     char *cache;
     char *state;          // durable internal state: the mutation lock, the swap journal
+    size_t backups_kept;  // versions of a skill that stay
     sh_agent *providers;  // every agent in the catalog plus the user's own, with the detection result
     size_t n_providers;
     sh_agent **agents;    // the managed ones (detected, or switched on), pointing into `providers`, or `project_agents`

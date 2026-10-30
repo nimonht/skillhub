@@ -14,6 +14,7 @@ extern "C" {
 // never overwritten.
 yyjson_mut_doc *sh_state_load(char **err);
 bool sh_state_save(yyjson_mut_doc *m);
+long long sh_setting_int(const char *section, const char *key, long long fallback);  // from settings.json; never fails
 
 #ifdef __cplusplus
 }

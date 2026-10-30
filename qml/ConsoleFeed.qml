@@ -5,12 +5,8 @@ import "."
 // Activity feed: the real log lines from Store (clones, links, updates, failures).
 Rectangle {
     id: root
-    property bool open: false
     color: Theme.bg1
-    height: open ? 164 : 0
     clip: true
-    Behavior on height { NumberAnimation { duration: Theme.dBase; easing.type: Easing.OutCubic } }
-    Rectangle { width: parent.width; height: 1; color: Theme.line }
 
     Item {
         id: bar

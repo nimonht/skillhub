@@ -13,6 +13,7 @@
 #include "sh_history.h"
 #include "sh_json.h"
 #include "sh_link.h"
+#include "sh_palette.h"
 #include "sh_path.h"
 #include "sh_proc.h"
 #include "sh_projects.h"
@@ -598,6 +599,28 @@ static void m_projects_change(server *s, sh_rpc_msg *m) {
     free(err);
 }
 
+static void m_palette(server *s, sh_rpc_msg *m) {
+    sh_palette p;
+    if (!sh_palette_derive(param_str(m->params, "seed"), strcmp(param_str(m->params, "mode"), "light") != 0, &p)) {
+        send_error(s, m, SH_RPC_INVALID_PARAMS, "seed is not a #RRGGBB colour");
+        return;
+    }
+    yyjson_mut_doc *d = yyjson_mut_doc_new(NULL);
+    yyjson_mut_val *r = yyjson_mut_obj(d), *roles = yyjson_mut_obj(d);
+    yyjson_mut_obj_add_strcpy(d, roles, "action", p.action);
+    yyjson_mut_obj_add_strcpy(d, roles, "actionInk", p.action_ink);
+    yyjson_mut_obj_add_strcpy(d, roles, "mark", p.mark);
+    yyjson_mut_obj_add_strcpy(d, roles, "markText", p.mark_text);
+    yyjson_mut_obj_add_strcpy(d, roles, "markLow", p.mark_low);
+    yyjson_mut_obj_add_strcpy(d, roles, "focus", p.focus);
+    yyjson_mut_obj_add_strcpy(d, roles, "selected", p.selected);
+    yyjson_mut_obj_add_strcpy(d, roles, "inkOk", p.ink_ok);
+    yyjson_mut_obj_add_val(d, r, "roles", roles);
+    yyjson_mut_obj_add_str(d, r, "clash", p.clash);
+    send_result(s, m, d, r);
+    yyjson_mut_doc_free(d);
+}
+
 static void m_history(server *s, sh_rpc_msg *m) {
     const char *name = param_str(m->params, "name");
     sh_store st;
@@ -856,6 +879,7 @@ typedef struct {
 static const immediate IMMEDIATE[] = {
     {"skills.read", m_read},
     {"skills.history", m_history},
+    {"palette.derive", m_palette},
     {"scope.set", m_scope_set},
     {"projects.list", m_projects_list},
     {"projects.add", m_projects_change},

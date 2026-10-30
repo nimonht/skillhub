@@ -2,6 +2,10 @@ singleton Theme 1.0 Theme.qml
 AddSheet 1.0 AddSheet.qml
 AgentTile 1.0 AgentTile.qml
 Btn 1.0 Btn.qml
+Glass 1.0 Glass.qml
+GlassEffect 1.0 GlassEffect.qml
+Range 1.0 Range.qml
+SettingsPage 1.0 SettingsPage.qml
 ScopeMenu 1.0 ScopeMenu.qml
 PaneHandle 1.0 PaneHandle.qml
 ReviewPage 1.0 ReviewPage.qml

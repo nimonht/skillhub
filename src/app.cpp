@@ -1,5 +1,16 @@
 #include "app.h"
 
+#include "gui/window_effects.h"
+#include "sh_palette.h"
+
+#ifdef SKILLHUB_HAVE_DBUS
+#include <QDBusArgument>
+#include <QDBusConnection>
+#include <QDBusMessage>
+#include <QDBusPendingCallWatcher>
+#include <QDBusPendingReply>
+#endif
+
 #include <QClipboard>
 #include <QDate>
 #include <QDateTime>
@@ -11,6 +22,7 @@
 #include <QLocale>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QPalette>
 #include <QSettings>
 #include <QStandardPaths>
 #include <QTextBlock>
@@ -285,6 +297,7 @@ void AppController::onReady(bool restarted) {
     }
     loadProjects();
     loadSettings();
+    watchPortalAccent();
     refreshAutomation();
     loadSnapshot();
     emit countsChanged();  // centralPath is known now
@@ -329,6 +342,55 @@ void AppController::setScope(const QString &path) {
         emit countsChanged();
     });
 }
+
+void AppController::removeProject(const QString &path) {
+    core_.call(QStringLiteral("projects.remove"), {{QStringLiteral("path"), path}}, [this, path](const CoreReply &r) {
+        if (!r.ok()) emit toast(QStringLiteral("error"), r.message());
+        if (scope_ == path) setScope(QString());
+        loadProjects();
+    });
+}
+
+void AppController::setProjectAuto(const QString &path, bool on) {
+    core_.call(QStringLiteral("projects.setAuto"), {{QStringLiteral("path"), path}, {QStringLiteral("on"), on}}, [this](const CoreReply &r) {
+        if (!r.ok()) emit toast(QStringLiteral("error"), r.message());
+        loadProjects();
+    });
+}
+
+void AppController::measurePaths() { startJob(QStringLiteral("paths.sizes"), {}, tr("Measuring folders"), QStringLiteral("sizes"), false); }
+
+void AppController::clearCache() { startJob(QStringLiteral("cache.clear"), {}, tr("Clearing the cache"), QStringLiteral("clearCache"), false); }
+
+void AppController::restartBackend() {
+    if (busy_) return;
+    core_.stop();
+    core_.start();
+}
+
+QString AppController::backendInfo() const {
+    const QJsonObject init = core_.init();
+    return tr("%1, process %2").arg(init.value(QStringLiteral("version")).toString()).arg(init.value(QStringLiteral("pid")).toInt());
+}
+
+QString AppController::materialNote() const {
+    return window_effects::note(setting(QStringLiteral("appearance"), QStringLiteral("material"), QStringLiteral("solid")).toString());
+}
+
+QString AppController::material() const {
+    if (setting(QStringLiteral("appearance"), QStringLiteral("reduceTransparency"), false).toBool() || !window_effects::canBeTranslucent()) return QStringLiteral("solid");
+    return setting(QStringLiteral("appearance"), QStringLiteral("material"), QStringLiteral("solid")).toString();
+}
+
+bool AppController::glassReady() const {
+#ifdef SKILLHUB_HAVE_SHADERS
+    return !forcedStill_ && QQuickWindow::graphicsApi() != QSGRendererInterface::Software;
+#else
+    return false;
+#endif
+}
+
+void AppController::applyMaterial(QQuickWindow *window, bool dark) { window_effects::apply(window, material(), dark); }
 
 void AppController::addProject(const QString &path) {
     core_.call(QStringLiteral("projects.add"), {{QStringLiteral("path"), path}}, [this, path](const CoreReply &r) {
@@ -441,15 +503,7 @@ void AppController::onNotification(const QString &method, const QJsonObject &par
     } else if (method == QLatin1String("event.jobDone") && params.value(QStringLiteral("job")).toString() == job_) {
         jobDone(params);
     } else if (method == QLatin1String("settings.changed")) {
-        const QJsonObject s = params.value(QStringLiteral("settings")).toObject();
-        if (!themeForced_ && s.contains(QStringLiteral("theme")) && s.value(QStringLiteral("theme")).toString() != themeMode_) {
-            themeMode_ = s.value(QStringLiteral("theme")).toString();
-            emit themeChanged();
-        }
-        if (s.value(QStringLiteral("reduceMotion")).toBool() != reduce_) {
-            reduce_ = s.value(QStringLiteral("reduceMotion")).toBool();
-            emit themeChanged();
-        }
+        applySettings(params.value(QStringLiteral("settings")).toObject());
     }
 }
 
@@ -460,36 +514,145 @@ void AppController::loadSettings() {
     core_.call(QStringLiteral("settings.get"), {}, [this](const CoreReply &r) {
         if (!r.ok()) return;
         QJsonObject s = r.result.toObject();
+        QJsonObject look = s.value(QStringLiteral("appearance")).toObject();
+        // first start of 2.0: from 1.x's QSettings. A 2.0 test build kept these two at the top level, so those count too.
         QSettings old;
-        QJsonObject moved;
-        if (!s.contains(QStringLiteral("theme")) && old.contains(QStringLiteral("theme"))) moved.insert(QStringLiteral("theme"), old.value(QStringLiteral("theme")).toString());
-        if (!s.contains(QStringLiteral("reduceMotion")) && old.contains(QStringLiteral("reduceMotion"))) moved.insert(QStringLiteral("reduceMotion"), old.value(QStringLiteral("reduceMotion")).toBool());
-        if (!moved.isEmpty()) {
-            core_.call(QStringLiteral("settings.set"), {{QStringLiteral("patch"), moved}});
-            for (auto it = moved.begin(); it != moved.end(); ++it) s.insert(it.key(), it.value());
+        bool moved = false;
+        for (const QString &key : {QStringLiteral("theme"), QStringLiteral("reduceMotion")}) {
+            if (look.contains(key)) continue;
+            if (s.contains(key)) look.insert(key, s.value(key));
+            else if (old.contains(key)) look.insert(key, QJsonValue::fromVariant(old.value(key)));
+            else continue;
+            moved = true;
         }
-        if (!themeForced_) themeMode_ = s.value(QStringLiteral("theme")).toString(QStringLiteral("system"));
-        reduce_ = s.value(QStringLiteral("reduceMotion")).toBool();
-        emit themeChanged();
+        if (moved) {
+            s.insert(QStringLiteral("appearance"), look);
+            core_.call(QStringLiteral("settings.set"), {{QStringLiteral("patch"), QJsonObject{{QStringLiteral("appearance"), look}}}});
+        }
+        applySettings(s);
     });
 }
 
-void AppController::saveSetting(const QString &key, const QJsonValue &value) {
-    core_.call(QStringLiteral("settings.set"), {{QStringLiteral("patch"), QJsonObject{{key, value}}}});
-}
-
-void AppController::setThemeMode(const QString &m) {
-    if (m == themeMode_) return;
-    themeMode_ = m;
-    saveSetting(QStringLiteral("theme"), m);
+void AppController::applySettings(const QJsonObject &s) {
+    settings_ = s;
+    const QJsonObject look = s.value(QStringLiteral("appearance")).toObject();
+    if (!themeForced_) themeMode_ = look.value(QStringLiteral("theme")).toString(QStringLiteral("system"));
+    reduce_ = look.value(QStringLiteral("reduceMotion")).toBool();
+    const QJsonObject accent = look.value(QStringLiteral("accent")).toObject();
+    const QString source = accent.value(QStringLiteral("source")).toString(QStringLiteral("default"));
+    const QString seed = source == QLatin1String("custom") ? accent.value(QStringLiteral("color")).toString() : source == QLatin1String("system") ? systemAccent() : QString();
+    paletteDark_ = derivePalette(seed, true);
+    paletteLight_ = derivePalette(seed, false);
+    ++settingsRev_;
+    emit settingsChanged();
     emit themeChanged();
 }
 
-void AppController::setReduceMotion(bool on) {
-    if (on == reduce_) return;
-    reduce_ = on;
-    saveSetting(QStringLiteral("reduceMotion"), on);
-    emit themeChanged();
+QVariant AppController::setting(const QString &section, const QString &key, const QVariant &fallback) const {
+    const QJsonValue v = settings_.value(section).toObject().value(key);
+    return v.isUndefined() ? fallback : v.toVariant();
+}
+
+void AppController::setSetting(const QString &section, const QString &key, const QVariant &value) {
+    QJsonObject part = settings_.value(section).toObject();
+    part.insert(key, QJsonValue::fromVariant(value));
+    QJsonObject next = settings_;
+    next.insert(section, part);
+    applySettings(next);
+    core_.call(QStringLiteral("settings.set"), {{QStringLiteral("patch"), QJsonObject{{section, part}}}});
+    if (section == QLatin1String("appearance") && key == QLatin1String("uiScale")) QSettings().setValue(QStringLiteral("ui/scale"), value);  // read before the window exists
+}
+
+void AppController::setThemeMode(const QString &m) { setSetting(QStringLiteral("appearance"), QStringLiteral("theme"), m); }
+
+void AppController::setReduceMotion(bool on) { setSetting(QStringLiteral("appearance"), QStringLiteral("reduceMotion"), on); }
+
+bool AppController::compactDensity() const { return setting(QStringLiteral("appearance"), QStringLiteral("density"), QString()).toString() == QLatin1String("compact"); }
+
+QString AppController::systemAccent() const {
+    if (!portalAccent_.isEmpty()) return portalAccent_;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 6, 0)
+    const QColor c = QGuiApplication::palette().color(QPalette::Accent);
+    if (c.isValid()) return c.name().toUpper();
+#endif
+    return QString();
+}
+
+// Linux desktops tell their accent through the settings portal, as a colour in three doubles
+void AppController::watchPortalAccent() {
+#ifdef SKILLHUB_HAVE_DBUS
+    static const QString service = QStringLiteral("org.freedesktop.portal.Desktop"), path = QStringLiteral("/org/freedesktop/portal/desktop"),
+                         iface = QStringLiteral("org.freedesktop.portal.Settings");
+    QDBusConnection bus = QDBusConnection::sessionBus();
+    if (!bus.isConnected()) return;
+    bus.connect(service, path, iface, QStringLiteral("SettingChanged"), this, SLOT(onPortalSetting(QString, QString, QDBusVariant)));
+    QDBusMessage read = QDBusMessage::createMethodCall(service, path, iface, QStringLiteral("Read"));
+    read << QStringLiteral("org.freedesktop.appearance") << QStringLiteral("accent-color");
+    auto *watcher = new QDBusPendingCallWatcher(bus.asyncCall(read, 2000), this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher *w) {
+        QDBusPendingReply<QVariant> r = *w;
+        w->deleteLater();
+        if (!r.isError()) setPortalAccent(r.value());
+    });
+#endif
+}
+
+#ifdef SKILLHUB_HAVE_DBUS
+void AppController::setPortalAccent(const QVariant &value) {
+    QVariant v = value;
+    while (v.canConvert<QDBusVariant>() && v.typeId() == qMetaTypeId<QDBusVariant>()) v = v.value<QDBusVariant>().variant();
+    if (v.typeId() != qMetaTypeId<QDBusArgument>()) return;
+    const QDBusArgument arg = v.value<QDBusArgument>();
+    double r = -1, g = -1, b = -1;
+    arg.beginStructure();
+    arg >> r >> g >> b;
+    arg.endStructure();
+    if (r < 0 || r > 1 || g < 0 || g > 1 || b < 0 || b > 1) return;  // the portal's way of saying "no preference"
+    portalAccent_ = QColor::fromRgbF(r, g, b).name().toUpper();
+    applySettings(settings_);
+}
+
+void AppController::onPortalSetting(const QString &group, const QString &key, const QDBusVariant &value) {
+    if (group == QLatin1String("org.freedesktop.appearance") && key == QLatin1String("accent-color")) setPortalAccent(value.variant());
+}
+#endif
+
+QVariant AppController::oklch(const QString &hex) const {
+    double l = 0, c = 0, h = 0;
+    if (!sh_oklch_from_hex(hex.toUtf8().constData(), &l, &c, &h)) return QVariant();
+    return QVariantMap{{QStringLiteral("l"), l}, {QStringLiteral("c"), c}, {QStringLiteral("h"), h}};
+}
+
+QString AppController::hexOf(double l, double c, double h) const {
+    char out[8];
+    sh_oklch_to_hex(l, c, h, out);
+    return QString::fromLatin1(out);
+}
+
+double AppController::contrast(const QColor &a, const QColor &b) const {
+    return sh_palette_contrast(a.name().toUpper().toLatin1().constData(), b.name().toUpper().toLatin1().constData());
+}
+
+QVariantMap AppController::derivePalette(const QString &seed, bool dark) const {
+    sh_palette p;
+    if (!sh_palette_derive(seed.toUtf8().constData(), dark, &p)) return {};
+    return {{QStringLiteral("action"), QString::fromLatin1(p.action)},       {QStringLiteral("actionInk"), QString::fromLatin1(p.action_ink)},
+            {QStringLiteral("mark"), QString::fromLatin1(p.mark)},           {QStringLiteral("markText"), QString::fromLatin1(p.mark_text)},
+            {QStringLiteral("markLow"), QString::fromLatin1(p.mark_low)},    {QStringLiteral("focus"), QString::fromLatin1(p.focus)},
+            {QStringLiteral("selected"), QString::fromLatin1(p.selected)},   {QStringLiteral("inkOk"), QString::fromLatin1(p.ink_ok)},
+            {QStringLiteral("clash"), QString::fromLatin1(p.clash)}};
+}
+
+QVariant AppController::layoutState(const QString &key) const {
+    QSettings s;
+    const QVariant v = s.value(QStringLiteral("layout/") + key);
+    return v.isValid() ? v : QVariant(false);
+}
+
+void AppController::saveLayout(const QString &key, const QVariant &state) {
+    QSettings s;
+    if (state.isValid()) s.setValue(QStringLiteral("layout/") + key, state);
+    else s.remove(QStringLiteral("layout/") + key);
 }
 
 // ---- selection and detail --------------------------------------------------------------------------------------------------
@@ -781,6 +944,13 @@ void AppController::jobDone(const QJsonObject &done) {
     } else if (kind == QLatin1String("restore")) {
         msg = done.value(QStringLiteral("ok")).toBool() ? tr("Restored") : error;
         level = done.value(QStringLiteral("ok")).toBool() ? QStringLiteral("ok") : QStringLiteral("error");
+    } else if (kind == QLatin1String("sizes")) {
+        pathSizes_ = done.value(QStringLiteral("sizes")).toArray().toVariantList();
+        emit pathSizesChanged();
+    } else if (kind == QLatin1String("clearCache")) {
+        msg = error.isEmpty() ? tr("Cache cleared") : error;
+        level = error.isEmpty() ? QStringLiteral("ok") : QStringLiteral("error");
+        measurePaths();
     } else if (kind == QLatin1String("copy")) {
         msg = error.isEmpty() ? tr("Copied to the project") : error;
         level = error.isEmpty() ? QStringLiteral("ok") : QStringLiteral("error");
@@ -842,7 +1012,10 @@ void AppController::refresh() {
 
 void AppController::checkUpdates() { startJob(QStringLiteral("skills.check"), {}, tr("Checking upstream"), QStringLiteral("check"), false); }
 
-void AppController::checkUpdatesQuietly() { startJob(QStringLiteral("skills.check"), {}, tr("Checking upstream"), QStringLiteral("check-quiet"), false); }
+void AppController::checkUpdatesQuietly() {
+    if (!setting(QStringLiteral("updates"), QStringLiteral("checkAtLaunch"), true).toBool()) return;
+    startJob(QStringLiteral("skills.check"), {}, tr("Checking upstream"), QStringLiteral("check-quiet"), false);
+}
 
 void AppController::updateAll() { startJob(QStringLiteral("skills.update"), {}, tr("Updating skills"), QStringLiteral("update"), true); }
 
@@ -982,7 +1155,8 @@ QString AppController::renderMarkdown(const QString &markdown, bool dark) const 
 
     struct Span { int pos, len; QTextCharFormat fmt; };
     QVector<Span> spans;
-    const QColor link = dark ? QColor(QStringLiteral("#34E0A6")) : QColor(QStringLiteral("#07765A"));
+    const QVariantMap &accent = dark ? paletteDark_ : paletteLight_;
+    const QColor link = !accent.isEmpty() ? QColor(accent.value(QStringLiteral("markText")).toString()) : dark ? QColor(QStringLiteral("#34E0A6")) : QColor(QStringLiteral("#07765A"));
     for (QTextBlock b = doc.begin(); b.isValid(); b = b.next()) {
         const int level = b.blockFormat().headingLevel();
         for (auto it = b.begin(); !it.atEnd(); ++it) {

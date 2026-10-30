@@ -5,6 +5,7 @@ import "."
 // Whose skills the window shows: your own, or a project's. The list, the agents and the Add sheet all follow it.
 AbstractButton {
     id: root
+    property bool compact: false
     implicitHeight: 40
     hoverEnabled: true
     focusPolicy: Qt.StrongFocus
@@ -21,8 +22,9 @@ AbstractButton {
 
     background: Rectangle { radius: 4; color: root.hovered ? Theme.bg3 : Theme.bg2; border.color: Theme.focus; border.width: root.visualFocus ? 2 : 0 }
     contentItem: Item {
-        Icon { x: 10; anchors.verticalCenter: parent.verticalCenter; name: app.inProject ? "branch" : "all"; size: 16; color: Theme.markText }
+        Icon { x: root.compact ? (parent.width - width) / 2 : 10; anchors.verticalCenter: parent.verticalCenter; name: app.inProject ? "branch" : "all"; size: 16; color: Theme.markText }
         Text {
+            visible: !root.compact
             x: 34
             width: parent.width - x - 28
             anchors.verticalCenter: parent.verticalCenter
@@ -30,7 +32,7 @@ AbstractButton {
             text: app.scopeLabel
             color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold
         }
-        Icon { anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; name: "down"; size: 14; color: Theme.text2 }
+        Icon { visible: !root.compact; anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; name: "down"; size: 14; color: Theme.text2 }
     }
 
     Popup {

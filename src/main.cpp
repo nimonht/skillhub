@@ -1,4 +1,5 @@
 // skillhub: GUI when started without a command, CLI otherwise (used by the systemd units).
+#include <QSettings>
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
@@ -15,6 +16,7 @@
 #include <memory>
 
 #include "app.h"
+#include "gui/window_effects.h"
 
 #ifndef SKILLHUB_VERSION
 #define SKILLHUB_VERSION "dev"
@@ -64,6 +66,10 @@ int main(int argc, char **argv) {
             QSurfaceFormat::setDefaultFormat(fmt);
         }
 #endif
+        {   // the scale has to be set before the application object exists
+            const QVariant scale = QSettings(QStringLiteral("skillhub"), QStringLiteral("skillhub")).value(QStringLiteral("ui/scale"));
+            if (scale.isValid() && scale.toDouble() > 0 && !qEnvironmentVariableIsSet("QT_SCALE_FACTOR")) qputenv("QT_SCALE_FACTOR", scale.toByteArray());
+        }
         QGuiApplication app(argc, argv);
         app.setApplicationName(QStringLiteral("skillhub"));
         app.setOrganizationName(QStringLiteral("skillhub"));
@@ -73,6 +79,7 @@ int main(int argc, char **argv) {
         app.setWindowIcon(icon);
         QQuickStyle::setStyle(QStringLiteral("Basic"));
 
+        window_effects::prepare();
         AppController controller;
         if (!args.contains(QStringLiteral("--bench")))
             QTimer::singleShot(500, &controller, &AppController::checkUpdatesQuietly);  // verdicts without a click
@@ -81,6 +88,7 @@ int main(int argc, char **argv) {
         if (!shotFile.isEmpty()) {
             const QStringList sz = opt("--size").split(QLatin1Char('x'));
             if (sz.size() == 2) engine.rootContext()->setContextProperty(QStringLiteral("startSize"), QSize(sz[0].toInt(), sz[1].toInt()));
+            engine.rootContext()->setContextProperty(QStringLiteral("startLayout"), opt("--layout"));
         }
 #if QT_VERSION < QT_VERSION_CHECK(6, 7, 0)
         (new QQmlFileSelector(&engine, &engine))->setExtraSelectors({QStringLiteral("legacy")});  // qml/+legacy: no font features before Qt 6.7
@@ -175,6 +183,7 @@ int main(int argc, char **argv) {
                     if (!opt("--scope").isEmpty()) controller.setScope(opt("--scope"));
                     if (opt("--action") == QLatin1String("scopes")) emit controller.showScopeMenu();
                     if (opt("--mode") == QLatin1String("review")) controller.reviewAll();
+                    if (opt("--mode") == QLatin1String("settings")) emit controller.showSettings(opt("--section").isEmpty() ? QStringLiteral("appearance") : opt("--section"));
                     if (opt("--action") == QLatin1String("update-all")) controller.updateAll();
                     if (opt("--action") == QLatin1String("check")) controller.checkUpdates();
                     if (opt("--action") == QLatin1String("adopt")) controller.adopt();

@@ -24,6 +24,7 @@
 #include <sys/file.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/statvfs.h>
 #include <unistd.h>
 #endif
 
@@ -682,4 +683,35 @@ void sh_flock_release(sh_flock *l) {
     close(l->fd);
 #endif
     free(l);
+}
+
+static bool add_bytes(const char *rel, const char *full, bool is_link, void *user) {
+    (void)rel;
+    if (!is_link) *(int64_t *)user += sh_file_size(full);
+    return true;
+}
+
+int64_t sh_tree_bytes(const char *dir) {
+    int64_t total = 0;
+    sh_walk_files(dir, add_bytes, &total);
+    return total;
+}
+
+bool sh_disk_usage(const char *path, int64_t *total, int64_t *free_bytes) {
+#ifdef _WIN32
+    wchar_t *w = sh_wide_path(path);
+    ULARGE_INTEGER avail, all;
+    const BOOL ok = GetDiskFreeSpaceExW(w, &avail, &all, NULL);
+    free(w);
+    if (!ok) return false;
+    *total = (int64_t)all.QuadPart;
+    *free_bytes = (int64_t)avail.QuadPart;
+    return true;
+#else
+    struct statvfs s;
+    if (statvfs(path, &s) != 0) return false;
+    *total = (int64_t)s.f_blocks * (int64_t)s.f_frsize;
+    *free_bytes = (int64_t)s.f_bavail * (int64_t)s.f_frsize;
+    return true;
+#endif
 }

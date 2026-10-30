@@ -39,7 +39,7 @@ Item {
                 contentItem: Row {
                     spacing: 5
                     anchors.centerIn: parent
-                    Icon { name: seg.modelData.icon; size: 14; color: seg.on ? Theme.markText : Theme.text2; anchors.verticalCenter: parent.verticalCenter }
+                    Icon { visible: seg.modelData.icon !== undefined; name: seg.modelData.icon || ""; size: 14; color: seg.on ? Theme.markText : Theme.text2; anchors.verticalCenter: parent.verticalCenter }
                     Text {
                         text: seg.modelData.label
                         color: seg.on ? Theme.text : Theme.text2
