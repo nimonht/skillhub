@@ -110,7 +110,7 @@ Rectangle {
         Item { width: 1; height: 8 }
 
         SectionLabel { visible: !root.compact; width: parent.width; text: "Skills" }
-        FilterItem { text: "All skills"; mode: "all"; iconName: "all"; count: app.skillCount }
+        FilterItem { text: "All skills"; mode: "all"; iconName: "all"; count: app.skillCount; TourTarget { key: "filters" } }
         FilterItem { text: "Updates"; mode: "updates"; iconName: "upgrade"; count: app.updateCount; countColor: Theme.notifyText }
         FilterItem { text: "Local only"; mode: "local"; iconName: "folder"; count: app.localCount }
         FilterItem { text: "Link problems"; mode: "problems"; iconName: "alert"; count: app.problemCount; countColor: Theme.dangerText }
@@ -146,7 +146,7 @@ Rectangle {
         width: scroller.width - 2 * x
         y: Math.max(topCol.height + 16, scroller.height - height - 16)
         spacing: 10
-        FilterItem { text: "Settings"; mode: "@settings"; iconName: "sliders"; asAction: true; hideCount: true; onTriggered: root.settingsRequested() }
+        FilterItem { text: "Settings"; mode: "@settings"; iconName: "sliders"; asAction: true; hideCount: true; onTriggered: root.settingsRequested(); TourTarget { key: "settings" } }
         NumText {
             visible: !root.compact
             x: 4

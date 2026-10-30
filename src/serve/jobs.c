@@ -310,6 +310,13 @@ static void body_clear_cache(job *j, sh_store *st) {
     free(repos);
 }
 
+static void body_merge_locks(job *j, sh_store *st) {
+    char *err = NULL;
+    if (!sh_lock_migrate(st, &err)) fail(j, err);
+    free(err);
+    j->rescan = true;
+}
+
 static void body_copy(job *j, sh_store *st) {
     const char *name = param_str(j->params, "name");
     char *err = NULL;
@@ -536,6 +543,7 @@ static const job_method METHODS[] = {
     {"skills.restore", "restore", true, body_restore, {"name", NULL}},
     {"skills.hold", "hold", true, body_hold, {"name", NULL}},
     {"skills.copyToProject", "copy", true, body_copy, {"name", "project", NULL}},
+    {"lock.merge", "mergeLocks", true, body_merge_locks, {NULL}},
     {"paths.sizes", "sizes", false, body_sizes, {NULL}},
     {"cache.clear", "clearCache", true, body_clear_cache, {NULL}},
     {"skills.setAgentEnabled", "setAgentEnabled", true, body_set_enabled, {"agent", NULL}},

@@ -50,6 +50,7 @@ ApplicationWindow {
                 width: parent.width
                 height: 64
                 onEscaped: list.forceActiveFocus()
+                TourTarget { key: "top" }
             }
 
             SplitView {
@@ -75,9 +76,27 @@ ApplicationWindow {
                     SplitView.minimumWidth: win.centerMin
 
                     Rectangle { anchors.fill: parent; color: Theme.bg2 }
-                    ProviderBand { id: band; width: parent.width; height: win.bandCompact ? compactHeight : implicitHeight }
+                    Rectangle {   // two lock files, from before and after npx moved its own: one merge, when the user says so
+                        id: splitBanner
+                        visible: app.lockSplit >= 0 && !app.inProject
+                        width: parent.width
+                        height: visible ? 44 : 0
+                        color: Theme.notifyLow
+                        z: 2
+                        Icon { x: 16; anchors.verticalCenter: parent.verticalCenter; name: "alert"; size: 16; color: Theme.notifyText }
+                        Text {
+                            x: 42
+                            width: parent.width - x - mergeButton.width - 32
+                            anchors.verticalCenter: parent.verticalCenter
+                            elide: Text.ElideRight
+                            text: "Your skills are recorded in two lock files" + (app.lockSplit > 0 ? ", " + app.lockSplit + " only in the older one." : ".") + " Merging keeps a backup of both."
+                            color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsSmall
+                        }
+                        Btn { id: mergeButton; anchors.right: parent.right; anchors.rightMargin: 12; anchors.verticalCenter: parent.verticalCenter; kind: "ghost"; compact: true; text: "Merge"; enabled: !app.busy; onClicked: app.mergeLocks() }
+                    }
+                    ProviderBand { id: band; anchors.top: splitBanner.bottom; width: parent.width; height: win.bandCompact ? compactHeight : implicitHeight; TourTarget { key: "band" } }
                     MouseArea {   // the band's lower edge: drag it and the band snaps between full height and tiles only
-                        y: band.height - 3
+                        y: band.y + band.height - 3
                         width: parent.width
                         height: 7
                         z: 3
@@ -86,7 +105,7 @@ ApplicationWindow {
                         onPressed: (e) => from = e.y
                         onPositionChanged: (e) => { if (Math.abs(e.y - from) > 24) app.setSetting("layout", "bandCompact", e.y < from) }
                     }
-                    ListHeader { id: head; anchors.top: band.bottom; width: parent.width; height: 36 }
+                    ListHeader { id: head; anchors.top: band.bottom; width: parent.width; height: 36; TourTarget { key: "header" } }
 
                     ListView {
                         id: list
@@ -161,6 +180,7 @@ ApplicationWindow {
 
                     DetailPanel {
                         id: detail
+                        TourTarget { key: "detail" }
                         visible: !win.overlayDetail
                         SplitView.preferredWidth: Theme.detailW
                         SplitView.minimumWidth: 300
@@ -211,6 +231,7 @@ ApplicationWindow {
 
             StatusBar {
                 id: statusBar
+                TourTarget { key: "status" }
                 anchors.bottom: parent.bottom
                 width: parent.width
                 height: 34
@@ -226,6 +247,24 @@ ApplicationWindow {
     // for the test of the terminal
     function typeInTerminal(text) { const s = activity.sessionItem(); if (s) s.typeText(text) }
     function terminalScreen() { const s = activity.sessionItem(); return s ? s.screenText() : "" }
+
+    Loader {
+        id: tour
+        anchors.fill: parent
+        z: 50
+        active: false
+        sourceComponent: Onboarding {
+            onFinished: { tour.active = false; app.tourDone() }
+            onOpenTerminal: { win.consoleOpen = true; activity.showTerminal() }
+        }
+        onLoaded: { item.step = win.tourStep; item.coach = win.tourCoach; item.forceActiveFocus() }
+    }
+    property int tourStep: 0
+    property int tourCoach: 0
+    Connections {
+        target: app
+        function onStartTour(step, coach) { win.tourStep = step; win.tourCoach = coach; tour.active = true }
+    }
 
     function saveLayout() {
         app.saveLayout("outer", outer.saveState())
@@ -327,6 +366,7 @@ ApplicationWindow {
     Shortcut { sequences: ["Ctrl+`"]; onActivated: { if (win.consoleOpen && activity.tab !== "activity") win.consoleOpen = false; else { win.consoleOpen = true; activity.showTerminal() } } }
     Shortcut { sequence: "Ctrl+Q"; onActivated: Qt.quit() }
     Shortcut { sequence: "Ctrl+,"; onActivated: win.settingsOpen = !win.settingsOpen }
+    Shortcut { sequence: "F1"; onActivated: app.startTour(0, 0) }
     Shortcut { sequence: "Ctrl+Alt+Left"; onActivated: win.nudgeSide(-24) }
     Shortcut { sequence: "Ctrl+Alt+Right"; onActivated: win.nudgeSide(24) }
     Shortcut { sequence: "Ctrl+Alt+Up"; onActivated: win.nudgeDock(24) }

@@ -28,6 +28,8 @@
   can come from your kitty, Ghostty or Alacritty config.
 - **`skillhub fetch`**: a banner of the machine and its skills that never touches the network, with `--json`, `--field`, your own
   logo, and a crisp image in kitty, Ghostty and WezTerm.
+- **A tour on first start**, on your own agents and skills, with F1 to take it again. A banner offers to merge the two lock files
+  when an older Skill Hub and `npx skills` left one each.
 - **The window is yours to arrange.** Every panel resizes with the mouse or Ctrl+Alt and the arrows, and keeps its size. The rail
   collapses to icons, the agent band to tiles. A Settings page (Ctrl+,) holds appearance, layout, updates, projects and more.
 - **Any accent colour**, your own or your desktop's, with every role derived to keep its contrast. **Blur and Liquid Glass**: native

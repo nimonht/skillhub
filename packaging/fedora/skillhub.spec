@@ -16,6 +16,8 @@ BuildRequires:  pkgconfig
 BuildRequires:  python3
 BuildRequires:  qt6-qtbase-devel
 BuildRequires:  qt6-qtdeclarative-devel
+BuildRequires:  qt6-qtshadertools-devel
+BuildRequires:  pkgconfig(xcb)
 BuildRequires:  desktop-file-utils
 BuildRequires:  libappstream-glib
 

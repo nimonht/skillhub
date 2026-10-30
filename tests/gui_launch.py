@@ -6,6 +6,7 @@ usage: python3 tests/gui_launch.py PATH/TO/skillhub [OUTPUT_DIR]
 Needs no display (QT_QPA_PLATFORM=offscreen; set SKILLHUB_TEST_PLATFORM=cocoa|windows to test a deployed app that
 ships only its native platform plugin) and no network. Used by CI on Linux, macOS and Windows.
 """
+import json
 import os
 import re
 import shutil
@@ -58,6 +59,11 @@ try:
     # the terminal on every system: a real shell on a real pty (ConPTY on Windows) answers through the emulator
     dump = os.path.join(OUT, "terminal.txt")
     shell_env = dict(env, SHELL="/bin/sh")
+    if os.name == "nt":   # cmd.exe starts at once; PowerShell can take longer than the test waits
+        config = env.get("SKILLHUB_CONFIG") or os.path.join(home, "AppData", "Roaming", "skillhub")
+        os.makedirs(config, exist_ok=True)
+        with open(os.path.join(config, "settings.json"), "w") as f:
+            json.dump({"version": 1, "terminal": {"shell": os.environ.get("ComSpec", "C:\\Windows\\System32\\cmd.exe"), "banner": False}}, f)
     p = subprocess.run([BIN, "gui", "--shot", os.path.join(OUT, "terminal.png"), "--theme", "dark", "--size", "1280x800", "--layout", "dock=340", "--mode", "terminal",
                         "--terminal-run", "echo pty-check", "--terminal-dump", dump, "--settle", "60" if os.name == "nt" else "20"],
                        env=shell_env, capture_output=True, text=True, timeout=240)

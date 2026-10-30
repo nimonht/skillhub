@@ -12,10 +12,12 @@
 #include "sh_path.h"
 #include "sh_proc.h"
 #include "sh_str.h"
+#include "sh_utf.h"
 
 #ifdef _WIN32
 #include <windows.h>
 #else
+#include <pwd.h>
 #include <sys/utsname.h>
 #include <unistd.h>
 #endif
@@ -111,7 +113,8 @@ void sh_sysinfo_read(sh_sysinfo *s) {
     char host[256] = "";
     gethostname(host, sizeof host - 1);
     s->host = sh_strdup(host);
-    s->user = env_or("USER", "");
+    const struct passwd *pw = getpwuid(getuid());
+    s->user = env_or("USER", pw ? pw->pw_name : "");
     s->os = os_name(have ? u.machine : "");
     s->kernel = have ? sh_strfmt("%s %s", u.sysname, u.release) : sh_strdup("");
     char *shell = env_or("SHELL", "");
