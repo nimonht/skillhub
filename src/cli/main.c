@@ -157,7 +157,8 @@ static void comma_list(const char *s, sh_strv *out_list) {
 
 static bool stdin_is_terminal(void) {
 #ifdef _WIN32
-    return _isatty(_fileno(stdin)) != 0;
+    DWORD mode;  // _isatty also says yes for NUL
+    return GetConsoleMode(GetStdHandle(STD_INPUT_HANDLE), &mode) != 0;
 #else
     return isatty(0) != 0;
 #endif
