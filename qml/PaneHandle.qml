@@ -1,5 +1,5 @@
 import QtQuick
-import QtQuick.Controls.Basic
+import QtQuick.Templates as T
 import "."
 
 // The handle of a SplitView: a hairline with a wider grip that lights up while it is used. Only looks: the SplitView does the
@@ -8,7 +8,7 @@ Rectangle {
     id: handle
     implicitWidth: 1
     implicitHeight: 1
-    color: SplitHandle.pressed || SplitHandle.hovered ? Theme.mark : Theme.line
+    color: T.SplitHandle.pressed || T.SplitHandle.hovered ? Theme.mark : Theme.line
     containmentMask: Item {
         x: handle.width > handle.height ? 0 : -4
         y: handle.width > handle.height ? -4 : 0
