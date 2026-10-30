@@ -166,16 +166,8 @@ yyjson_mut_doc *sh_lock_load(const sh_store *st, char **err) {
 }
 
 // `entry`: the current entry of that name, or NULL when the file has none
-static void set_entry(yyjson_mut_doc *m, const char *name, yyjson_mut_val *entry, const sh_source *src) {
-    yyjson_mut_val *skills = skills_of(m);
-    if (!entry) {
-        entry = yyjson_mut_obj(m);
-        yyjson_mut_obj_add(skills, yyjson_mut_strcpy(m, name), entry);
-    } else if (!yyjson_mut_is_obj(entry)) {  // something else under that name: replaced
-        entry = yyjson_mut_obj(m);
-        sh_json_set_val(m, skills, name, entry);
-    }
-    // only our fields change; fields other tools wrote stay
+// only our fields change; fields other tools wrote stay
+static void fill_entry(yyjson_mut_doc *m, yyjson_mut_val *entry, const sh_source *src) {
     sh_json_set_str(m, entry, "source", src->source);
     sh_json_set_str(m, entry, "sourceType", src->type && *src->type ? src->type : "github");
     if (src->ref && *src->ref) sh_json_set_str(m, entry, "ref", src->ref);
@@ -185,6 +177,18 @@ static void set_entry(yyjson_mut_doc *m, const char *name, yyjson_mut_val *entry
     sh_json_set_str(m, entry, "skillFolderHash", src->hash);
     sh_json_set_str(m, entry, "installedAt", src->installed_at);
     sh_json_set_str(m, entry, "updatedAt", src->updated_at);
+}
+
+static void set_entry(yyjson_mut_doc *m, const char *name, yyjson_mut_val *entry, const sh_source *src) {
+    yyjson_mut_val *skills = skills_of(m);
+    if (!entry) {
+        entry = yyjson_mut_obj(m);
+        yyjson_mut_obj_add(skills, yyjson_mut_strcpy(m, name), entry);
+    } else if (!yyjson_mut_is_obj(entry)) {  // something else under that name: replaced
+        entry = yyjson_mut_obj(m);
+        sh_json_set_val(m, skills, name, entry);
+    }
+    fill_entry(m, entry, src);
 }
 
 static bool write_lock(sh_store *st, const char *path, yyjson_mut_doc *m) {
@@ -257,6 +261,21 @@ bool sh_lock_put_many(sh_store *st, const char *const *names, const sh_source *c
     yyjson_mut_doc_free(primary);
     yyjson_mut_doc_free(other);
     return ok;
+}
+
+bool sh_lock_entry(const sh_store *st, const char *name, sh_source *out) {
+    yyjson_mut_doc *m = sh_lock_load(st, NULL);
+    yyjson_mut_val *entry = m ? yyjson_mut_obj_get(skills_of(m), name) : NULL;
+    const bool found = yyjson_mut_is_obj(entry);
+    if (found) sh_source_from_mut_json(entry, out);
+    yyjson_mut_doc_free(m);
+    return found;
+}
+
+yyjson_mut_val *sh_source_to_json(yyjson_mut_doc *m, const sh_source *src) {
+    yyjson_mut_val *entry = yyjson_mut_obj(m);
+    fill_entry(m, entry, src);
+    return entry;
 }
 
 bool sh_lock_put(sh_store *st, const char *name, const sh_source *src) {
@@ -389,6 +408,11 @@ const char *sh_trees_get(const sh_trees *t, const char *name) {
     return entry ? sh_json_mut_str(entry, "treeSha") : "";
 }
 
+const char *sh_trees_content(const sh_trees *t, const char *name) {
+    yyjson_mut_val *entry = t ? sh_json_index_get(t->ix, name) : NULL;
+    return entry ? sh_json_mut_str(entry, "contentHash") : "";
+}
+
 void sh_trees_free(sh_trees *t) {
     if (!t) return;
     sh_json_index_free(t->ix);
@@ -396,7 +420,7 @@ void sh_trees_free(sh_trees *t) {
     free(t);
 }
 
-void sh_trees_put_many(sh_store *st, const char *const *names, const char *const *ids, size_t n) {
+void sh_trees_put_many(sh_store *st, const char *const *names, const char *const *ids, const char *const *contents, size_t n) {
     if (n == 0) return;
     yyjson_mut_doc *m = sources_load(st);
     yyjson_mut_val *trees = user_trees(m);
@@ -410,6 +434,7 @@ void sh_trees_put_many(sh_store *st, const char *const *names, const char *const
             yyjson_mut_obj_add(trees, yyjson_mut_strcpy(m, names[i]), entry);
         }
         sh_json_set_str(m, entry, "treeSha", ids[i]);
+        sh_json_set_str(m, entry, "contentHash", contents[i]);
     }
     char *path = sources_path(st);
     sh_json_write(path, m, true, true);

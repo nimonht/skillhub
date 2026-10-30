@@ -164,6 +164,7 @@ Written exactly like `npx skills` `src/local-lock.ts`, because it is committed a
 
 - `<stamp>` is `yyyyMMdd-HHmmss` in local time, as in 1.x, so old and new backups sort together. A second backup in the
   same second gets `-2`, `-3`, ...
+- Replacing or removing a live link leaves no backup: the folder it led to is still where it was.
 - Each backup folder may have a sidecar with the same name plus `.json`:
 
 ```json
@@ -174,7 +175,7 @@ Written exactly like `npx skills` `src/local-lock.ts`, because it is committed a
   "reason": "update",
   "createdAt": "2026-10-25T09:20:41.715Z",
   "createdBy": "skillhub 2.0.0",
-  "treeSha": "<40 hex: git tree SHA-1 of the backed-up folder>",
+  "treeSha": "<the upstream tree id that version came from, or empty>",
   "lockEntry": { "source": "owner/repo", "sourceType": "github", "skillFolderHash": "...", "...": "..." }
 }
 ```
@@ -185,6 +186,14 @@ Written exactly like `npx skills` `src/local-lock.ts`, because it is committed a
 - Retention: the newest N `<stamp>` folders per skill are kept (setting `updates.backupsKept`, default 3, 1–20). Pruning
   removes each folder together with its sidecar.
 
+- `reason` is `update`, `install`, `rollback` or `remove`. A swap writes the sidecar after the new version is in place, so a
+  crash at that moment leaves a backup without one, which then counts as a backup from 1.x.
+- Rollback backs up the current version (reason `rollback`), moves the chosen backup into place, restores its lock entry
+  and tree record, and sets a hold. A backup without a sidecar brings back the files only: the lock entry stays and its hash
+  is cleared, so the next check offers the update.
+- Restore moves the newest `_removed/<name>-<stamp>/` back, with its lock entry. It never replaces an installed skill.
+- Retention removes a backup and its sidecar together. It keeps 3 versions per skill.
+
 ## 5. Cache (`<cache>`)
 
 | Path | What |
@@ -193,6 +202,7 @@ Written exactly like `npx skills` `src/local-lock.ts`, because it is committed a
 | `repos/<host>/<path>-<h8>/` | every other repository; `<path>` has `/` replaced by `__` and characters outside `[A-Za-z0-9._-]` by `_`; `<h8>` is the first 8 hex digits of SHA-1 over `<normalized url>#<ref>` |
 | `repos/<key>.lock` | per-repository lock (section 8) |
 | `stage/<label>-<pid>-<n>/` | staging folders: the skill name (`import-<name>` for embedded skills), the process id and a counter, so no two threads or processes share one (1.x named them after the skill, so two processes could delete each other's) |
+| `stage/review-<name>-<pid>-<n>/` | a reviewed update: `new/` (upstream's folder) and `review.json` (`name`, `tree`, `skillPath`, and `hash`, the SHA-256 folder hash of `new/`, checked again before it is applied, so what is applied is what was shown). Kept for a day; other stages count as leftovers after ten minutes |
 | `sources.json` | derived update data, safe to delete |
 
 - Normalized URL: lowercase scheme and host, no trailing `/` or `.git`; `git@host:path` becomes `ssh://git@host/path`.
@@ -225,9 +235,10 @@ Written exactly like `npx skills` `src/local-lock.ts`, because it is committed a
 }
 ```
 
-`trees` is keyed by scope (`user` or `project:<path>`). `contentHash` is the SHA-256 folder hash Skill Hub last computed,
-for local, gitlab and git sources and for project locks. `repos`, `lastCheck`, `contentHash` and `commit` are reserved;
-2.0 so far writes `treeSha`.
+`trees` is keyed by scope (`user` or `project:<path>`). `contentHash` is the SHA-256 folder hash of what Skill Hub placed,
+for every source: when the folder no longer has that hash, it holds local edits. A skill with no record (installed by
+1.x or npx) has no such claim made about it. `repos`, `lastCheck` and `commit` are reserved; 2.0 so far writes `treeSha`
+and `contentHash`.
 
 `treeSha` is what makes GitLab and git checks cheap: their lock entries hold a hash of the files, and comparing that with
 upstream would mean downloading them. So `check` compares the git tree id of the folder upstream with the id on record.
@@ -275,7 +286,7 @@ Everything that both the command line and the window need. Missing keys mean the
     "parallelPerHost": 8,
     "parallelChecksPerHost": 32,
     "backupsKept": 3,
-    "reviewBeforeUpdate": false,
+    "reviewBeforeUpdate": true,
     "autoSkipScripts": true,
     "checkAtLaunch": true
   },
@@ -330,7 +341,8 @@ Durable state that Skill Hub owns and that is not a preference.
 ```
 
 - `holds`: after a rollback, automatic updates skip the skill while upstream's tree is still `fromTree`. A manual update,
-  or `skillhub release NAME`, removes the hold.
+  or `skillhub release NAME`, removes the hold. `skillhub hold NAME` sets one with an empty `fromTree`, which holds whatever
+  upstream does.
 - `parked`: lock entries of parked skills, kept here while parked. `npx skills update -g` reinstalls any lock entry whose
   upstream changed without checking that its folder exists, so a parked entry left in the shared lock would come back.
   Unparking returns the entry to the lock file.

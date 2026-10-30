@@ -88,6 +88,8 @@ add_custom_command(
 add_library(skillhub_core STATIC
     src/core/sh_catalog.c
     src/core/sh_collate.c src/core/sh_collate.h
+    src/core/sh_history.c src/core/sh_history.h
+    src/core/sh_review.c src/core/sh_review.h
     src/core/sh_engine.c src/core/sh_engine.h
     src/core/sh_exe.c src/core/sh_exe.h
     src/core/sh_frontmatter.c src/core/sh_frontmatter.h

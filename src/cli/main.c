@@ -14,6 +14,7 @@
 #include "sh_engine.h"
 #include "sh_exe.h"
 #include "sh_fs.h"
+#include "sh_history.h"
 #include "sh_json.h"
 #include "sh_path.h"
 #include "sh_serve.h"
@@ -101,6 +102,12 @@ static void usage(void) {
         "  skillhub update [--all|NAME...] [--auto] [--notify]\n"
         "  skillhub add SOURCE... [--skill a,b | --all] [--link]   owner/repo, a GitLab or git URL, or a folder (--link: live)\n"
         "  skillhub remove NAME\n"
+        "  skillhub restore NAME                   bring back a removed skill\n"
+        "  skillhub diff NAME [--stat]             what an update would change, against the files on disk\n"
+        "  skillhub update NAME... --review [--yes]   show the changes, ask, then apply exactly those\n"
+        "  skillhub history NAME                   the earlier versions that are kept\n"
+        "  skillhub rollback NAME [STAMP]          back to an earlier version; automatic updates then wait\n"
+        "  skillhub hold NAME | release NAME       keep automatic updates away from a skill, or let them back\n"
         "  skillhub track NAME SOURCE [PATH]       set the upstream of a local skill\n"
         "  skillhub autoupdate on|off|status       daily update timer (Linux: systemd user timer)\n"
         "  skillhub watch on|off|status            auto-adopt strays (Linux: systemd path unit)\n"
@@ -484,6 +491,191 @@ static int cmd_adopt(sh_store *st, const args_t *a) {
     return 0;
 }
 
+static void print_file(const sh_diff_file *f) {
+    outf("  %c  ", f->status);
+    padded(f->path, 44);
+    if (f->binary) out("binary");
+    else outf("+%d -%d", f->added, f->removed);
+    if (f->exec) out("  executable");
+    if (f->risk) out("  [script]");
+    out("\n");
+}
+
+static void print_patch(const sh_diff_file *f) {
+    if (!*f->patch) return;
+    outf("--- %s\n+++ %s\n%s", f->status == 'A' ? "/dev/null" : f->path, f->status == 'D' ? "/dev/null" : f->path, f->patch);
+    if (f->cut) out("[... cut here: the file changes too much to show ...]\n");
+}
+
+static void print_review(const sh_review *r, bool patches) {
+    if (r->err) {
+        errf("%s: %s\n", r->name, r->err);
+        return;
+    }
+    if (r->n == 0) {
+        outf("%s: no differences\n", r->name);
+        return;
+    }
+    outf("%s: %s\n", r->name, r->available ? "update available" : "no update, these are local edits");
+    if (r->available && r->local_edits) out("  local edits will be replaced; a backup is kept\n");
+    if (r->risk) out("  adds or changes scripts: read them before you agree\n");
+    for (size_t i = 0; i < r->n; ++i) print_file(&r->files[i]);
+    for (size_t i = 0; patches && i < r->n; ++i) print_patch(&r->files[i]);
+}
+
+static sh_skill *skill_named(sh_skills *sk, const char *name) {
+    for (size_t i = 0; i < sk->len; ++i)
+        if (strcmp(sk->items[i].name, name) == 0) return &sk->items[i];
+    return NULL;
+}
+
+static int cmd_diff(sh_store *st, const args_t *a) {
+    if (a->n == 0 || sh_starts_with(a->v[0], "--")) {
+        usage();
+        return 2;
+    }
+    sh_skills sk;
+    sh_store_scan(st, &sk);
+    sh_skill *s = skill_named(&sk, a->v[0]);
+    int rc = 1;
+    if (!s) {
+        errf("no skill named %s\n", a->v[0]);
+    } else {
+        sh_engine *engine = sh_engine_new(st);
+        sh_review r;
+        sh_engine_diff(engine, &s, 1, &r);
+        print_review(&r, !has(a, "--stat"));
+        rc = r.err ? 1 : 0;
+        if (r.stage) sh_remove_tree(r.stage);  // nobody applies it
+        sh_review_free(&r);
+        sh_engine_free(engine);
+    }
+    sh_skills_free(&sk);
+    return rc;
+}
+
+// skillhub update ... --review: what is applied is what was shown, even when upstream moves on while the question is open
+static int update_reviewed(const args_t *a, sh_skills *sk, const sh_strv *names, sh_engine *engine) {
+    sh_skill **todo = sh_xcalloc(sk->len + 1, sizeof *todo);
+    size_t n = 0;
+    for (size_t i = 0; i < sk->len; ++i)
+        if ((names->len == 0 || sh_strv_contains(names, sk->items[i].name)) && sk->items[i].update == SH_UPDATE_AVAILABLE) todo[n++] = &sk->items[i];
+    sh_review *reviews = sh_xcalloc(n + 1, sizeof *reviews);
+    if (n) sh_engine_diff(engine, todo, n, reviews);
+    sh_skill **ready = sh_xcalloc(n + 1, sizeof *ready);
+    const char **stages = sh_xcalloc(n + 1, sizeof *stages);
+    size_t n_ready = 0;
+    for (size_t i = 0; i < n; ++i) {
+        print_review(&reviews[i], true);
+        if (!reviews[i].stage) continue;
+        ready[n_ready] = todo[i];
+        stages[n_ready++] = reviews[i].stage;
+    }
+    bool go = n_ready > 0;
+    int rc = 0;
+    if (go && !has(a, "--yes")) {
+        if (!stdin_is_terminal()) {
+            errf("pass --yes to apply %zu update(s) without a prompt\n", n_ready);
+            go = false;
+            rc = 2;
+        } else {
+            outf("Apply %zu update(s)? [y/N] ", n_ready);
+            fflush(stdout);
+            if (!confirmed()) {
+                out("aborted\n");
+                go = false;
+                rc = 1;
+            }
+        }
+    }
+    bool *done = sh_xcalloc(n_ready + 1, sizeof *done);
+    const int updated = go ? sh_engine_apply(engine, ready, stages, n_ready, done) : 0;
+    if (!go)
+        for (size_t i = 0; i < n_ready; ++i) sh_remove_tree(stages[i]);
+    if (go || n_ready == 0) {
+        outf("%d updated, %d failed\n", updated, (int)n_ready - updated);
+        rc = updated == (int)n_ready ? 0 : 1;
+    }
+    free(done);
+    for (size_t i = 0; i < n; ++i) sh_review_free(&reviews[i]);
+    free(reviews);
+    free(stages);
+    free(ready);
+    free(todo);
+    return rc;
+}
+
+static int cmd_history(sh_store *st, const args_t *a) {
+    if (a->n == 0) {
+        usage();
+        return 2;
+    }
+    sh_versions v;
+    sh_history_list(st, a->v[0], &v);
+    if (v.len == 0) outf("%s has no earlier versions\n", a->v[0]);
+    for (size_t i = 0; i < v.len; ++i) {
+        padded(v.items[i].stamp, 20);
+        padded(*v.items[i].reason ? v.items[i].reason : "backup", 10);
+        outf("%.8s\n", v.items[i].tree);
+    }
+    sh_versions_free(&v);
+    sh_holds *holds = sh_holds_load(st);
+    if (sh_holds_get(holds, a->v[0])) outf("on hold: automatic updates leave %s alone (skillhub release %s)\n", a->v[0], a->v[0]);
+    sh_holds_free(holds);
+    return 0;
+}
+
+static int cmd_rollback(sh_store *st, const args_t *a) {
+    if (a->n == 0) {
+        usage();
+        return 2;
+    }
+    char *err = NULL;
+    const bool ok = sh_history_rollback(st, a->v[0], a->n > 1 ? a->v[1] : NULL, &err);
+    if (!ok) errf("%s\n", err ? err : "");
+    free(err);
+    return ok ? 0 : 1;
+}
+
+static int cmd_restore(sh_store *st, const args_t *a) {
+    if (a->n == 0) {
+        usage();
+        return 2;
+    }
+    char *err = NULL;
+    const bool ok = sh_history_restore(st, a->v[0], &err);
+    if (!ok) errf("%s\n", err ? err : "");
+    free(err);
+    return ok ? 0 : 1;
+}
+
+static int cmd_hold(sh_store *st, const char *cmd, const args_t *a) {
+    if (a->n == 0) {
+        usage();
+        return 2;
+    }
+    const char *name = a->v[0];
+    if (strcmp(cmd, "release") == 0) {
+        const char *const names[] = {name};
+        if (sh_holds_release(st, names, 1)) {
+            outf("released %s\n", name);
+            return 0;
+        }
+        errf("%s is not on hold\n", name);
+        return 1;
+    }
+    sh_skills sk;
+    sh_store_scan(st, &sk);
+    const bool known = skill_named(&sk, name) != NULL;
+    sh_skills_free(&sk);
+    char *err = NULL;
+    const bool ok = known && sh_hold_set(st, name, "", &err);
+    if (ok) outf("%s is on hold: automatic updates leave it alone\n", name);
+    else errf("%s\n", err ? err : "no such skill");
+    free(err);
+    return ok ? 0 : 1;
+}
+
 static int cmd_check_update(sh_store *st, const args_t *a, bool do_update) {
     sh_skills sk;
     sh_store_scan(st, &sk);
@@ -503,6 +695,14 @@ static int cmd_check_update(sh_store *st, const args_t *a, bool do_update) {
     const sh_strv none = SH_STRV_INIT;
     sh_engine *engine = sh_engine_new(st);
     const int avail = sh_engine_check(engine, &sk, do_update && !all ? &names : &none);
+    if (do_update && has(a, "--review")) {
+        const int reviewed = update_reviewed(a, &sk, all ? &none : &names, engine);
+        sh_engine_free(engine);
+        sh_strv_free(&names);
+        sh_skills_free(&sk);
+        return reviewed;
+    }
+    if (do_update && has(a, "--auto")) sh_engine_set_auto(engine);
     sh_skill **todo = sh_xcalloc(sk.len + 1, sizeof *todo);
     size_t n_todo = 0;
     for (size_t i = 0; i < sk.len; ++i) {
@@ -519,7 +719,9 @@ static int cmd_check_update(sh_store *st, const args_t *a, bool do_update) {
     fflush(stdout);
     bool *done = sh_xcalloc(n_todo + 1, sizeof *done);
     const int updated = n_todo ? sh_engine_update(engine, todo, n_todo, done) : 0;
-    const int failed = (int)n_todo - updated;
+    int held = 0;
+    for (size_t i = 0; i < n_todo; ++i) held += todo[i]->left_out;
+    const int failed = (int)n_todo - updated - held;
     sh_strv changed = SH_STRV_INIT;
     for (size_t i = 0; i < n_todo; ++i)
         if (done[i]) sh_strv_push(&changed, todo[i]->name);
@@ -532,6 +734,7 @@ static int cmd_check_update(sh_store *st, const args_t *a, bool do_update) {
         rc = avail ? 10 : 0;
     } else {
         outf("%d updated, %d failed\n", updated, failed);
+        if (held) outf("%d left out\n", held);
         if (has(a, "--notify") && (updated || failed)) {
             char *joined = sh_strv_join(&changed, ", ");
             char *short_list = sh_left_utf16(joined, 160);
@@ -691,7 +894,7 @@ static bool is_any(const char *s, const char *const *words) {
 
 // commands that change skills, links, lock files or config
 static bool mutates(const char *cmd, const args_t *a) {
-    static const char *const always[] = {"adopt", "update", "remove", "track", "import", "uninstall", NULL};
+    static const char *const always[] = {"adopt", "update", "remove", "restore", "rollback", "hold", "release", "track", "import", "uninstall", NULL};
     static const char *const provider_changes[] = {"enable", "disable", "add", "remove", NULL};
     static const char *const switches[] = {"on", "off", NULL};
     if (is_any(cmd, always)) return true;
@@ -772,6 +975,11 @@ static int run_cli(int argc, char **argv) {
     else if (strcmp(cmd, "check") == 0) rc = cmd_check_update(&st, &a, false);
     else if (strcmp(cmd, "update") == 0) rc = cmd_check_update(&st, &a, true);
     else if (strcmp(cmd, "add") == 0) rc = cmd_add(&st, &a);
+    else if (strcmp(cmd, "diff") == 0) rc = cmd_diff(&st, &a);
+    else if (strcmp(cmd, "history") == 0) rc = cmd_history(&st, &a);
+    else if (strcmp(cmd, "rollback") == 0) rc = cmd_rollback(&st, &a);
+    else if (strcmp(cmd, "restore") == 0) rc = cmd_restore(&st, &a);
+    else if (strcmp(cmd, "hold") == 0 || strcmp(cmd, "release") == 0) rc = cmd_hold(&st, cmd, &a);
     else if (strcmp(cmd, "remove") == 0) {
         if (a.n == 0) {
             usage();

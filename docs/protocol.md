@@ -79,7 +79,7 @@ first scan has finished is answered when it has.
 ```json
 { "name":"gsap-core", "description":"...", "source":"greensock/gsap-skills", "sourceType":"github",
   "status":"available", "note":"", "links":["link","shared","off"], "problem":false,
-  "live":false, "parked":false, "localEdits":false, "hold":false, "versions":2, "lock":"current",
+  "live":false, "parked":false, "hold":false, "versions":2, "lock":"current",
   "path":"~/.agents/skills/gsap-core", "upstreamPath":"skills/gsap-core/SKILL.md", "hash":"<tree id>",
   "installedAt":"<ISO UTC>", "updatedAt":"<ISO UTC>" }
 ```
@@ -155,16 +155,16 @@ Parameters marked `?` are optional. `names` is a list of skill names; an empty o
 | Method | Parameters | Result |
 |---|---|---|
 | `skills.check` | `names?` | job; the results carry the new statuses |
-| `skills.update` | `names?`, `stage?` (a reviewed stage from `skills.diff`), `auto?` (honour holds and `autoSkipScripts`) | job |
+| `skills.update` | `names?`, `stages?` (`{name: stage}` from `skills.diff`: applies exactly those), `auto?` (leaves out skills on hold and updates that add or change scripts, unless `autoSkipScripts` is off) | job; the summary adds `heldBack` |
 | `skills.install` | `source` (any input `sources.discover` accepts), `skills` (names), `mode?` (`copy` or `link` for local folders) | job |
 | `skills.remove` | `name` | job |
 | `skills.track` | `name`, `source`, `path?` | job |
 | `skills.read` | `name` | `{ "name", "text", "truncated" }`: the first 80 KB of its SKILL.md, for the preview |
-| `skills.diff` | `name` | `{ "stage", "treeSha", "localEdits", "files":[{"path","status","add","del","binary","exec","risk"}], "patch", "truncated" }` |
-| `skills.history` | `name` | `{ "versions":[{"stamp","reason","createdAt","treeSha","hasLockEntry"}], "hold": {...} }` |
-| `skills.rollback` | `name`, `stamp?` (newest when missing) | job |
+| `skills.diff` | `names?` (missing: every available update) | job; the results carry `reviews:[{"name","stage","treeSha","available","localEdits","risk","truncated","error?","files":[{"path","status","add","del","binary","exec","risk","cut","patch"}]}]`. `status` is `added`, `removed` or `modified`; `patch` holds the hunks of that file. At most 256 KB per file, 4 MB per skill, 32 MB per reply; `cut` and `truncated` say when something is missing. A review with no `stage` has nothing to apply |
+| `skills.history` | `name` | `{ "versions":[{"stamp","reason","createdAt","treeSha","hasLockEntry"}], "hold": true }`, newest first |
+| `skills.rollback` | `name` with `stamp?` (newest when missing), or `names` (each to its newest version) | job |
 | `skills.restore` | `name` (from `_removed/`) | job |
-| `skills.hold` | `name`, `on` | `{}` |
+| `skills.hold` | `name`, `on` | job |
 | `skills.setAgentEnabled` | `name`, `agent` (agent id, or `@shared`), `enabled` | job |
 | `sources.discover` | `input` | job; the results carry `candidates:[{"name","description","dir","installed"}]`, `host`, `sourceType` |
 | `adopt` | none | job |
@@ -195,11 +195,12 @@ Parameters marked `?` are optional. `names` is a list of skill names; an empty o
 `<Project>`: `{ "path", "name", "skills":N, "problems":N, "autoUpdate":false }`.
 
 What 2.0's backend answers today (milestone M1c): `initialize`, `shutdown`, `state.snapshot`, `skills.read`,
-`skills.check`, `skills.update`, `skills.install`, `skills.remove`, `skills.track`, `sources.discover`, `adopt`, `relink`,
+`skills.check`, `skills.update`, `skills.install`, `skills.remove`, `skills.track`, `skills.diff`, `skills.history`,
+`skills.rollback`, `skills.restore`, `skills.hold`, `sources.discover`, `adopt`, `relink`,
 `providers.list`, `providers.setManaged`, `providers.addCustom`, `providers.removeCustom`, `providers.rescan`,
 `transfer.export`, `transfer.preview`, `transfer.import`, `automation.status`, `automation.set`, `settings.get`,
-`settings.set` and `jobs.cancel`. The others arrive with the features they belong to (diff, history and rollback;
-per-agent switches; projects; the terminal and `fetch`; the accent engine) and until then get `-32601`.
+`settings.set` and `jobs.cancel`. The others arrive with the features they belong to (per-agent switches; projects; the
+terminal and `fetch`; the accent engine) and until then get `-32601`.
 
 ### Notifications from the backend
 

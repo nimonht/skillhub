@@ -24,6 +24,28 @@ done
 "$BIN" adopt >/dev/null                 # creates the Claude links
 rm "$H/.claude/skills/gamma"            # one visible problem to render
 
+# a repository with an update waiting, a script among the changes, and a version to go back to
+mkdir -p "$H/up/acme/demo.git" "$H/work/skills/demo"
+git -C "$H/up/acme/demo.git" init -q --bare
+printf '[url "file://%s/up/"]\n\tinsteadOf = https://github.com/\n[protocol "file"]\n\tallow = always\n[user]\n\tname = t\n\temail = t@example.com\n' "$H" > "$H/gitconfig"
+export GIT_CONFIG_GLOBAL="$H/gitconfig"
+git -C "$H/work" init -q .
+git -C "$H/work" remote add origin "$H/up/acme/demo.git"
+revise() {
+  printf -- '---\nname: demo\ndescription: a tracked demo skill\n---\n\n# demo\n\nRevision %s.\n\nThis line stays.\n' "$1" > "$H/work/skills/demo/SKILL.md"
+  git -C "$H/work" add -A
+  git -C "$H/work" commit -q -m "revision $1"
+  git -C "$H/work" push -q origin HEAD
+}
+revise 1
+"$BIN" add acme/demo --all >/dev/null
+revise 2
+"$BIN" update demo >/dev/null
+revise 3
+mkdir -p "$H/work/skills/demo/scripts"
+printf '#!/bin/sh\necho setup\n' > "$H/work/skills/demo/scripts/setup.sh"
+revise 4
+
 shot() {
   name=$1; shift
   "$BIN" gui --shot "$OUT/$name.png" "$@" 2>"$H/err.txt" || { cat "$H/err.txt" >&2; fail "$name: app exited with an error"; }
@@ -43,5 +65,8 @@ for theme in dark light; do
   shot "$theme-transfer" --theme "$theme" --size 1280x800 --mode transfer
   shot "$theme-filter" --theme "$theme" --size 1280x800 --filter problems
   shot "$theme-nomatch" --theme "$theme" --size 1280x800 --search zzzz
+  shot "$theme-review" --theme "$theme" --size 1280x800 --mode review
+  shot "$theme-review-small" --theme "$theme" --size 820x600 --mode review
+  shot "$theme-versions" --theme "$theme" --size 1280x800 --select demo
 done
 echo "gui smoke test passed (screenshots in $OUT)"

@@ -10,6 +10,7 @@
 
 #include "serve.h"
 #include "sh_fs.h"
+#include "sh_history.h"
 #include "sh_json.h"
 #include "sh_link.h"
 #include "sh_path.h"
@@ -509,6 +510,33 @@ static bool m_from_state(server *s, sh_rpc_msg *m) {
     return true;
 }
 
+static void m_history(server *s, sh_rpc_msg *m) {
+    const char *name = param_str(m->params, "name");
+    sh_store st;
+    sh_store_init(&st, NULL, NULL);
+    sh_versions v;
+    sh_history_list(&st, name, &v);
+    sh_holds *holds = sh_holds_load(&st);
+    yyjson_mut_doc *d = yyjson_mut_doc_new(NULL);
+    yyjson_mut_val *r = yyjson_mut_obj(d), *list = yyjson_mut_arr(d);
+    for (size_t i = 0; i < v.len; ++i) {
+        yyjson_mut_val *o = yyjson_mut_obj(d);
+        yyjson_mut_obj_add_strcpy(d, o, "stamp", v.items[i].stamp);
+        yyjson_mut_obj_add_strcpy(d, o, "reason", v.items[i].reason);
+        yyjson_mut_obj_add_strcpy(d, o, "createdAt", v.items[i].created_at);
+        yyjson_mut_obj_add_strcpy(d, o, "treeSha", v.items[i].tree);
+        yyjson_mut_obj_add_bool(d, o, "hasLockEntry", v.items[i].has_entry);
+        yyjson_mut_arr_append(list, o);
+    }
+    yyjson_mut_obj_add_val(d, r, "versions", list);
+    yyjson_mut_obj_add_bool(d, r, "hold", sh_holds_get(holds, name) != NULL);
+    send_result(s, m, d, r);
+    yyjson_mut_doc_free(d);
+    sh_holds_free(holds);
+    sh_versions_free(&v);
+    sh_store_free(&st);
+}
+
 static void m_read(server *s, sh_rpc_msg *m) {
     const char *name = param_str(m->params, "name");
     if (!*name || strchr(name, '/') || strchr(name, '\\') || name[0] == '.') {
@@ -737,6 +765,7 @@ typedef struct {
 
 static const immediate IMMEDIATE[] = {
     {"skills.read", m_read},
+    {"skills.history", m_history},
     {"providers.addCustom", m_providers_add},
     {"providers.removeCustom", m_providers_remove},
     {"transfer.export", m_export},

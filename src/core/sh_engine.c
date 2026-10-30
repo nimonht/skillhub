@@ -8,6 +8,8 @@
 #include "sh_frontmatter.h"
 #include "sh_fs.h"
 #include "sh_git.h"
+#include "sh_history.h"
+#include "sh_json.h"
 #include "sh_origin.h"
 #include "sh_path.h"
 #include "sh_thread.h"
@@ -46,7 +48,8 @@ typedef struct {
 typedef struct {
     char *name;
     sh_source src;
-    char *tree;  // the tree id to remember (GitLab and git sources), or ""
+    char *tree;     // the tree id to remember (GitLab and git sources), or ""
+    char *content;  // the SHA-256 folder hash of what was placed
 } pending_entry;
 
 struct sh_engine {
@@ -59,6 +62,8 @@ struct sh_engine {
     size_t n_pending, cap_pending;
     int64_t last_commit;
     sh_trees *trees;  // what GitLab and git skills were installed from; read-only while tasks run
+    bool auto_mode;
+    bool skip_scripts;
     long cancelled;  // read and written through sh_atomic_*
     sh_engine_progress progress;
     void *progress_user;
@@ -66,6 +71,27 @@ struct sh_engine {
 
 void sh_engine_cancel(sh_engine *e) { sh_atomic_inc(&e->cancelled); }
 bool sh_engine_cancelled(sh_engine *e) { return sh_atomic_get(&e->cancelled) > 0; }
+
+static bool setting_skip_scripts(void) {
+    char *config = sh_config_dir();
+    char *path = sh_path_join(config, "settings.json");
+    yyjson_doc *doc = NULL;
+    bool skip = true;
+    if (sh_json_read(path, 0, &doc) == SH_JSON_OK) {
+        yyjson_val *updates = yyjson_obj_get(yyjson_doc_get_root(doc), "updates");
+        yyjson_val *value = updates ? yyjson_obj_get(updates, "autoSkipScripts") : NULL;
+        if (yyjson_is_bool(value)) skip = yyjson_get_bool(value);
+        yyjson_doc_free(doc);
+    }
+    free(path);
+    free(config);
+    return skip;
+}
+
+void sh_engine_set_auto(sh_engine *e) {
+    e->auto_mode = true;
+    e->skip_scripts = setting_skip_scripts();
+}
 
 void sh_engine_on_progress(sh_engine *e, sh_engine_progress fn, void *user) {
     e->progress = fn;
@@ -102,6 +128,7 @@ void sh_engine_free(sh_engine *e) {
     for (size_t i = 0; i < e->n_pending; ++i) {
         free(e->pending[i].name);
         free(e->pending[i].tree);
+        free(e->pending[i].content);
         sh_source_free(&e->pending[i].src);
     }
     free(e->pending);
@@ -388,7 +415,7 @@ static bool upstream_has(const repo_slot *s, const char *path) {
 
 // ---- group commits to the lock file ----
 
-static void queue_entry(sh_engine *e, const char *name, const sh_source *src, const char *tree) {
+static void queue_entry(sh_engine *e, const char *name, const sh_source *src, const char *tree, const char *content) {
     sh_mutex_lock(e->m);
     if (e->n_pending == e->cap_pending) {
         e->cap_pending = e->cap_pending ? e->cap_pending * 2 : 64;
@@ -397,6 +424,7 @@ static void queue_entry(sh_engine *e, const char *name, const sh_source *src, co
     pending_entry *p = &e->pending[e->n_pending++];
     p->name = sh_strdup(name);
     p->tree = sh_strdup(tree);
+    p->content = sh_strdup(content);
     sh_source_copy(src, &p->src);
     sh_mutex_unlock(e->m);
 }
@@ -410,26 +438,25 @@ static void commit_pending(sh_engine *e) {
     sh_mutex_unlock(e->m);
     e->last_commit = sh_mono_ms();
     if (n == 0) return;
-    const char **names = sh_xcalloc(n, sizeof *names), **tree_names = sh_xcalloc(n, sizeof *tree_names), **trees = sh_xcalloc(n, sizeof *trees);
+    const char **names = sh_xcalloc(n, sizeof *names), **trees = sh_xcalloc(n, sizeof *trees), **contents = sh_xcalloc(n, sizeof *contents);
     const sh_source **srcs = sh_xcalloc(n, sizeof *srcs);
-    size_t n_trees = 0;
     for (size_t i = 0; i < n; ++i) {
         names[i] = batch[i].name;
         srcs[i] = &batch[i].src;
-        if (!*batch[i].tree) continue;
-        tree_names[n_trees] = batch[i].name;
-        trees[n_trees++] = batch[i].tree;
+        trees[i] = batch[i].tree;
+        contents[i] = batch[i].content;
     }
     sh_lock_put_many(e->st, names, srcs, n);
-    sh_trees_put_many(e->st, tree_names, trees, n_trees);
+    sh_trees_put_many(e->st, names, trees, contents, n);
     for (size_t i = 0; i < n; ++i) {
         free(batch[i].name);
         free(batch[i].tree);
+        free(batch[i].content);
         sh_source_free(&batch[i].src);
     }
     free(names);
-    free(tree_names);
     free(trees);
+    free(contents);
     free(srcs);
     free(batch);
 }
@@ -598,6 +625,8 @@ typedef struct {
     char *stage;
     bool link;       // local folders: a live link instead of a copy
     bool ok;
+    bool left_out;   // an automatic update that waits for the user
+    sh_backup_note note;
 } placement;
 
 typedef struct {
@@ -607,7 +636,7 @@ typedef struct {
     char *err;
 } copy_walk;
 
-// what extraction from git does, for a local folder: plain files only, with the same limits
+// what extraction from git does, for a local folder or a copy of the installed one: plain files only, with the same limits
 static bool copy_one(const char *rel, const char *full, bool is_link, void *user) {
     copy_walk *c = user;
     if (is_link || sh_folder_hash_skips(rel)) return true;
@@ -625,24 +654,41 @@ static bool copy_one(const char *rel, const char *full, bool is_link, void *user
     return ok;
 }
 
+static char *copy_folder(const char *from, const char *to) {  // NULL, or why it failed
+    sh_remove_tree(to);
+    sh_mkpath(to);
+    copy_walk c = {to, 0, 0, NULL};
+    sh_walk_files(from, copy_one, &c);
+    return c.err;
+}
+
+// an automatic update that would bring in new scripts waits for the user to look at it
+static bool held_back(sh_engine *e, placement *p) {
+    if (!e->skip_scripts) return false;
+    char *installed = sh_path_join(e->st->central, p->name);
+    p->left_out = sh_adds_scripts(p->stage, installed);
+    free(installed);
+    if (p->left_out) sh_store_log(e->st, "left %s out: the update adds or changes scripts (skillhub update %s --review)", p->name, p->name);
+    return p->left_out;
+}
+
 static void place_local(sh_engine *e, repo_slot *s, placement *p, size_t n) {
     for (size_t i = 0; i < n && !sh_engine_cancelled(e); ++i) {
         if (!*p[i].id) continue;
         char *folder = local_path(s, p[i].dir);
         if (p[i].link) {
-            p[i].ok = sh_store_place_link(e->st, p[i].name, folder);
+            p[i].ok = sh_store_place_link(e->st, p[i].name, folder, &p[i].note);
         } else {
             p[i].stage = sh_store_stage_dir(e->st, p[i].name);
-            sh_remove_tree(p[i].stage);
-            sh_mkpath(p[i].stage);
-            copy_walk c = {p[i].stage, 0, 0, NULL};
-            sh_walk_files(folder, copy_one, &c);
-            if (c.err) {
-                sh_store_log(e->st, "extract failed for %s: %s", p[i].name, c.err);
+            char *err = copy_folder(folder, p[i].stage);
+            if (err) {
+                sh_store_log(e->st, "extract failed for %s: %s", p[i].name, err);
                 sh_remove_tree(p[i].stage);
-                free(c.err);
+                free(err);
+            } else if (held_back(e, &p[i])) {
+                sh_remove_tree(p[i].stage);
             } else {
-                p[i].ok = sh_store_place(e->st, p[i].name, p[i].stage);
+                p[i].ok = sh_store_place(e->st, p[i].name, p[i].stage, &p[i].note);
             }
         }
         free(folder);
@@ -675,8 +721,10 @@ static void place_all(sh_engine *e, repo_slot *s, placement *p, size_t n) {
         } else if (!x[m].ok) {
             sh_store_log(e->st, "extract failed for %s: %s", pl->name, x[m].err ? x[m].err : "");
             sh_remove_tree(pl->stage);
+        } else if (held_back(e, pl)) {
+            sh_remove_tree(pl->stage);
         } else {
-            pl->ok = sh_store_place(e->st, pl->name, pl->stage);
+            pl->ok = sh_store_place(e->st, pl->name, pl->stage, &pl->note);
         }
         free(x[m].err);
     }
@@ -693,13 +741,19 @@ static void placements_free(placement *p, size_t n) {
     free(p);
 }
 
-// what the lock holds for a placed skill, as npx writes it: the git tree id for GitHub, the SHA-256 folder hash otherwise
-static char *lock_hash(const sh_engine *e, const repo_slot *s, const char *name, const char *id) {
-    if (s->o.type == SH_ORIGIN_GITHUB) return sh_strdup(id);
+static char *placed_hash(const sh_engine *e, const char *name) {
     char *folder = sh_path_join(e->st->central, name);
     char *hash = sh_folder_hash(folder);
     free(folder);
     return hash;
+}
+
+// what the lock holds for a placed skill, as npx writes it: the git tree id for GitHub, the SHA-256 folder hash otherwise
+static const char *lock_hash(const repo_slot *s, const char *content, const char *id) { return s->o.type == SH_ORIGIN_GITHUB ? id : content; }
+
+// the upstream tree id the installed skill came from
+static const char *installed_tree(const sh_engine *e, const repo_slot *s, const sh_skill *sk) {
+    return remembers_tree(s) ? sh_trees_get(e->trees, sk->name) : sk->src.hash;
 }
 
 // ---- update ----
@@ -714,14 +768,14 @@ static void updated(sh_engine *e, const repo_slot *s, sh_skill *sk, const char *
     sh_source_copy(&sk->src, &src);
     if (!*src.url) set_str(&src.url, s->o.url);
     set_str(&src.skill_path, skill_md);
-    char *hash = lock_hash(e, s, sk->name, id);
-    set_str(&src.hash, hash);
-    free(hash);
+    char *content = placed_hash(e, sk->name);
+    set_str(&src.hash, lock_hash(s, content, id));
     char *now = sh_now_iso();
     if (!*src.installed_at) set_str(&src.installed_at, now);
     set_str(&src.updated_at, now);
     free(now);
-    queue_entry(e, sk->name, &src, remembers_tree(s) ? id : "");
+    queue_entry(e, sk->name, &src, remembers_tree(s) ? id : "", content);
+    free(content);
     sh_source_free(&sk->src);
     sk->src = src;
     sk->update = SH_UPDATE_CURRENT;
@@ -747,10 +801,12 @@ static void update_task(job *j, repo_slot *s, const group *gr) {
         p[i].name = sk->name;
         p[i].dir = sh_dir_of(skill_mds[i]);
         p[i].id = *sk->new_hash ? sh_strdup(sk->new_hash) : upstream_id(s, p[i].dir);
+        p[i].note = (sh_backup_note){"update", &sk->src, installed_tree(j->e, s, sk)};
     }
     place_all(j->e, s, p, gr->n);
     for (size_t i = 0; i < gr->n; ++i) {
         it->done[gr->items[i]] = p[i].ok;
+        it->todo[gr->items[i]]->left_out = p[i].left_out;
         if (p[i].ok) updated(j->e, s, it->todo[gr->items[i]], skill_mds[i], p[i].id);
         free(skill_mds[i]);
     }
@@ -758,21 +814,229 @@ static void update_task(job *j, repo_slot *s, const group *gr) {
     placements_free(p, gr->n);
 }
 
+// a rollback holds a skill for as long as upstream stays at the version rolled back from; an update ends it
+static bool on_hold(sh_engine *e, const sh_holds *holds, sh_skill *sk) {
+    const char *from = sh_holds_get(holds, sk->name);
+    if (!from || (*from && strcmp(from, sk->new_hash) != 0)) return false;
+    sh_store_log(e->st, "left %s out: it is on hold (skillhub release %s)", sk->name, sk->name);
+    sk->left_out = true;
+    return true;
+}
+
+static void release_holds(sh_engine *e, sh_skill *const *todo, size_t n, const bool *done) {
+    const char **names = sh_xcalloc(n + 1, sizeof *names);
+    size_t k = 0;
+    for (size_t i = 0; i < n; ++i)
+        if (done[i]) names[k++] = todo[i]->name;
+    sh_holds_release(e->st, names, k);
+    free(names);
+}
+
 int sh_engine_update(sh_engine *e, sh_skill *const *todo, size_t n, bool *done) {
     update_items it = {todo, done};
     job j = {e, {NULL, 0}, update_task, &it, 0, 0};
+    sh_holds *holds = e->auto_mode ? sh_holds_load(e->st) : NULL;
     for (size_t i = 0; i < n; ++i) {
         done[i] = false;
         sh_origin o;
-        if (!sh_source_runnable(&todo[i]->src) || todo[i]->live || !origin_of(&todo[i]->src, &o)) continue;
+        if (!sh_source_runnable(&todo[i]->src) || todo[i]->live || on_hold(e, holds, todo[i]) || !origin_of(&todo[i]->src, &o)) continue;
         group_add(&j.g, slot_for(e, &o), i);
         sh_origin_free(&o);
     }
+    sh_holds_free(holds);
     run_job(&j);
     groups_free(&j.g);
     int ok = 0;
     for (size_t i = 0; i < n; ++i) ok += done[i];
-    if (ok) sh_store_relink(e->st);
+    if (ok) {
+        release_holds(e, todo, n, done);
+        sh_store_relink(e->st);
+    }
+    return ok;
+}
+
+// ---- review ----
+
+typedef struct {
+    sh_skill *const *todo;
+    sh_review *out;
+} review_items;
+
+static bool edited_since_placed(const sh_engine *e, const repo_slot *s, const sh_skill *sk) {
+    const char *placed = sh_trees_content(e->trees, sk->name);
+    if (!*placed && s->o.type != SH_ORIGIN_GITHUB) placed = sk->src.hash;  // npx's own hash of the files
+    if (!*placed) return false;
+    char *now = placed_hash(e, sk->name);
+    const bool edited = strcmp(now, placed) != 0;
+    free(now);
+    return edited;
+}
+
+static void write_manifest(const char *stage, const char *name, const char *tree, const char *skill_md, const char *hash) {
+    yyjson_mut_doc *d = yyjson_mut_doc_new(NULL);
+    yyjson_mut_val *root = yyjson_mut_obj(d);
+    yyjson_mut_doc_set_root(d, root);
+    sh_json_set_str(d, root, "name", name);
+    sh_json_set_str(d, root, "tree", tree);
+    sh_json_set_str(d, root, "skillPath", skill_md);
+    sh_json_set_str(d, root, "hash", hash);
+    char *path = sh_path_join(stage, "review.json");
+    sh_json_write(path, d, true, true);
+    free(path);
+    yyjson_mut_doc_free(d);
+}
+
+// the upstream version sits in <stage>/new: compares it with a copy of the installed folder
+static void finish_review(sh_engine *e, const repo_slot *s, const sh_skill *sk, sh_review *r, const char *stage, const char *skill_md) {
+    char *old = sh_path_join(stage, "old"), *fresh = sh_path_join(stage, "new"), *installed = sh_path_join(e->st->central, sk->name);
+    r->err = copy_folder(installed, old);
+    if (!r->err) sh_review_compare(stage, r);
+    sh_remove_tree(old);
+    r->available = sk->update == SH_UPDATE_AVAILABLE;
+    r->tree = sh_strdup(sk->new_hash);
+    r->local_edits = r->n > 0 && (!r->available || edited_since_placed(e, s, sk));
+    if (!r->err && r->n > 0) {
+        char *hash = sh_folder_hash(fresh);
+        write_manifest(stage, sk->name, sk->new_hash, skill_md, hash);
+        free(hash);
+        r->stage = sh_strdup(stage);
+    } else {
+        sh_remove_tree(stage);
+    }
+    free(installed);
+    free(fresh);
+    free(old);
+}
+
+static void review_task(job *j, repo_slot *s, const group *gr) {
+    review_items *it = j->items;
+    sh_engine *e = j->e;
+    const bool synced = ensure_synced(e, s);
+    sh_extract *x = sh_xcalloc(gr->n + 1, sizeof *x);
+    size_t *which = sh_xcalloc(gr->n + 1, sizeof *which);
+    char **stages = sh_xcalloc(gr->n + 1, sizeof *stages), **dirs = sh_xcalloc(gr->n + 1, sizeof *dirs), **mds = sh_xcalloc(gr->n + 1, sizeof *mds);
+    size_t k = 0;
+    for (size_t i = 0; i < gr->n; ++i) {
+        sh_skill *sk = it->todo[gr->items[i]];
+        sh_review *r = &it->out[gr->items[i]];
+        if (!synced) {
+            r->err = sh_strdup(s->err ? s->err : "");
+            continue;
+        }
+        check_skill(e, s, sk);
+        if (sk->update == SH_UPDATE_ERROR) {
+            r->err = sh_strdup(sk->note);
+            continue;
+        }
+        char *label = sh_strfmt("review-%s", sk->name);
+        stages[k] = sh_store_stage_dir(e->st, label);
+        free(label);
+        mds[k] = sh_strdup(*sk->new_path ? sk->new_path : sk->src.skill_path);
+        dirs[k] = sh_dir_of(mds[k]);
+        char *fresh = sh_path_join(stages[k], "new");
+        sh_mkpath(fresh);
+        x[k] = (sh_extract){dirs[k], fresh, false, NULL};
+        which[k++] = gr->items[i];
+    }
+    if (is_local(s)) {
+        for (size_t m = 0; m < k; ++m) {
+            char *folder = local_path(s, dirs[m]);
+            x[m].err = copy_folder(folder, x[m].dest);
+            x[m].ok = !x[m].err;
+            free(folder);
+        }
+    } else {
+        sh_repo_extract(&s->repo, x, k);
+    }
+    for (size_t m = 0; m < k; ++m) {
+        sh_review *r = &it->out[which[m]];
+        if (x[m].ok) {
+            finish_review(e, s, it->todo[which[m]], r, stages[m], mds[m]);
+        } else {
+            r->err = sh_strdup(x[m].err ? x[m].err : "cannot read upstream");
+            sh_remove_tree(stages[m]);
+        }
+        free(x[m].err);
+        free((char *)x[m].dest);
+        free(stages[m]);
+        free(dirs[m]);
+        free(mds[m]);
+    }
+    free(mds);
+    free(dirs);
+    free(stages);
+    free(which);
+    free(x);
+}
+
+void sh_engine_diff(sh_engine *e, sh_skill *const *todo, size_t n, sh_review *out) {
+    review_items it = {todo, out};
+    job j = {e, {NULL, 0}, review_task, &it, 0, 0};
+    sh_trees_free(e->trees);
+    e->trees = sh_trees_load(e->st);
+    for (size_t i = 0; i < n; ++i) {
+        const sh_skill *sk = todo[i];
+        sh_origin o;
+        memset(&out[i], 0, sizeof out[i]);
+        out[i].name = sh_strdup(sk->name);
+        if (!sh_source_tracked(&sk->src)) out[i].err = sh_strfmt("%s has no upstream", sk->name);
+        else if (!sh_source_runnable(&sk->src)) out[i].err = sh_strfmt("%s is managed by npx", sk->name);
+        else if (sk->live) out[i].err = sh_strfmt("%s is a live link: it always shows what its folder holds", sk->name);
+        else if (!origin_of(&sk->src, &o)) out[i].err = sh_strfmt("%s has a source that cannot be read", sk->name);
+        else {
+            group_add(&j.g, slot_for(e, &o), i);
+            sh_origin_free(&o);
+        }
+    }
+    run_job(&j);
+    groups_free(&j.g);
+}
+
+static bool apply_one(sh_engine *e, sh_skill *sk, const char *stage) {
+    char *root = sh_path_join(e->st->cache, "stage/review-");
+    const bool ours = sh_starts_with(stage, root) && !strchr(stage + strlen(root), '/') && !strchr(stage + strlen(root), '\\');
+    free(root);
+    char *manifest = sh_path_join(stage, "review.json"), *fresh = sh_path_join(stage, "new");
+    yyjson_doc *doc = NULL;
+    sh_origin o = {0};
+    bool ok = false;
+    if (!ours || sh_json_read(manifest, 64 * 1024, &doc) != SH_JSON_OK || !origin_of(&sk->src, &o)) {
+        sh_store_log(e->st, "the review of %s is gone: review it again", sk->name);
+    } else {
+        yyjson_val *root_val = yyjson_doc_get_root(doc);
+        char *hash = sh_folder_hash(fresh);
+        if (strcmp(sh_json_str(root_val, "name"), sk->name) != 0 || strcmp(sh_json_str(root_val, "hash"), hash) != 0) {
+            sh_store_log(e->st, "the review of %s changed on disk: review it again", sk->name);
+        } else {
+            const size_t at = slot_for(e, &o);  // may move the table
+            const repo_slot *s = &e->slots[at];
+            const sh_backup_note note = {"update", &sk->src, installed_tree(e, s, sk)};
+            ok = sh_store_place(e->st, sk->name, fresh, &note);
+            if (ok) updated(e, s, sk, sh_json_str(root_val, "skillPath"), sh_json_str(root_val, "tree"));
+        }
+        free(hash);
+        sh_origin_free(&o);
+    }
+    if (ours) sh_remove_tree(stage);
+    yyjson_doc_free(doc);
+    free(fresh);
+    free(manifest);
+    return ok;
+}
+
+int sh_engine_apply(sh_engine *e, sh_skill *const *todo, const char *const *stages, size_t n, bool *done) {
+    sh_trees_free(e->trees);
+    e->trees = sh_trees_load(e->st);
+    int ok = 0;
+    for (size_t i = 0; i < n; ++i) {
+        done[i] = !sh_engine_cancelled(e) && apply_one(e, todo[i], stages[i]);
+        ok += done[i];
+    }
+    commit_pending(e);
+    if (ok) {
+        release_holds(e, todo, n, done);
+        sh_store_relink(e->st);
+    }
     return ok;
 }
 
@@ -874,10 +1138,12 @@ static void installed(sh_engine *e, const repo_slot *s, const install_item *it, 
     src.source = sh_strdup(s->o.source);
     src.url = sh_strdup(s->o.url);
     src.skill_path = *dir ? sh_strfmt("%s/SKILL.md", dir) : sh_strdup("SKILL.md");
-    src.hash = lock_hash(e, s, it->name, id);
+    char *content = placed_hash(e, it->name);
+    src.hash = sh_strdup(lock_hash(s, content, id));
     src.installed_at = sh_now_iso();
     src.updated_at = sh_strdup(src.installed_at);
-    queue_entry(e, it->name, &src, remembers_tree(s) ? id : "");
+    queue_entry(e, it->name, &src, remembers_tree(s) ? id : "", content);
+    free(content);
     sh_source_free(&src);
     sh_store_log(e->st, it->link ? "linked %s to %s" : "installed %s from %s", it->name, s->o.source);
 }
@@ -893,6 +1159,7 @@ static void install_task(job *j, repo_slot *s, const group *gr) {
         install_item *it = &items[gr->items[i]];
         p[i].name = it->name;
         p[i].link = it->link;
+        p[i].note = (sh_backup_note){"install", NULL, ""};
         p[i].dir = sh_strdup(it->dir);
         p[i].id = upstream_id(s, p[i].dir);
         if (it->find_if_moved && !*p[i].id) {

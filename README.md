@@ -40,6 +40,9 @@ that into one directory plus a few symlinks, and tells you the moment something 
 - **Takes skills from anywhere**: GitHub, GitLab (nested groups and self-hosted too), any git URL over https or ssh, a branch
   or tag (`#ref`), or a folder on your machine. A folder is copied and updates when you choose, or stays a live link while
   you write the skill, so your edits reach every agent at once.
+- **Shows an update before it happens**: *Review changes* lists the files with a diff, flags scripts and your own edits, and
+  applies exactly what you read. *Undo* is one click, every skill keeps its last three versions, and a skill you rolled back
+  stays put until upstream moves on.
 - **Transfer between machines**: *Export* writes one JSON file with every skill (remote skills as their source, local skills
   with their files); *Import* on the other machine shows what is inside, then downloads and installs everything. Drag the
   file onto the window, or use `skillhub export` / `skillhub import`.
@@ -151,6 +154,11 @@ skillhub add ~/work/my-skills --skill draft --link      # a local folder as a li
 skillhub track my-skill owner/repo                  # give a local skill an upstream
 skillhub check                                      # fetch upstream, list updates (exit code 10 if any)
 skillhub update --all                               # apply them
+skillhub diff my-skill                              # what an update would change
+skillhub update my-skill --review                   # show it, ask, then apply exactly that
+skillhub history my-skill                           # the versions that are kept
+skillhub rollback my-skill                          # back to the last one; automatic updates then wait
+skillhub restore my-skill                           # bring back a removed skill
 
 skillhub autoupdate on     # daily update via systemd user timer
 skillhub watch on          # auto-adopt strays dropped into agent folders
@@ -229,7 +237,8 @@ manager or `sudo cmake --build build --target uninstall`; both remove only files
   versions of each skill are kept).
 - Skills are instructions your agents follow with your permissions. **Auto-update pulls the upstream default branch** of
   every repository you track, so only track sources you trust, or leave the timer off and run `skillhub check` yourself.
-  See [SECURITY.md](SECURITY.md).
+  Automatic runs leave out updates that add or change scripts until you have reviewed them, and diffs never run your own
+  git diff helpers. See [SECURITY.md](SECURITY.md).
 - An import file is treated as untrusted: names and paths are validated, symlinks are never created, sizes are capped, sources must be GitHub repositories, nothing is executed and installed skills are never overwritten. Skills still run with your agents' permissions, so import only files you trust. GitHub skills arrive at their latest upstream version, not necessarily the one on the other machine.
 - Updates use plain `git` (HTTPS clones into `~/.cache/skillhub`); there is no telemetry and no account.
 
@@ -242,7 +251,7 @@ manager or `sudo cmake --build build --target uninstall`; both remove only files
 
 ## Roadmap
 
-- [ ] Show a diff before applying an update, and one-click rollback in the GUI
+- [x] Show a diff before applying an update, and one-click rollback in the GUI
 - [ ] Per-agent enable/disable for a skill
 - [ ] Project-level skills (`.claude/skills` in a repository), not only user-level ones
 - [x] GitLab / arbitrary git URLs and local-path sources

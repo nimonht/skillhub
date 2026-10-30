@@ -163,19 +163,20 @@ static void tree_record(void) {
     sh_trees *t = sh_trees_load(&st);
     CHECK(strcmp(sh_trees_get(t, "one"), "") == 0);  // nothing on record yet
     sh_trees_free(t);
-    const char *names[] = {"one", "two"}, *ids[] = {"aaa", "bbb"};
-    sh_trees_put_many(&st, names, ids, 2);
+    const char *names[] = {"one", "two"}, *ids[] = {"aaa", "bbb"}, *contents[] = {"h1", "h2"};
+    sh_trees_put_many(&st, names, ids, contents, 2);
     const char *more[] = {"two"}, *newer[] = {"ccc"};
-    sh_trees_put_many(&st, more, newer, 1);
+    sh_trees_put_many(&st, more, newer, contents, 1);
     t = sh_trees_load(&st);
     CHECK(strcmp(sh_trees_get(t, "one"), "aaa") == 0);
+    CHECK(strcmp(sh_trees_content(t, "one"), "h1") == 0);
     CHECK(strcmp(sh_trees_get(t, "two"), "ccc") == 0);
     sh_trees_free(t);
     write_text("cache/sources.json", "not json");  // derived data: a damaged file is the same as none
     t = sh_trees_load(&st);
     CHECK(strcmp(sh_trees_get(t, "one"), "") == 0);
     sh_trees_free(t);
-    sh_trees_put_many(&st, more, newer, 1);
+    sh_trees_put_many(&st, more, newer, contents, 1);
     t = sh_trees_load(&st);
     CHECK(strcmp(sh_trees_get(t, "two"), "ccc") == 0);
     sh_trees_free(t);
@@ -191,18 +192,18 @@ static void live_links(void) {
     write_text("work/other/SKILL.md", skill);
     write_text("work/empty/README.md", "no skill here\n");
     char *one = at("work/one"), *other = at("work/other"), *empty = at("work/empty"), *dest = at("skills/one");
-    CHECK(!sh_store_place_link(&st, "one", empty));
+    CHECK(!sh_store_place_link(&st, "one", empty, NULL));
     CHECK(!sh_lexists(dest));
-    CHECK(sh_store_place_link(&st, "one", one));
+    CHECK(sh_store_place_link(&st, "one", one, NULL));
     CHECK(sh_is_link(dest) && sh_points_to(dest, one));
-    CHECK(sh_store_place_link(&st, "one", other));  // linked again, elsewhere: the first folder stays as it was
+    CHECK(sh_store_place_link(&st, "one", other, NULL));  // linked again, elsewhere: the first folder stays as it was
     CHECK(sh_is_link(dest) && sh_points_to(dest, other));
     char *kept = at("work/one/SKILL.md");
     CHECK(sh_exists(kept));
     CHECK(sh_store_remove_skill(&st, "one"));
     CHECK(!sh_lexists(dest) && sh_exists(kept));
     write_text("skills/one/SKILL.md", skill);  // a real folder in the way goes to the backups, as with any update
-    CHECK(sh_store_place_link(&st, "one", one));
+    CHECK(sh_store_place_link(&st, "one", one, NULL));
     CHECK(sh_is_link(dest));
     sh_strv backups = SH_STRV_INIT;
     char *dir = at("backup/one");

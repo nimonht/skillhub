@@ -7,6 +7,7 @@
 #include "serve.h"
 #include "sh_engine.h"
 #include "sh_fs.h"
+#include "sh_history.h"
 #include "sh_path.h"
 
 // ---- reporting from the job's threads ----
@@ -123,22 +124,9 @@ static void body_check(job *j, sh_store *st) {
     sh_strv_free(&names);
 }
 
-static void body_update(job *j, sh_store *st) {
-    sh_strv names = SH_STRV_INIT;
-    param_strv(j->params, "names", &names);
-    sh_skills sk;
-    sh_store_scan(st, &sk);
-    int available, errors;
-    sh_engine *e = check_skills(j, st, &sk, &names, &available, &errors);
-    sh_skill **todo = sh_xcalloc(sk.len + 1, sizeof *todo);
-    size_t n = 0;
-    for (size_t i = 0; i < sk.len; ++i)
-        if (wanted(&names, sk.items[i].name) && sk.items[i].update == SH_UPDATE_AVAILABLE) todo[n++] = &sk.items[i];
-    bool *done = sh_xcalloc(n + 1, sizeof *done);
-    const int updated = n && !cancelled(j) ? sh_engine_update(e, todo, n, done) : 0;
-    engine_done(j, e);
+static void report_updates(job *j, sh_skill **todo, const bool *done, size_t n, int updated) {
     const bool stopped = cancelled(j);
-    int failed = 0, skipped = 0;
+    int failed = 0, skipped = 0, held = 0;
     for (size_t i = 0; i < n; ++i) {
         if (done[i]) {
             // the engine moved the skill's lock entry on to the new version
@@ -148,6 +136,9 @@ static void body_update(job *j, sh_store *st) {
         } else if (stopped) {
             ++skipped;
             add_result(j, todo[i]->name, false, "cancelled");
+        } else if (todo[i]->left_out) {
+            ++held;
+            add_result(j, todo[i]->name, false, "left out: review it first");
         } else {
             ++failed;
             add_result(j, todo[i]->name, false, "not updated (see the activity log)");
@@ -156,12 +147,174 @@ static void body_update(job *j, sh_store *st) {
     sum(j, "updated", updated);
     sum(j, "failed", failed);
     sum(j, "skipped", skipped);
+    sum(j, "heldBack", held);
     if (failed) j->ok = false;
     j->rescan = true;
+}
+
+// `stages`: the updates reviewed with skills.diff, as {name: stage}, applied as they are
+static void apply_reviewed(job *j, sh_store *st, yyjson_val *stages) {
+    sh_skills sk;
+    sh_store_scan(st, &sk);
+    sh_engine *e = engine_for(j, st);
+    const size_t max = yyjson_obj_size(stages);
+    sh_skill **todo = sh_xcalloc(max + 1, sizeof *todo);
+    const char **paths = sh_xcalloc(max + 1, sizeof *paths);
+    size_t n = 0, i, m;
+    yyjson_val *key, *val;
+    yyjson_obj_foreach(stages, i, m, key, val) {
+        for (size_t k = 0; k < sk.len; ++k) {
+            if (strcmp(sk.items[k].name, yyjson_get_str(key)) != 0 || !yyjson_is_str(val)) continue;
+            todo[n] = &sk.items[k];
+            paths[n++] = yyjson_get_str(val);
+            break;
+        }
+    }
+    bool *done = sh_xcalloc(n + 1, sizeof *done);
+    const int updated = n && !cancelled(j) ? sh_engine_apply(e, todo, paths, n, done) : 0;
+    engine_done(j, e);
+    report_updates(j, todo, done, n, updated);
+    free(done);
+    free(paths);
+    free(todo);
+    sh_skills_free(&sk);
+}
+
+static void body_update(job *j, sh_store *st) {
+    yyjson_val *stages = yyjson_obj_get(j->params, "stages");
+    if (yyjson_is_obj(stages) && yyjson_obj_size(stages) > 0) {
+        apply_reviewed(j, st, stages);
+        return;
+    }
+    sh_strv names = SH_STRV_INIT;
+    param_strv(j->params, "names", &names);
+    sh_skills sk;
+    sh_store_scan(st, &sk);
+    int available, errors;
+    sh_engine *e = check_skills(j, st, &sk, &names, &available, &errors);
+    if (param_bool(j->params, "auto", false)) sh_engine_set_auto(e);
+    sh_skill **todo = sh_xcalloc(sk.len + 1, sizeof *todo);
+    size_t n = 0;
+    for (size_t i = 0; i < sk.len; ++i)
+        if (wanted(&names, sk.items[i].name) && sk.items[i].update == SH_UPDATE_AVAILABLE) todo[n++] = &sk.items[i];
+    bool *done = sh_xcalloc(n + 1, sizeof *done);
+    const int updated = n && !cancelled(j) ? sh_engine_update(e, todo, n, done) : 0;
+    engine_done(j, e);
+    report_updates(j, todo, done, n, updated);
     free(done);
     free(todo);
     sh_skills_free(&sk);
     sh_strv_free(&names);
+}
+
+// ---- review, history ----
+
+#define REVIEW_BUDGET (32 * 1024 * 1024)  // keeps one reply well below the 64 MB a message may have
+
+static const char *status_text(char status) { return status == 'A' ? "added" : status == 'D' ? "removed" : "modified"; }
+
+static yyjson_mut_val *review_json(job *j, const sh_review *r, size_t *budget) {
+    yyjson_mut_val *o = yyjson_mut_obj(j->out);
+    yyjson_mut_obj_add_strcpy(j->out, o, "name", r->name);
+    yyjson_mut_obj_add_strcpy(j->out, o, "stage", r->stage ? r->stage : "");
+    yyjson_mut_obj_add_strcpy(j->out, o, "treeSha", r->tree ? r->tree : "");
+    yyjson_mut_obj_add_bool(j->out, o, "available", r->available);
+    yyjson_mut_obj_add_bool(j->out, o, "localEdits", r->local_edits);
+    yyjson_mut_obj_add_bool(j->out, o, "risk", r->risk);
+    if (r->err) yyjson_mut_obj_add_strcpy(j->out, o, "error", r->err);
+    bool truncated = r->truncated;
+    yyjson_mut_val *files = yyjson_mut_arr(j->out);
+    for (size_t i = 0; i < r->n; ++i) {
+        const sh_diff_file *f = &r->files[i];
+        const size_t size = strlen(f->patch);
+        const bool show = size <= *budget;
+        *budget -= show ? size : 0;
+        truncated = truncated || !show;
+        yyjson_mut_val *x = yyjson_mut_obj(j->out);
+        yyjson_mut_obj_add_strcpy(j->out, x, "path", f->path);
+        yyjson_mut_obj_add_str(j->out, x, "status", status_text(f->status));
+        yyjson_mut_obj_add_int(j->out, x, "add", f->added);
+        yyjson_mut_obj_add_int(j->out, x, "del", f->removed);
+        yyjson_mut_obj_add_bool(j->out, x, "binary", f->binary);
+        yyjson_mut_obj_add_bool(j->out, x, "exec", f->exec);
+        yyjson_mut_obj_add_bool(j->out, x, "risk", f->risk);
+        yyjson_mut_obj_add_bool(j->out, x, "cut", f->cut || !show);
+        yyjson_mut_obj_add_strcpy(j->out, x, "patch", show ? f->patch : "");
+        yyjson_mut_arr_append(files, x);
+    }
+    yyjson_mut_obj_add_bool(j->out, o, "truncated", truncated);
+    yyjson_mut_obj_add_val(j->out, o, "files", files);
+    return o;
+}
+
+static void body_diff(job *j, sh_store *st) {
+    sh_strv names = SH_STRV_INIT;
+    param_strv(j->params, "names", &names);
+    sh_skills sk;
+    sh_store_scan(st, &sk);
+    int available = 0, errors = 0;
+    sh_engine *e = names.len ? engine_for(j, st) : check_skills(j, st, &sk, &names, &available, &errors);  // no names: every update there is
+    sh_skill **todo = sh_xcalloc(sk.len + 1, sizeof *todo);
+    size_t n = 0;
+    for (size_t i = 0; i < sk.len; ++i)
+        if (names.len ? sh_strv_contains(&names, sk.items[i].name) : sk.items[i].update == SH_UPDATE_AVAILABLE) todo[n++] = &sk.items[i];
+    sh_review *reviews = sh_xcalloc(n + 1, sizeof *reviews);
+    if (n && !cancelled(j)) sh_engine_diff(e, todo, n, reviews);
+    engine_done(j, e);
+    size_t budget = REVIEW_BUDGET;
+    yyjson_mut_val *list = yyjson_mut_arr(j->out);
+    for (size_t i = 0; i < n && reviews[i].name; ++i) {
+        yyjson_mut_arr_append(list, review_json(j, &reviews[i], &budget));
+        add_result(j, reviews[i].name, !reviews[i].err, reviews[i].err);
+        sh_review_free(&reviews[i]);
+    }
+    yyjson_mut_obj_add_val(j->out, j->extra, "reviews", list);
+    sum(j, "reviewed", (long long)n);
+    if (names.len && n == 0) fail(j, "no such skill");
+    free(reviews);
+    free(todo);
+    sh_skills_free(&sk);
+    sh_strv_free(&names);
+}
+
+// `name` with an optional `stamp`, or `names`: each back to its newest kept version (Undo after an update)
+static void body_rollback(job *j, sh_store *st) {
+    sh_strv names = SH_STRV_INIT;
+    param_strv(j->params, "names", &names);
+    if (*param_str(j->params, "name")) sh_strv_push(&names, param_str(j->params, "name"));
+    if (names.len == 0) fail(j, "name which skill");
+    for (size_t i = 0; i < names.len; ++i) {
+        char *err = NULL;
+        const bool ok = sh_history_rollback(st, names.items[i], param_str(j->params, "stamp"), &err);
+        add_result(j, names.items[i], ok, err);
+        if (!ok) fail(j, err);
+        free(err);
+    }
+    sh_strv_free(&names);
+    j->rescan = true;
+}
+
+static void body_restore(job *j, sh_store *st) {
+    const char *name = param_str(j->params, "name");
+    char *err = NULL;
+    const bool ok = sh_history_restore(st, name, &err);
+    add_result(j, name, ok, err);
+    if (!ok) fail(j, err);
+    free(err);
+    j->rescan = true;
+}
+
+static void body_hold(job *j, sh_store *st) {
+    const char *name = param_str(j->params, "name");
+    char *err = NULL;
+    if (param_bool(j->params, "on", true)) {
+        if (!sh_hold_set(st, name, "", &err)) fail(j, err);
+    } else {
+        const char *const names[] = {name};
+        sh_holds_release(st, names, 1);
+    }
+    free(err);
+    j->rescan = true;
 }
 
 // ---- adding skills ----
@@ -321,6 +474,10 @@ static const job_method METHODS[] = {
     {"skills.update", "update", true, body_update, {NULL}},
     {"skills.install", "install", true, body_install, {"source", "skills", NULL}},
     {"skills.remove", "remove", true, body_remove, {"name", NULL}},
+    {"skills.diff", "diff", false, body_diff, {NULL}},
+    {"skills.rollback", "rollback", true, body_rollback, {NULL}},
+    {"skills.restore", "restore", true, body_restore, {"name", NULL}},
+    {"skills.hold", "hold", true, body_hold, {"name", NULL}},
     {"skills.track", "track", true, body_track, {"name", "source", NULL}},
     {"sources.discover", "discover", false, body_discover, {"input", NULL}},
     {"adopt", "adopt", true, body_adopt, {NULL}},

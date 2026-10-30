@@ -115,7 +115,7 @@ ApplicationWindow {
                         }
                         Text {
                             width: parent.width; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.Wrap
-                            text: parent.none ? "Install skills from a GitHub repository, or drop a folder with a SKILL.md into " + app.centralPath + "."
+                            text: parent.none ? "Install skills from a repository or a folder, or drop a folder with a SKILL.md into " + app.centralPath + "."
                                 : parent.good ? "Every tracked skill matches its upstream. Check again any time."
                                 : "Nothing in this view matches the current filter."
                             color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsBody; lineHeight: 1.2
@@ -123,11 +123,17 @@ ApplicationWindow {
                         Row {
                             anchors.horizontalCenter: parent.horizontalCenter
                             spacing: 8
-                            Btn { visible: parent.parent.none; kind: "primary"; iconName: "plus"; text: "Add from GitHub"; onClicked: app.detailMode = "add" }
+                            Btn { visible: parent.parent.none; kind: "primary"; iconName: "plus"; text: "Add skills"; onClicked: app.detailMode = "add" }
                             Btn { visible: !parent.parent.none && (app.filter.mode !== "all" || app.filter.text !== ""); iconName: "x"; text: "Clear filter"; onClicked: { app.filter.mode = "all"; app.filter.text = "" } }
                         }
                     }
                 }
+            }
+
+            ReviewPage {
+                anchors.fill: parent
+                visible: app.reviewOpen
+                z: 10
             }
 
             DetailPanel {
@@ -189,8 +195,13 @@ ApplicationWindow {
         anchors.bottom: parent.bottom
         anchors.bottomMargin: 54 + (win.consoleOpen ? 164 : 0)
         z: 20
+        onActed: app.undoLast()
     }
-    Connections { target: app; function onToast(level, text) { toast.show(level, text) } }
+    Connections {
+        target: app
+        function onToast(level, text) { toast.show(level, text) }
+        function onUndoOffered(text) { toast.show("ok", text, "Undo") }
+    }
 
     Shortcut { sequence: "/"; enabled: !win.typing; onActivated: top.focusSearch() }
     Shortcut { sequence: "Ctrl+F"; onActivated: top.focusSearch() }
@@ -198,9 +209,9 @@ ApplicationWindow {
     Shortcut { sequence: "Ctrl+Shift+E"; onActivated: app.detailMode = "transfer" }
     Shortcut { sequence: "Ctrl+Shift+A"; onActivated: app.detailMode = "providers" }
     Shortcut { sequence: "Ctrl+U"; onActivated: if (!app.busy) app.checkUpdates() }
-    Shortcut { sequence: "Ctrl+Shift+U"; onActivated: if (!app.busy && app.updateCount > 0) app.updateAll() }
+    Shortcut { sequence: "Ctrl+Shift+U"; onActivated: if (!app.busy && app.updateCount > 0) app.reviewAll() }
     Shortcut { sequences: ["F5", "Ctrl+R"]; onActivated: app.refresh() }
     Shortcut { sequence: "Ctrl+J"; onActivated: win.consoleOpen = !win.consoleOpen }
     Shortcut { sequence: "Ctrl+Q"; onActivated: Qt.quit() }
-    Shortcut { sequence: "Escape"; enabled: !win.typing; onActivated: { if (app.detailMode === "add") app.closeAdd(); else app.dismiss() } }
+    Shortcut { sequence: "Escape"; enabled: !win.typing; onActivated: { if (app.reviewOpen) app.closeReview(); else if (app.detailMode === "add") app.closeAdd(); else app.dismiss() } }
 }

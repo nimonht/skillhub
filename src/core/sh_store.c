@@ -461,7 +461,27 @@ static bool has_skill_md(const char *folder) {
 }
 
 // puts `stage` (or, with `link_to`, a link to that folder) where skill `name` belongs, moving any folder there aside
-static bool swap_in(sh_store *st, const char *name, const char *stage, const char *link_to) {
+static void sidecar_write(const char *bk, const char *name, const sh_backup_note *note) {
+    yyjson_mut_doc *d = yyjson_mut_doc_new(NULL);
+    yyjson_mut_val *root = yyjson_mut_obj(d);
+    yyjson_mut_doc_set_root(d, root);
+    sh_json_set_int(d, root, "version", 1);
+    sh_json_set_str(d, root, "name", name);
+    sh_json_set_str(d, root, "scope", "user");
+    sh_json_set_str(d, root, "reason", note->reason);
+    char *now = sh_now_iso();
+    sh_json_set_str(d, root, "createdAt", now);
+    free(now);
+    sh_json_set_str(d, root, "createdBy", "skillhub " SKILLHUB_VERSION);
+    sh_json_set_str(d, root, "treeSha", note->tree ? note->tree : "");
+    if (note->entry) sh_json_set_val(d, root, "lockEntry", sh_source_to_json(d, note->entry));
+    char *path = sh_strfmt("%s.json", bk);
+    sh_json_write(path, d, true, true);
+    free(path);
+    yyjson_mut_doc_free(d);
+}
+
+static bool swap_in(sh_store *st, const char *name, const char *stage, const char *link_to, const sh_backup_note *note) {
     bool ok = true;
     char *dest = sh_path_join(st->central, name), *bk = NULL, *journal = NULL;
     bool moved_aside = false;
@@ -483,6 +503,7 @@ static bool swap_in(sh_store *st, const char *name, const char *stage, const cha
             ok = false;
         } else {
             if (was_link) sh_remove_link(bk);  // a live link: the folder it led to is still there, nothing to keep
+            else if (moved_aside && note) sidecar_write(bk, name, note);
             prune_backups(st->backup, name, 3);
         }
     }
@@ -494,20 +515,24 @@ static bool swap_in(sh_store *st, const char *name, const char *stage, const cha
     return ok;
 }
 
-bool sh_store_place(sh_store *st, const char *name, const char *stage) {
+bool sh_store_place(sh_store *st, const char *name, const char *stage, const sh_backup_note *note) {
     bool ok = has_skill_md(stage);
     if (!ok) sh_store_log(st, "refusing %s: upstream folder has no valid SKILL.md", name);
-    else ok = swap_in(st, name, stage, NULL);
+    else ok = swap_in(st, name, stage, NULL, note);
     if (!ok) sh_remove_tree(stage);
     return ok;
 }
 
-bool sh_store_place_link(sh_store *st, const char *name, const char *target) {
+bool sh_store_place_link(sh_store *st, const char *name, const char *target, const sh_backup_note *note) {
     if (!has_skill_md(target)) {
         sh_store_log(st, "refusing %s: upstream folder has no valid SKILL.md", name);
         return false;
     }
-    return swap_in(st, name, "", target);
+    return swap_in(st, name, "", target, note);
+}
+
+bool sh_store_put_back(sh_store *st, const char *name, const char *backup, const sh_backup_note *note) {
+    return has_skill_md(backup) && swap_in(st, name, backup, NULL, note);
 }
 
 // a path from a journal that may be touched: inside the folder it belongs to
@@ -549,6 +574,8 @@ static int recover_swaps(sh_store *st) {
 }
 
 #define STALE_MS (10 * 60 * 1000)  // older leftovers are stale; younger ones may belong to a running 1.x, which takes no lock
+
+#define REVIEW_MS (24 * 60 * 60 * 1000)  // a reviewed update waits for the user to finish reading
 
 static bool stale(const char *path) { return sh_now_ms() - sh_mtime_ms(path) > STALE_MS; }
 
@@ -607,7 +634,8 @@ int sh_store_recover(sh_store *st, bool git_locks) {
     sh_list_dir(stage_root, SH_LIST_ALL, &stages);
     for (size_t i = 0; i < stages.len; ++i) {
         char *p = sh_path_join(stage_root, stages.items[i]);
-        if (stale(p)) sh_remove_tree(p);
+        const bool review = sh_starts_with(stages.items[i], "review-");
+        if (review ? sh_now_ms() - sh_mtime_ms(p) > REVIEW_MS : stale(p)) sh_remove_tree(p);
         free(p);
     }
     sh_strv_free(&stages);
@@ -626,7 +654,18 @@ bool sh_store_remove_skill(sh_store *st, const char *name) {
     const bool live = sh_is_link(dest);  // only the link goes; the folder is the author's, and needs no backup
     char *stamp = sh_stamp();
     char *bk = unused_backup(sh_strfmt("%s/_removed/%s-%s", st->backup, name, stamp));
+    sh_source entry;
+    const bool tracked = sh_lock_entry(st, name, &entry);
+    sh_trees *t = tracked ? sh_trees_load(st) : NULL;
+    char *tree = sh_strdup(sh_trees_get(t, name));
+    sh_trees_free(t);
     const bool gone = live ? sh_remove_link(dest) : sh_move_dir(dest, bk);
+    if (gone && !live) {
+        const sh_backup_note note = {"remove", tracked ? &entry : NULL, tree};
+        sidecar_write(bk, name, &note);
+    }
+    free(tree);
+    if (tracked) sh_source_free(&entry);
     free(bk);
     free(stamp);
     free(dest);

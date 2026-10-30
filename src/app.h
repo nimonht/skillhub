@@ -131,6 +131,11 @@ class AppController : public QObject {
     Q_PROPERTY(QString candidateType READ candidateType NOTIFY candidatesChanged)  // github, gitlab, git, local
     Q_PROPERTY(QString candidateHost READ candidateHost NOTIFY candidatesChanged)
     Q_PROPERTY(bool discovering READ discovering NOTIFY candidatesChanged)
+    Q_PROPERTY(bool reviewOpen READ reviewOpen NOTIFY reviewChanged)
+    Q_PROPERTY(bool reviewLoading READ reviewLoading NOTIFY reviewChanged)
+    Q_PROPERTY(QVariantList reviews READ reviews NOTIFY reviewChanged)
+    Q_PROPERTY(QVariantList versions READ versions NOTIFY versionsChanged)  // of the selected skill, newest first
+    Q_PROPERTY(bool onHold READ onHold NOTIFY versionsChanged)
     Q_PROPERTY(bool automationSupported READ automationSupported NOTIFY automationChanged)  // daily timer + stray watcher exist on this system
     Q_PROPERTY(QString timerState READ timerState NOTIFY automationChanged)
     Q_PROPERTY(QString watcherState READ watcherState NOTIFY automationChanged)
@@ -184,6 +189,11 @@ public:
     QString candidateType() const { return candidateType_; }
     QString candidateHost() const { return candidateHost_; }
     bool discovering() const { return discovering_; }
+    bool reviewOpen() const { return reviewOpen_; }
+    bool reviewLoading() const { return reviewLoading_; }
+    QVariantList reviews() const { return reviews_; }
+    QVariantList versions() const { return versions_; }
+    bool onHold() const { return onHold_; }
     bool automationSupported() const { return automationSupported_; }
     QString timerState() const { return timer_; }
     QString watcherState() const { return watch_; }
@@ -207,6 +217,13 @@ public:
     Q_INVOKABLE void checkUpdates();
     Q_INVOKABLE void checkUpdatesQuietly();  // launch-time check: only speaks up when something needs attention
     Q_INVOKABLE void updateAll();
+    Q_INVOKABLE void reviewAll() { openReview({}); }
+    Q_INVOKABLE void openReview(const QStringList &names);  // empty: every update there is
+    Q_INVOKABLE void closeReview();
+    Q_INVOKABLE void applyReview(const QStringList &names);
+    Q_INVOKABLE void rollback(const QString &name, const QString &stamp);
+    Q_INVOKABLE void undoLast();
+    Q_INVOKABLE void setHold(const QString &name, bool on);
     Q_INVOKABLE void updateSkill(const QString &name);
     Q_INVOKABLE void adopt();
     Q_INVOKABLE void select(const QString &name);
@@ -242,6 +259,9 @@ signals:
     void automationChanged();
     void themeChanged();
     void toast(const QString &level, const QString &text);
+    void undoOffered(const QString &text);
+    void reviewChanged();
+    void versionsChanged();
     void customProviderAdded(const QString &error);  // "" when it worked
 
 private:
@@ -255,6 +275,8 @@ private:
     void jobDone(const QJsonObject &done);
     void rebuildDetail();
     void readPreview(const QString &name);
+    void loadVersions();
+    void offerUndo(const QString &method, const QStringList &names, const QString &text);
     void refreshAutomation();
     void loadSettings();
     void saveSetting(const QString &key, const QJsonValue &value);
@@ -273,7 +295,10 @@ private:
     bool loading_ = false, stale_ = false;
     QString job_, jobKind_, jobName_;  // the running job: its id, kind, and the skill it is about
     QVariantMap detail_;
-    QVariantList candidates_;
+    QVariantList candidates_, reviews_, versions_;
+    QString undoMethod_;       // skills.rollback or skills.restore, for what just happened
+    QStringList undoNames_;
+    bool reviewOpen_ = false, reviewLoading_ = false, onHold_ = false;
     QVariantList importItems_;
     QString importError_, importPath_;
     QString selected_, preview_, focus_, mode_ = QStringLiteral("skill");
