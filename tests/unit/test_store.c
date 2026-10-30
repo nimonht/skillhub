@@ -95,11 +95,10 @@ static void recover(void) {
     teardown(&st);
 }
 
-static bool count_file(const char *rel, const char *full, bool is_link, void *user) {
-    (void)rel;
+static bool list_file(const char *rel, const char *full, bool is_link, void *user) {
     (void)full;
     (void)is_link;
-    ++*(size_t *)user;
+    sh_strv_push(user, rel);
     return true;
 }
 
@@ -139,11 +138,14 @@ static void folder_hash(void) {
         sh_strv_free(&order);
         char *full = at(dir);
         char *hash = sh_folder_hash(full);
-        // where the file system folds case, or Unicode forms, some files of a case land on one another; the order above still counts
-        size_t on_disk = 0;
-        sh_walk_files(full, count_file, &on_disk);
-        if (on_disk == yyjson_arr_size(sh_json_arr(c, "files")) + yyjson_arr_size(sh_json_arr(c, "skipped")) &&
-            strcmp(hash, sh_json_str(c, "computedHash")) != 0) {
+        // where the file system folds case or Unicode forms, files of a case land on one another or under another folder's
+        // spelling: the hash cannot match there, and the order above still counts
+        sh_strv on_disk = SH_STRV_INIT;
+        sh_walk_files(full, list_file, &on_disk);
+        bool intact = true;
+        yyjson_arr_foreach(sh_json_arr(c, "files"), j, m, f) intact = intact && sh_strv_contains(&on_disk, sh_json_str(f, "path"));
+        sh_strv_free(&on_disk);
+        if (intact && strcmp(hash, sh_json_str(c, "computedHash")) != 0) {
             fprintf(stderr, "case %s: hash %s, npx has %s\n", sh_json_str(c, "name"), hash, sh_json_str(c, "computedHash"));
             ++sh_test_failures;
         }
