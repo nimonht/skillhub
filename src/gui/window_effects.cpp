@@ -54,7 +54,9 @@ void prepare() {
 }
 
 void apply(QQuickWindow *window, const QString &material, bool dark) {
+    // a real window only: on the offscreen platform of the tests winId() is no handle at all
 #if defined(Q_OS_WIN)
+    if (QGuiApplication::platformName() != QLatin1String("windows")) return;
     const auto hwnd = reinterpret_cast<HWND>(window->winId());
     const BOOL immersive = dark;
     DwmSetWindowAttribute(hwnd, 20 /* DWMWA_USE_IMMERSIVE_DARK_MODE */, &immersive, sizeof immersive);
@@ -66,6 +68,7 @@ void apply(QQuickWindow *window, const QString &material, bool dark) {
     DwmExtendFrameIntoClientArea(hwnd, &margins);
 #elif defined(Q_OS_MACOS)
     (void)dark;
+    if (QGuiApplication::platformName() != QLatin1String("cocoa")) return;
     window_effects_apply_mac(window, material == QLatin1String("glass") ? 2 : material == QLatin1String("blur") ? 1 : 0);
 #else
     (void)window;
