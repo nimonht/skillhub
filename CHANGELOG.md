@@ -6,6 +6,13 @@
   links), any git URL (https, ssh, `git@host:path`), a branch or tag (`#ref`), a folder inside a repository, and local
   folders, as a copy that updates when you choose or as a live link (`--link`). Input follows `npx skills`, and the lock
   entries are the ones it writes.
+- **Review before you update.** `skillhub diff`, `skillhub update --review` and the Review page show every changed file with
+  a diff, flag scripts and your own edits, and apply exactly what you read. *Update all* reviews a whole batch, with a tick per
+  skill.
+- **One-click rollback.** Every backup now records its lock entry, so `skillhub rollback` and *Roll back* bring the source back
+  too, and *Undo* follows every update and removal. A rollback sets a hold: automatic updates leave the skill alone until
+  upstream moves on (`skillhub hold`, `skillhub release`). `skillhub restore` brings back a removed skill.
+- Automatic updates leave out updates that add or change scripts until you review them (`updates.autoSkipScripts`).
 - Export files move to version 2 and carry those sources; version 1 still reads. Import accepts remote sources over https
   only, so a hostile file cannot reach a local folder or use your SSH keys.
 - A private repository now says what to set up (a credential helper or an SSH key) instead of only git's message.

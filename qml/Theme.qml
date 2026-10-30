@@ -63,6 +63,7 @@ QtObject {
     readonly property FontLoader _f5: FontLoader { source: "qrc:/fonts/BarlowCondensed-Bold.ttf" }
     readonly property string ui: _f1.name !== "" ? _f1.name : "sans-serif"
     readonly property string display: _f5.name !== "" ? _f5.name : "sans-serif"
+    readonly property string mono: Qt.platform.os === "windows" ? "Consolas" : Qt.platform.os === "osx" ? "Menlo" : "monospace"
     // fixed scale (product UI): 12 / 13 / 14 / 16 / 20 / 26 / 34
     readonly property int fsMicro: 12
     readonly property int fsSmall: 13

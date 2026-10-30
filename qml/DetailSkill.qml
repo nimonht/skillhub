@@ -97,7 +97,8 @@ Flickable {
         Flow {
             width: parent.width
             spacing: 8
-            Btn { visible: root.d.state === "available"; kind: "primary"; iconName: "upgrade"; text: "Update to latest"; enabled: !app.busy; onClicked: app.updateSkill(root.d.name) }
+            Btn { visible: root.d.state === "available"; kind: "primary"; iconName: "search"; text: "Review changes"; enabled: !app.busy; onClicked: app.openReview([root.d.name]) }
+            Btn { visible: root.d.state === "available"; iconName: "upgrade"; text: "Update now"; enabled: !app.busy; onClicked: app.updateSkill(root.d.name) }
             Btn { visible: root.d.state === "tracked" || root.d.state === "error"; iconName: "refresh"; text: root.d.state === "error" ? "Retry" : "Check and update"; enabled: !app.busy; onClicked: app.updateSkill(root.d.name) }
             Btn { visible: !root.d.tracked; iconName: "branch"; text: "Set update source"; onClicked: root.editSource = !root.editSource }
             Btn { kind: "danger"; iconName: "trash"; text: "Remove"; enabled: !app.busy; onClicked: root.confirmRemove = !root.confirmRemove }
@@ -175,6 +176,43 @@ Flickable {
                         font.pixelSize: Theme.fsSmall
                         anchors.verticalCenter: parent.verticalCenter
                     }
+                }
+            }
+        }
+
+        // earlier versions, and what keeps automatic updates away
+        Column {
+            visible: app.versions.length > 0 || app.onHold
+            width: parent.width
+            spacing: 6
+            SectionLabel { width: parent.width; text: "Versions"; trailing: app.versions.length }
+            Row {
+                visible: app.onHold
+                width: parent.width
+                spacing: 8
+                Icon { name: "clock"; size: 16; color: Theme.notifyText; anchors.verticalCenter: parent.verticalCenter }
+                Text {
+                    width: parent.width - 24 - holdOff.width
+                    anchors.verticalCenter: parent.verticalCenter
+                    wrapMode: Text.Wrap
+                    text: "On hold: automatic updates leave this skill alone"
+                    color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsSmall
+                }
+                Btn { id: holdOff; kind: "ghost"; compact: true; text: "Release"; enabled: !app.busy; onClicked: app.setHold(root.d.name, false) }
+            }
+            Repeater {
+                model: app.versions
+                delegate: Row {
+                    required property var modelData
+                    width: parent.width
+                    spacing: 8
+                    Column {
+                        width: parent.width - back.width - 8
+                        anchors.verticalCenter: parent.verticalCenter
+                        NumText { width: parent.width; text: modelData.when; color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
+                        Text { width: parent.width; text: modelData.label; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
+                    }
+                    Btn { id: back; kind: "ghost"; compact: true; iconName: "refresh"; text: "Roll back"; enabled: !app.busy; onClicked: app.rollback(root.d.name, modelData.stamp) }
                 }
             }
         }

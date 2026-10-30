@@ -45,7 +45,7 @@ int main(int argc, char **argv) {
 
     if (args.isEmpty() || args.first() == QLatin1String("gui")) {
         // headless self-test: skillhub gui --shot out.png [--theme dark|light] [--size WxH] [--select NAME]
-        //   [--mode skill|agent|add|providers|transfer] [--agent ID] [--filter all|updates|local|problems] [--search TEXT]
+        //   [--mode skill|agent|add|providers|transfer|review] [--agent ID] [--filter all|updates|local|problems] [--search TEXT]
         //   [--discover OWNER/REPO] [--console] [--animate] [--action update-all|check|adopt [--busy]] [--settle TICKS] [--import FILE]
         const auto opt = [&](const char *name) {
             const int i = args.indexOf(QString::fromLatin1(name));
@@ -172,6 +172,7 @@ int main(int argc, char **argv) {
                         controller.setDetailMode(QStringLiteral("add"));
                         controller.discover(opt("--discover"));
                     }
+                    if (opt("--mode") == QLatin1String("review")) controller.reviewAll();
                     if (opt("--action") == QLatin1String("update-all")) controller.updateAll();
                     if (opt("--action") == QLatin1String("check")) controller.checkUpdates();
                     if (opt("--action") == QLatin1String("adopt")) controller.adopt();

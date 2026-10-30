@@ -5,6 +5,7 @@
 // and link-mode agents are relinked once at the end of a job instead of after every skill.
 #pragma once
 
+#include "sh_review.h"
 #include "sh_store.h"
 
 #ifdef __cplusplus
@@ -16,6 +17,10 @@ typedef struct sh_engine sh_engine;
 // One engine per job; it remembers the repositories it has brought up to date, so check then update fetch only once.
 sh_engine *sh_engine_new(sh_store *st);
 void sh_engine_free(sh_engine *e);
+
+// Automatic runs (`update --auto`, the daily timer): skills on hold stay as they are, and so do updates that add or change
+// scripts, unless settings.json switches that off. Such a skill gets `left_out`: it was not updated, and that is no failure.
+void sh_engine_set_auto(sh_engine *e);
 
 // Stops the job at its next safe point: no further repository is started and no further skill is swapped in. Skills
 // swapped in already stay, and their lock entries are committed. Callable from any thread.
@@ -31,6 +36,11 @@ void sh_engine_on_progress(sh_engine *e, sh_engine_progress fn, void *user);
 int sh_engine_check(sh_engine *e, sh_skills *skills, const sh_strv *only);
 // Applies the updates sh_engine_check found to the skills in `todo`; done[i] tells which ones worked. Returns how many did.
 int sh_engine_update(sh_engine *e, sh_skill *const *todo, size_t n, bool *done);
+// What updating each skill would change. out[i] is set for each one; a stage it names stays until sh_engine_apply takes it
+// or it grows old. Checks upstream on its own.
+void sh_engine_diff(sh_engine *e, sh_skill *const *todo, size_t n, sh_review *out);
+// Applies exactly what was reviewed: the stages from sh_engine_diff, checked for changes since. Same result as sh_engine_update.
+int sh_engine_apply(sh_engine *e, sh_skill *const *todo, const char *const *stages, size_t n, bool *done);
 
 typedef struct {
     sh_candidates cands;

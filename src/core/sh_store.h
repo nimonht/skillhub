@@ -57,6 +57,7 @@ typedef struct sh_skill {
     bool live;       // a link to a local folder: its edits show at once, and there is nothing to update
     char *new_hash;
     char *new_path;  // SKILL.md path upstream when the skill moved
+    bool left_out;   // an automatic update passed over it (sh_engine_set_auto)
     char *note;
 } sh_skill;
 
@@ -163,15 +164,19 @@ bool sh_source_runnable(const sh_source *s);  // a type Skill Hub can update (th
 bool sh_lock_put(sh_store *st, const char *name, const sh_source *src);
 // The same for many entries at once: each lock file is read and written once (the engine's group commits).
 bool sh_lock_put_many(sh_store *st, const char *const *names, const sh_source *const *srcs, size_t n);
+bool sh_lock_entry(const sh_store *st, const char *name, sh_source *out);  // false when the lock has no such entry
+yyjson_mut_val *sh_source_to_json(yyjson_mut_doc *m, const sh_source *src);
 
 // <cache>/sources.json: update data of Skill Hub's own (docs/formats.md, section 5). For GitLab and git sources the lock
 // holds npx's SHA-256 folder hash, which cannot be compared with upstream without downloading it; the git tree id each
-// skill was installed from is kept here instead. Derived data: when it is lost, the next update restores it.
+// skill was installed from is kept here instead, and for every source the SHA-256 folder hash of what was placed, which
+// tells local edits apart. Derived data: when it is lost, the next update restores it.
 typedef struct sh_trees sh_trees;
 sh_trees *sh_trees_load(const sh_store *st);
-const char *sh_trees_get(const sh_trees *t, const char *name);  // "" when unknown
+const char *sh_trees_get(const sh_trees *t, const char *name);      // "" when unknown
+const char *sh_trees_content(const sh_trees *t, const char *name);  // "" when unknown
 void sh_trees_free(sh_trees *t);
-void sh_trees_put_many(sh_store *st, const char *const *names, const char *const *ids, size_t n);
+void sh_trees_put_many(sh_store *st, const char *const *names, const char *const *ids, const char *const *contents, size_t n);
 
 // ---- skills (sh_store.c) ----
 void sh_store_scan(const sh_store *st, sh_skills *out);
@@ -184,12 +189,21 @@ bool sh_store_track(sh_store *st, const char *name, const char *repo_input, cons
 char *sh_dir_of(const char *skill_md_path);
 // A fresh staging folder name for `label`, unique across threads and processes (the folder is not created).
 char *sh_store_stage_dir(const sh_store *st, const char *label);
+// What is written next to a backup (docs/formats.md, section 4).
+typedef struct {
+    const char *reason;      // update, install, rollback, remove
+    const sh_source *entry;  // the lock entry of the version being replaced; NULL when it has none
+    const char *tree;        // the upstream tree id that version came from; "" when unknown
+} sh_backup_note;
 // Checks a staged skill folder (a SKILL.md with a description) and swaps it in as skill `name`, keeping the folder it
-// replaces as a backup. The stage is gone afterwards either way. Safe from worker threads for different names.
-bool sh_store_place(sh_store *st, const char *name, const char *stage);
+// replaces as a backup, described by `note` (may be NULL). The stage is gone afterwards either way. Safe from worker threads
+// for different names.
+bool sh_store_place(sh_store *st, const char *name, const char *stage, const sh_backup_note *note);
 // The same for a live link: skill `name` becomes a link to the folder `target`, whose edits every agent then sees at once.
 // The folder itself is never moved or changed.
-bool sh_store_place_link(sh_store *st, const char *name, const char *target);
+bool sh_store_place_link(sh_store *st, const char *name, const char *target, const sh_backup_note *note);
+// The same for a backup coming back: on failure it stays where it is.
+bool sh_store_put_back(sh_store *st, const char *name, const char *backup, const sh_backup_note *note);
 // Cleans up after a process that died while changing skills (docs/formats.md, section 8): puts back a folder an
 // interrupted swap had moved aside, removes staging folders, and (`git_locks`) removes git lock files older than ten
 // minutes from cache clones nobody is using. Only call it while holding the mutation lock. Returns the folders put back.

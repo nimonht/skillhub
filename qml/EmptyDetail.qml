@@ -39,7 +39,7 @@ Item {
         }
         Item { width: 1; height: 6 }
         Repeater {
-            model: [ { k: "/", t: "Filter skills" }, { k: "Ctrl+N", t: "Add from GitHub" }, { k: "Ctrl+U", t: "Check for updates" }, { k: "Ctrl+Shift+U", t: "Update everything" } ]
+            model: [ { k: "/", t: "Filter skills" }, { k: "Ctrl+N", t: "Add skills" }, { k: "Ctrl+U", t: "Check for updates" }, { k: "Ctrl+Shift+U", t: "Review every update" } ]
             delegate: Row {
                 required property var modelData
                 spacing: 10

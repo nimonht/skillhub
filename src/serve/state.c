@@ -5,6 +5,7 @@
 
 #include "serve.h"
 #include "sh_fs.h"
+#include "sh_history.h"
 #include "sh_json.h"
 #include "sh_path.h"
 #include "sh_time.h"
@@ -253,7 +254,7 @@ typedef struct {
 } tally;
 
 static yyjson_mut_val *row_json(yyjson_mut_doc *d, const sh_store *st, const sh_skill *s, const char *status, const char *note,
-                                size_t versions, bool *problem) {
+                                size_t versions, bool hold, bool *problem) {
     yyjson_mut_val *o = yyjson_mut_obj(d);
     const bool tracked = sh_source_tracked(&s->src);
     yyjson_mut_obj_add_strcpy(d, o, "name", s->name);
@@ -272,8 +273,7 @@ static yyjson_mut_val *row_json(yyjson_mut_doc *d, const sh_store *st, const sh_
     yyjson_mut_obj_add_val(d, o, "links", links);
     yyjson_mut_obj_add_bool(d, o, "problem", *problem);
     yyjson_mut_obj_add_bool(d, o, "parked", false);
-    yyjson_mut_obj_add_bool(d, o, "localEdits", false);
-    yyjson_mut_obj_add_bool(d, o, "hold", false);
+    yyjson_mut_obj_add_bool(d, o, "hold", hold);
     yyjson_mut_obj_add_uint(d, o, "versions", versions);
     yyjson_mut_obj_add_str(d, o, "lock", "current");
     char *path = sh_tilde(s->path);
@@ -291,6 +291,7 @@ static void build_rows(scan_result *r, const sh_store *st, const sh_skills *sk, 
                        tally *t) {
     sh_strv backed_up = SH_STRV_INIT;
     sh_list_dir(st->backup, SH_LIST_DIRS | SH_SORT_NAME, &backed_up);
+    sh_holds *holds = sh_holds_load(st);
     r->rows = sh_xcalloc(sk->len + 1, sizeof *r->rows);
     for (size_t i = 0; i < sk->len; ++i) {
         const sh_skill *s = &sk->items[i];
@@ -299,7 +300,7 @@ static void build_rows(scan_result *r, const sh_store *st, const sh_skills *sk, 
         const char *status = status_of(s, checks, just_updated, &note, &stale);
         if (stale) sh_strv_push(&r->stale, s->name);
         yyjson_mut_doc *d = yyjson_mut_doc_new(NULL);
-        yyjson_mut_val *o = row_json(d, st, s, status, note, versions_of(&backed_up, st->backup, s->name), &problem);
+        yyjson_mut_val *o = row_json(d, st, s, status, note, versions_of(&backed_up, st->backup, s->name), sh_holds_get(holds, s->name) != NULL, &problem);
         r->rows[r->n].name = sh_strdup(s->name);
         r->rows[r->n].json = json_of(d, o);
         ++r->n;
@@ -310,6 +311,7 @@ static void build_rows(scan_result *r, const sh_store *st, const sh_skills *sk, 
         t->checked += strcmp(status, "current") == 0 || strcmp(status, "available") == 0 || strcmp(status, "error") == 0 ||
                       strcmp(status, "updated") == 0;
     }
+    sh_holds_free(holds);
     sh_strv_free(&backed_up);
 }
 

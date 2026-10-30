@@ -8,6 +8,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
+#include <QLocale>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QSettings>
@@ -466,6 +467,93 @@ void AppController::select(const QString &name) {
     if (changed) preview_.clear();
     rebuildDetail();
     if (changed && !name.isEmpty()) readPreview(name);
+    if (changed) loadVersions();
+}
+
+// "2026-10-25T09:20:41.715Z", or a 1.x backup's 20261025-092041: the moment in local time
+static QString whenOf(const QString &iso, const QString &stamp) {
+    QDateTime t = QDateTime::fromString(iso, Qt::ISODateWithMs);
+    if (!t.isValid()) t = QDateTime::fromString(stamp.left(15), QStringLiteral("yyyyMMdd-HHmmss"));
+    return t.isValid() ? QLocale().toString(t.toLocalTime(), QLocale::ShortFormat) : stamp;
+}
+
+static QString versionLabel(const QString &reason) {
+    if (reason == QLatin1String("update")) return AppController::tr("Before an update");
+    if (reason == QLatin1String("rollback")) return AppController::tr("Before a rollback");
+    if (reason == QLatin1String("install")) return AppController::tr("Before it was installed again");
+    return AppController::tr("Backup");
+}
+
+void AppController::loadVersions() {
+    const QString name = selected_;
+    if (name.isEmpty()) {
+        versions_.clear();
+        onHold_ = false;
+        emit versionsChanged();
+        return;
+    }
+    core_.call(QStringLiteral("skills.history"), {{QStringLiteral("name"), name}}, [this, name](const CoreReply &r) {
+        if (name != selected_ || !r.ok()) return;
+        const QJsonObject o = r.result.toObject();
+        versions_.clear();
+        for (const QJsonValue &v : o.value(QStringLiteral("versions")).toArray()) {
+            const QJsonObject x = v.toObject();
+            const QString stamp = x.value(QStringLiteral("stamp")).toString();
+            versions_ << QVariantMap{{QStringLiteral("stamp"), stamp},
+                                     {QStringLiteral("when"), whenOf(x.value(QStringLiteral("createdAt")).toString(), stamp)},
+                                     {QStringLiteral("label"), versionLabel(x.value(QStringLiteral("reason")).toString())}};
+        }
+        onHold_ = o.value(QStringLiteral("hold")).toBool();
+        emit versionsChanged();
+    });
+}
+
+void AppController::offerUndo(const QString &method, const QStringList &names, const QString &text) {
+    undoMethod_ = method;
+    undoNames_ = names;
+    emit undoOffered(text);
+}
+
+void AppController::undoLast() {
+    if (busy_ || undoNames_.isEmpty()) return;
+    const QString method = undoMethod_;
+    const QStringList names = undoNames_;
+    undoNames_.clear();
+    if (method == QLatin1String("skills.rollback")) startJob(method, {{QStringLiteral("names"), QJsonArray::fromStringList(names)}}, tr("Rolling back"), QStringLiteral("rollback"), false);
+    else startJob(method, {{QStringLiteral("name"), names.first()}}, tr("Restoring %1").arg(names.first()), QStringLiteral("restore"), false);
+}
+
+void AppController::openReview(const QStringList &names) {
+    if (busy_) return;
+    reviews_.clear();
+    reviewOpen_ = reviewLoading_ = true;
+    emit reviewChanged();
+    startJob(QStringLiteral("skills.diff"), {{QStringLiteral("names"), QJsonArray::fromStringList(names)}}, tr("Reading what changed"), QStringLiteral("diff"), false);
+}
+
+void AppController::closeReview() {
+    reviewOpen_ = reviewLoading_ = false;
+    reviews_.clear();
+    emit reviewChanged();
+}
+
+void AppController::applyReview(const QStringList &names) {
+    if (busy_ || names.isEmpty()) return;
+    QJsonObject stages;
+    for (const QVariant &v : reviews_) {
+        const QVariantMap r = v.toMap();
+        if (names.contains(r.value(QStringLiteral("name")).toString())) stages.insert(r.value(QStringLiteral("name")).toString(), r.value(QStringLiteral("stage")).toString());
+    }
+    closeReview();
+    startJob(QStringLiteral("skills.update"), {{QStringLiteral("stages"), stages}}, tr("Updating skills"), QStringLiteral("update"), true);
+}
+
+void AppController::rollback(const QString &name, const QString &stamp) {
+    startJob(QStringLiteral("skills.rollback"), {{QStringLiteral("name"), name}, {QStringLiteral("stamp"), stamp}}, tr("Rolling back %1").arg(name), QStringLiteral("rollback"), false);
+}
+
+void AppController::setHold(const QString &name, bool on) {
+    startJob(QStringLiteral("skills.hold"), {{QStringLiteral("name"), name}, {QStringLiteral("on"), on}}, tr("Changing the hold"), QStringLiteral("hold"), false);
 }
 
 void AppController::readPreview(const QString &name) {
@@ -529,6 +617,7 @@ void AppController::rebuildDetail() {
                               {QStringLiteral("installed"), dateOf(s->installedAt)},
                               {QStringLiteral("updated"), dateOf(s->updatedAt)},
                               {QStringLiteral("tracked"), !s->source.isEmpty()},
+                              {QStringLiteral("versions"), s->versions},
                               {QStringLiteral("links"), links}};
     } else {
         preview_.clear();
@@ -576,6 +665,13 @@ void AppController::jobDone(const QJsonObject &done) {
     } else if (kind == QLatin1String("update")) {
         const int n = sum.value(QStringLiteral("updated")).toInt();
         msg = n ? tr("Updated %1 skill%2").arg(n).arg(plural(n)) : tr("Nothing to update");
+        if (n && done.value(QStringLiteral("ok")).toBool()) {
+            QStringList names;
+            for (const QJsonValue &v : results)
+                if (v.toObject().value(QStringLiteral("ok")).toBool()) names << v.toObject().value(QStringLiteral("name")).toString();
+            offerUndo(QStringLiteral("skills.rollback"), names, msg);
+            msg.clear();
+        }
     } else if (kind == QLatin1String("install")) {
         const int n = sum.value(QStringLiteral("installed")).toInt();
         msg = tr("Installed %1 skill%2").arg(n).arg(plural(n));
@@ -596,6 +692,31 @@ void AppController::jobDone(const QJsonObject &done) {
     } else if (kind == QLatin1String("remove")) {
         msg = done.value(QStringLiteral("ok")).toBool() ? tr("Removed %1 (backup kept)").arg(name) : tr("Could not remove %1").arg(name);
         level = done.value(QStringLiteral("ok")).toBool() ? QStringLiteral("ok") : QStringLiteral("error");
+        if (done.value(QStringLiteral("ok")).toBool()) {
+            offerUndo(QStringLiteral("skills.restore"), {name}, msg);
+            msg.clear();
+        }
+    } else if (kind == QLatin1String("diff")) {
+        reviewLoading_ = false;
+        reviews_ = done.value(QStringLiteral("reviews")).toArray().toVariantList();
+        emit reviewChanged();
+        if (!error.isEmpty()) {
+            closeReview();
+            msg = error;
+            level = QStringLiteral("error");
+        } else if (reviews_.isEmpty()) {
+            closeReview();
+            msg = tr("Nothing to update");
+        }
+    } else if (kind == QLatin1String("rollback")) {
+        msg = done.value(QStringLiteral("ok")).toBool() ? tr("Rolled back. Automatic updates leave it alone until upstream moves on") : error;
+        level = done.value(QStringLiteral("ok")).toBool() ? QStringLiteral("ok") : QStringLiteral("error");
+    } else if (kind == QLatin1String("restore")) {
+        msg = done.value(QStringLiteral("ok")).toBool() ? tr("Restored") : error;
+        level = done.value(QStringLiteral("ok")).toBool() ? QStringLiteral("ok") : QStringLiteral("error");
+    } else if (kind == QLatin1String("hold") && !error.isEmpty()) {
+        msg = error;
+        level = QStringLiteral("error");
     } else if (kind == QLatin1String("track")) {
         if (!done.value(QStringLiteral("ok")).toBool()) {
             msg = error;
@@ -640,6 +761,7 @@ void AppController::jobDone(const QJsonObject &done) {
         level = QStringLiteral("warn");
     }
     if (!msg.isEmpty()) emit toast(level, msg);
+    if (kind == QLatin1String("update") || kind == QLatin1String("rollback") || kind == QLatin1String("hold")) loadVersions();
 }
 
 // the window regained focus, or F5: the backend reads the shared folder again; changes come as a delta

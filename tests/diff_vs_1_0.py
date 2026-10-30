@@ -193,8 +193,11 @@ def snapshot(home, upstream):
                 out[rel] = "file %s %s" % (mode, hashlib.sha256(data).hexdigest()[:16])
         dirnames[:] = [d for d in dirnames if not os.path.islink(os.path.join(dirpath, d))]
     # 2.0's lock file for changing commands and its swap journal (docs/formats.md, section 8): no data, and 1.0.1 has
-    # neither. A journal entry left behind after a command would still show up.
+    # neither. A journal entry left behind after a command would still show up. The same for the description next to each
+    # backup (section 4).
     out.pop("state/skillhub/mutate.lock", None)
+    for k in [k for k in out if k.startswith(".agents/.backup/") and k.endswith(".json")]:
+        del out[k]
     for d in ("state/skillhub/journal", "state/skillhub", "state"):
         if d in out and not any(k.startswith(d + "/") for k in out):
             del out[d]

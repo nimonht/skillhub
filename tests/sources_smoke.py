@@ -18,6 +18,7 @@ import tempfile
 BIN = os.path.abspath(sys.argv[1])
 WIN = os.name == "nt"
 ROOT = os.path.realpath(tempfile.mkdtemp(prefix="skillhub-sources-"))
+GITCONFIG = os.path.join(ROOT, "gitconfig")
 GITLAB = "https://gitlab.com/group/sub/proj"
 PLAIN = "https://git.example.test/team/tools.git"
 
@@ -45,6 +46,11 @@ def git(cwd, *args):
 def fwd(path):
     """A path as Skill Hub stores it: with / on every platform."""
     return path.replace("\\", "/")
+
+
+def read(path):
+    with open(path, encoding="utf-8") as f:
+        return f.read()
 
 
 def write(path, text):
@@ -111,7 +117,7 @@ def listed(env):
 
 def rpc(env, *requests):
     """One backend session: each request in turn, each job until it is done. The replies and every jobDone, by request."""
-    p = subprocess.Popen([BIN, "serve", "--stdio"], env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    p = subprocess.Popen([BIN, "serve", "--stdio"], env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=None if os.environ.get("SKILLHUB_TEST_STDERR") else subprocess.DEVNULL)
 
     def ask(i, method, params):
         p.stdin.write((json.dumps({"jsonrpc": "2.0", "id": i, "method": method, "params": params}) + "\n").encode())
@@ -172,12 +178,16 @@ def hostile_import(home, env):
     check(not list(pathlib.Path(ROOT).rglob("pwned")), "a hostile import ran a command")
 
 
-def main():
-    global GITCONFIG
-    GITCONFIG = os.path.join(ROOT, "gitconfig")
+def serve_hosts():
+    """The throw-away git config that puts the fake hosts at bare repositories below ROOT/hosts."""
     hosts = pathlib.Path(ROOT, "hosts").as_uri()
     os.makedirs(os.path.join(ROOT, "hosts"))
-    write(GITCONFIG, '[url "%s/gitlab/"]\n\tinsteadOf = https://gitlab.com/\n[url "%s/plain/"]\n\tinsteadOf = https://git.example.test/\n[protocol "file"]\n\tallow = always\n' % (hosts, hosts))
+    write(GITCONFIG, '[url "%s/gitlab/"]\n\tinsteadOf = https://gitlab.com/\n[url "%s/github/"]\n\tinsteadOf = https://github.com/\n'
+                     '[url "%s/plain/"]\n\tinsteadOf = https://git.example.test/\n[protocol "file"]\n\tallow = always\n' % (hosts, hosts, hosts))
+
+
+def main():
+    serve_hosts()
 
     # ---- GitLab: nested groups, discovery, check, update ----
     lab = make_upstream("gitlab/group/sub/proj.git")
