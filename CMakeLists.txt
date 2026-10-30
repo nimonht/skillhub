@@ -96,6 +96,8 @@ add_library(skillhub_core STATIC
     src/core/sh_engine.c src/core/sh_engine.h
     src/core/sh_exe.c src/core/sh_exe.h
     src/core/sh_frontmatter.c src/core/sh_frontmatter.h
+    src/core/sh_fetch.c src/core/sh_fetch.h
+    src/core/sh_sysinfo.c src/core/sh_sysinfo.h
     src/core/sh_fs.c src/core/sh_fs.h
     src/core/sh_git.c src/core/sh_git.h
     src/core/sh_hash.c src/core/sh_hash.h
@@ -117,6 +119,7 @@ add_library(skillhub_core STATIC
     src/core/sh_utf.c src/core/sh_utf.h src/core/sh_unicode_tables.h
     ${CMAKE_BINARY_DIR}/providers_json.c)
 target_include_directories(skillhub_core PUBLIC src/core)
+target_include_directories(skillhub_core SYSTEM PRIVATE third_party/stb)
 target_compile_options(skillhub_core PRIVATE ${SKILLHUB_C_WARNINGS})
 target_compile_definitions(skillhub_core PUBLIC SKILLHUB_VERSION="${SKILLHUB_VERSION}")
 find_package(Threads REQUIRED)
@@ -206,6 +209,8 @@ if(SKILLHUB_GUI)
         src/main.cpp src/app.cpp src/app.h
         src/gui/core_client.cpp src/gui/core_client.h src/gui/skill_row.h
         src/gui/window_effects.cpp src/gui/window_effects.h
+        src/gui/terminal/vterm_item.cpp src/gui/terminal/vterm_item.h
+        src/gui/terminal/term_look.cpp src/gui/terminal/term_look.h
         src/core/sh_palette.c
         resources.qrc)
     # the window runs the command line as its backend: build it too, so a fresh build starts
@@ -214,7 +219,20 @@ if(SKILLHUB_GUI)
         add_dependencies(skillhub_gui skillhub_cliw)
     endif()
     target_link_libraries(skillhub_gui PRIVATE Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2)
-    target_include_directories(skillhub_gui PRIVATE src src/core)
+    target_include_directories(skillhub_gui PRIVATE src src/core src/term)
+    # the built-in terminal: libvterm (MIT, vendored) and a pseudo terminal, for the window only
+    file(GLOB SKILLHUB_VTERM_SOURCES third_party/libvterm/src/*.c)
+    add_library(skillhub_vterm STATIC ${SKILLHUB_VTERM_SOURCES})
+    target_include_directories(skillhub_vterm PUBLIC third_party/libvterm/include)
+    set_target_properties(skillhub_vterm PROPERTIES C_STANDARD 99 C_STANDARD_REQUIRED ON C_EXTENSIONS ON)
+    if(MSVC)
+        target_compile_options(skillhub_vterm PRIVATE /w)
+        target_compile_definitions(skillhub_vterm PRIVATE _CRT_SECURE_NO_WARNINGS)
+    else()
+        target_compile_options(skillhub_vterm PRIVATE -w)
+    endif()
+    target_sources(skillhub_gui PRIVATE src/term/sh_pty.h $<IF:$<BOOL:${WIN32}>,src/term/pty_win.c,src/term/pty_posix.c>)
+    target_link_libraries(skillhub_gui PRIVATE skillhub_vterm)
     if(APPLE)
         target_sources(skillhub_gui PRIVATE src/gui/window_effects_mac.mm)
         target_link_libraries(skillhub_gui PRIVATE "-framework AppKit")

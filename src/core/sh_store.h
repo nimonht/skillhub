@@ -189,6 +189,7 @@ sh_trees *sh_trees_load(const sh_store *st);
 const char *sh_trees_get(const sh_trees *t, const char *name);      // "" when unknown
 const char *sh_trees_content(const sh_trees *t, const char *name);  // "" when unknown
 void sh_trees_free(sh_trees *t);
+void sh_last_check_put(sh_store *st, int available, int errors);  // for `skillhub fetch`, which never goes online
 void sh_trees_put_many(sh_store *st, const char *const *names, const char *const *ids, const char *const *contents, size_t n);
 
 // ---- skills (sh_store.c) ----

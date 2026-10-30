@@ -229,6 +229,19 @@ try:
     if states(env)["three"].get("claude-code") != "link":
         fail("a skill added with several repositories is not linked")
 
+    # the banner: facts as JSON, one field at a time, and plain text when nobody is looking at a terminal
+    facts = json.loads(run(env, "fetch", "--json").stdout)
+    if facts["skills"] < 2 or facts["agents"] < 1 or not facts["user"] or not facts["os"]:
+        fail("fetch --json: %s" % facts)
+    if run(env, "fetch", "--field", "skills").stdout.strip() != str(facts["skills"]):
+        fail("fetch --field")
+    run(env, "fetch", "--field", "nosuch", expect=2)
+    banner = run(env, "fetch").stdout
+    if "\x1b" in banner or "Skills" not in banner or "\u2588" not in banner:
+        fail("fetch piped: " + banner)
+    if "\u2588" in run(env, "fetch", "--logo", "none").stdout or "\u25cf" in run(env, "fetch", "--icons", "none").stdout:
+        fail("fetch options")
+
     if "not installed" not in run(env, "autoupdate", "status").stdout and not LINUX:
         fail("autoupdate status on a machine where it is off")
 

@@ -520,3 +520,17 @@ void sh_trees_put_many(sh_store *st, const char *const *names, const char *const
     sh_json_index_free(ix);
     yyjson_mut_doc_free(m);
 }
+
+void sh_last_check_put(sh_store *st, int available, int errors) {
+    yyjson_mut_doc *m = sources_load(st);
+    yyjson_mut_val *last = sh_json_get_or_add_obj(m, yyjson_mut_doc_get_root(m), "lastCheck");
+    yyjson_mut_val *row = yyjson_mut_obj(m);
+    yyjson_mut_obj_add_sint(m, row, "atMs", sh_now_ms());
+    yyjson_mut_obj_add_int(m, row, "available", available);
+    yyjson_mut_obj_add_int(m, row, "errors", errors);
+    sh_json_set_val(m, last, st->scope, row);
+    char *path = sources_path(st);
+    sh_json_write(path, m, true, true);
+    free(path);
+    yyjson_mut_doc_free(m);
+}

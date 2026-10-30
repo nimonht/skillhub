@@ -9,6 +9,8 @@
 #include <string.h>
 
 #include "serve.h"
+#include "sh_exe.h"
+#include "sh_fetch.h"
 #include "sh_fs.h"
 #include "sh_history.h"
 #include "sh_json.h"
@@ -17,6 +19,7 @@
 #include "sh_path.h"
 #include "sh_proc.h"
 #include "sh_projects.h"
+#include "sh_sysinfo.h"
 #include "sh_utf.h"
 
 #ifdef _WIN32
@@ -599,6 +602,77 @@ static void m_projects_change(server *s, sh_rpc_msg *m) {
     free(err);
 }
 
+static void m_fetch_render(server *s, sh_rpc_msg *m) {
+    sh_store st;
+    scope_store(s->project, &st, NULL, NULL);
+    const char *icons = param_str(m->params, "icons");
+    const sh_fetch_opts o = {strcmp(param_str(m->params, "colors"), "256") == 0 ? SH_COLOR_256 : SH_COLOR_TRUE,
+                             strcmp(icons, "nerd") == 0 ? SH_ICONS_NERD : strcmp(icons, "none") == 0 ? SH_ICONS_NONE : SH_ICONS_UNICODE,
+                             *param_str(m->params, "logo") ? param_str(m->params, "logo") : "builtin", false, 0};
+    char *text = sh_fetch_render(&st, &o);
+    yyjson_mut_doc *d = yyjson_mut_doc_new(NULL);
+    yyjson_mut_val *r = yyjson_mut_obj(d);
+    yyjson_mut_obj_add_strcpy(d, r, "ansi", text);
+    send_result(s, m, d, r);
+    yyjson_mut_doc_free(d);
+    free(text);
+    sh_store_free(&st);
+}
+
+// the shells of this machine: what /etc/shells lists, and the usual names on PATH
+static void add_shells(yyjson_mut_doc *d, yyjson_mut_val *list) {
+    sh_strv seen = SH_STRV_INIT;
+    sh_buf etc = SH_BUF_INIT;
+    if (sh_read_file("/etc/shells", 0, &etc)) {
+        sh_strv lines = SH_STRV_INIT;
+        sh_split(sh_buf_str(&etc), etc.len, '\n', true, &lines);
+        for (size_t i = 0; i < lines.len; ++i) {
+            const char *path = lines.items[i];
+            if (path[0] != '/' || !sh_is_executable(path) || sh_strv_contains(&seen, sh_path_name(path))) continue;
+            sh_strv_push(&seen, sh_path_name(path));
+            yyjson_mut_val *o = yyjson_mut_obj(d);
+            yyjson_mut_obj_add_strcpy(d, o, "name", sh_path_name(path));
+            yyjson_mut_obj_add_strcpy(d, o, "path", path);
+            yyjson_mut_arr_append(list, o);
+        }
+        sh_strv_free(&lines);
+    }
+    sh_buf_free(&etc);
+    static const char *const names[] = {"bash", "zsh", "fish", "sh", "nu", "xonsh", "elvish", "pwsh", "powershell", "cmd", "wsl"};
+    for (size_t i = 0; i < sizeof names / sizeof names[0]; ++i) {
+        if (sh_strv_contains(&seen, names[i])) continue;
+        char *path = sh_find_executable(names[i], NULL);
+        if (path) {
+            sh_strv_push(&seen, names[i]);
+            yyjson_mut_val *o = yyjson_mut_obj(d);
+            yyjson_mut_obj_add_str(d, o, "name", names[i]);
+            yyjson_mut_obj_add_strcpy(d, o, "path", path);
+            yyjson_mut_arr_append(list, o);
+            free(path);
+        }
+    }
+    sh_strv_free(&seen);
+}
+
+static void m_system_info(server *s, sh_rpc_msg *m) {
+    sh_sysinfo info;
+    sh_sysinfo_read(&info);
+    yyjson_mut_doc *d = yyjson_mut_doc_new(NULL);
+    yyjson_mut_val *r = yyjson_mut_obj(d), *shells = yyjson_mut_arr(d);
+    yyjson_mut_obj_add_strcpy(d, r, "user", info.user);
+    yyjson_mut_obj_add_strcpy(d, r, "host", info.host);
+    yyjson_mut_obj_add_strcpy(d, r, "os", info.os);
+    yyjson_mut_obj_add_strcpy(d, r, "kernel", info.kernel);
+    yyjson_mut_obj_add_strcpy(d, r, "shell", info.shell);
+    yyjson_mut_obj_add_strcpy(d, r, "terminal", info.terminal);
+    yyjson_mut_obj_add_strcpy(d, r, "uptime", info.uptime);
+    add_shells(d, shells);
+    yyjson_mut_obj_add_val(d, r, "shells", shells);
+    send_result(s, m, d, r);
+    yyjson_mut_doc_free(d);
+    sh_sysinfo_free(&info);
+}
+
 static void m_palette(server *s, sh_rpc_msg *m) {
     sh_palette p;
     if (!sh_palette_derive(param_str(m->params, "seed"), strcmp(param_str(m->params, "mode"), "light") != 0, &p)) {
@@ -880,6 +954,8 @@ static const immediate IMMEDIATE[] = {
     {"skills.read", m_read},
     {"skills.history", m_history},
     {"palette.derive", m_palette},
+    {"fetch.render", m_fetch_render},
+    {"system.info", m_system_info},
     {"scope.set", m_scope_set},
     {"projects.list", m_projects_list},
     {"projects.add", m_projects_change},

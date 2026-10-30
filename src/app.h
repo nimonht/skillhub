@@ -156,6 +156,8 @@ class AppController : public QObject {
     Q_PROPERTY(QString systemAccent READ systemAccent NOTIFY themeChanged)       // "": this system does not tell
     Q_PROPERTY(bool compactDensity READ compactDensity NOTIFY themeChanged)
     Q_PROPERTY(QVariantList pathSizes READ pathSizes NOTIFY pathSizesChanged)
+    Q_PROPERTY(QVariantList shells READ shells NOTIFY countsChanged)                  // of this machine, from the backend
+    Q_PROPERTY(QVariantList externalTerminals READ externalTerminals CONSTANT)
     Q_PROPERTY(QString backendInfo READ backendInfo NOTIFY countsChanged)
     Q_PROPERTY(QString materialNote READ materialNote NOTIFY themeChanged)
     Q_PROPERTY(bool automationSupported READ automationSupported NOTIFY automationChanged)  // daily timer + stray watcher exist on this system
@@ -236,6 +238,8 @@ public:
     QString material() const;
     bool glassReady() const;
     QVariantList pathSizes() const { return pathSizes_; }
+    QVariantList shells() const { return shells_; }
+    QVariantList externalTerminals() const;
     QString backendInfo() const;
     QString materialNote() const;
     QVariantMap paletteDark() const { return paletteDark_; }
@@ -275,6 +279,12 @@ public:
     Q_INVOKABLE QVariant layoutState(const QString &key) const;
     Q_INVOKABLE void saveLayout(const QString &key, const QVariant &state);
     Q_INVOKABLE void loadProjects();
+    Q_INVOKABLE QString terminalShell() const;
+    Q_INVOKABLE QStringList terminalArguments() const;
+    Q_INVOKABLE QString terminalFolder() const;
+    Q_INVOKABLE QVariantMap terminalLook() const;
+    Q_INVOKABLE void requestBanner();
+    Q_INVOKABLE void openExternalTerminal(const QString &id);
     Q_INVOKABLE void applyMaterial(QQuickWindow *window, bool dark);
     Q_INVOKABLE void removeProject(const QString &path);
     Q_INVOKABLE void setProjectAuto(const QString &path, bool on);
@@ -331,6 +341,8 @@ signals:
     void themeChanged();
     void toast(const QString &level, const QString &text);
     void undoOffered(const QString &text);
+    void bannerReady(const QString &text);
+    void showTerminal();
     void settingsChanged();
     void pathSizesChanged();
     void showSettings(const QString &section);
@@ -378,7 +390,7 @@ private:
     QStringList suggested_;
     QString scope_, scopeCentral_, mechanism_;
     QJsonObject settings_;
-    QVariantList pathSizes_;
+    QVariantList pathSizes_, shells_;
     int settingsRev_ = 0;
     QString portalAccent_;
     QVariantMap paletteDark_, paletteLight_;

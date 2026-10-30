@@ -55,6 +55,19 @@ try:
         if not os.path.isfile(png) or os.path.getsize(png) < 8000:
             fail("%s: screenshot missing or nearly empty" % name)
         print("ok  " + name)
+    # the terminal on every system: a real shell on a real pty (ConPTY on Windows) answers through the emulator
+    dump = os.path.join(OUT, "terminal.txt")
+    shell_env = dict(env, SHELL="/bin/sh")
+    p = subprocess.run([BIN, "gui", "--shot", os.path.join(OUT, "terminal.png"), "--theme", "dark", "--size", "1280x800", "--layout", "dock=340", "--mode", "terminal",
+                        "--terminal-run", "echo pty-check", "--terminal-dump", dump, "--settle", "60" if os.name == "nt" else "20"],
+                       env=shell_env, capture_output=True, text=True, timeout=240)
+    if p.returncode != 0:
+        fail("terminal: exit %d\n%s" % (p.returncode, p.stderr))
+    with open(dump, encoding="utf-8") as f:
+        screen = f.read()
+    if screen.count("pty-check") < 2:   # the command as typed, and its answer
+        fail("the shell did not answer through the terminal:\n" + screen)
+    print("ok  terminal")
     print("gui launch test passed (screenshots in %s)" % OUT)
 finally:
     shutil.rmtree(home, ignore_errors=True)

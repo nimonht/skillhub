@@ -23,6 +23,11 @@
   `skillhub watch` as on Linux. Windows has no file-change trigger, so its watcher is `skillhub watch --run`, started at logon.
   Windows now shows notifications. Scheduled runs use the variables recorded when automation was switched on, so
   `CLAUDE_CONFIG_DIR` and the like resolve as they do in your shell.
+- **A terminal in the window.** Any shell, as tabs in the bottom dock, starting in the folder you are working on: libvterm over a
+  pty, or ConPTY on Windows. *Open in kitty*, Ghostty, Alacritty, WezTerm and others hands the folder to your own terminal. The look
+  can come from your kitty, Ghostty or Alacritty config.
+- **`skillhub fetch`**: a banner of the machine and its skills that never touches the network, with `--json`, `--field`, your own
+  logo, and a crisp image in kitty, Ghostty and WezTerm.
 - **The window is yours to arrange.** Every panel resizes with the mouse or Ctrl+Alt and the arrows, and keeps its size. The rail
   collapses to icons, the agent band to tiles. A Settings page (Ctrl+,) holds appearance, layout, updates, projects and more.
 - **Any accent colour**, your own or your desktop's, with every role derived to keep its contrast. **Blur and Liquid Glass**: native

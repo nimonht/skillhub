@@ -58,6 +58,9 @@ that into one directory plus a few symlinks, and tells you the moment something 
 - **Updates**: compares each skill's folder hash with its upstream repository (git tree SHA), updates one or all, keeps
   the previous three versions, and can run daily: a systemd timer on Linux, a launchd agent on macOS, a scheduled task on Windows.
 - **Stays tidy**: an optional watcher pulls a skill dropped into an agent folder back into the shared one.
+- **A terminal inside**: any shell in the bottom dock, as tabs, in the folder of the skills you are looking at, with the font and
+  colours of your kitty, Ghostty or Alacritty if you like. Or open your own terminal there in one click.
+- **`skillhub fetch`**: this machine and its skills at a glance, for every new shell. `--field NAME` feeds your own fastfetch.
 - **Yours to arrange**: every panel resizes and remembers its size, the rail shrinks to icons, and **Settings** holds it all:
   dark, light or system, any accent colour (or your desktop's), blur or Liquid Glass where your system offers it, density and
   scale. Whatever colour you pick stays readable: contrast is computed, and checked in CI for 72 hues.
@@ -170,6 +173,7 @@ skillhub restore my-skill                           # bring back a removed skill
 skillhub disable my-skill --agent claude-code       # one agent stops seeing it (enable brings it back)
 skillhub disable my-skill --shared                  # every agent that reads the shared folder stops seeing it
 
+skillhub fetch                                      # the banner; --json, or --field skills for one value
 skillhub add acme/skills --all --project .          # into this repository: .agents/skills and skills-lock.json
 skillhub check -C ~/work/app                        # -C is short for --project
 skillhub copy my-skill ~/work/app                   # a skill of yours, into a project
@@ -185,13 +189,17 @@ skillhub watch on          # auto-adopt strays dropped into agent folders
 |---|---|
 | `/` or `Ctrl+F` | filter skills |
 | `Up` / `Down`, `Enter` | move through the list, open a skill |
-| `Ctrl+N` | add skills from GitHub |
+| `Ctrl+N` | add skills |
 | `Ctrl+U` | check for updates |
-| `Ctrl+Shift+U` | update everything |
+| `Ctrl+Shift+U` | review every update |
 | `F5` | refresh |
 | `Ctrl+Shift+A` | manage agents |
 | `Ctrl+Shift+E` | transfer skills (export / import) |
 | `Ctrl+J` | show / hide the activity log |
+| `` Ctrl+` `` | show / hide the terminal |
+| `Ctrl+,` | settings |
+| `Ctrl+Alt+Arrows` | resize the panel with the focus, or the dock; `Ctrl+Alt+0` puts everything back |
+| `Ctrl+Shift+C`, `Ctrl+Shift+V` | copy and paste in the terminal |
 | `Esc` | clear the filter or close the panel |
 
 ## How agents are found and wired

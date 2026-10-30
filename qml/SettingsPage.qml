@@ -11,7 +11,7 @@ Rectangle {
     property string section: "appearance"
     readonly property var sections: [
         { id: "appearance", label: "Appearance", icon: "sun" }, { id: "layout", label: "Layout", icon: "all" },
-        { id: "updates", label: "Updates and sources", icon: "upgrade" }, { id: "projects", label: "Projects", icon: "branch" },
+        { id: "terminal", label: "Terminal", icon: "terminal" }, { id: "updates", label: "Updates and sources", icon: "upgrade" }, { id: "projects", label: "Projects", icon: "branch" },
         { id: "advanced", label: "Advanced", icon: "tool" }, { id: "about", label: "About", icon: "info" } ]
 
     function look(key, fallback) { return Theme.setting("appearance", key, fallback) }
@@ -270,6 +270,65 @@ Rectangle {
                 }
                 Toggle { width: Math.min(parent.width, 420); text: "Open the activity dock at start"; checked: Theme.setting("layout", "dockAtStart", false); onToggled: app.setSetting("layout", "dockAtStart", checked) }
                 Toggle { width: Math.min(parent.width, 420); text: "Tiles only in the agent band"; checked: Theme.setting("layout", "bandCompact", false); onToggled: app.setSetting("layout", "bandCompact", checked) }
+            }
+
+            // ---- terminal
+            Column {
+                visible: root.section === "terminal"
+                width: parent.width
+                spacing: 16
+                Group {
+                    title: "Shell"
+                    Flow {
+                        width: parent.width
+                        spacing: 6
+                        Repeater {
+                            model: app.shells
+                            delegate: Btn {
+                                required property var modelData
+                                kind: Theme.setting("terminal", "shell", "") === modelData.path ? "secondary" : "ghost"
+                                compact: true
+                                text: modelData.name
+                                onClicked: app.setSetting("terminal", "shell", modelData.path)
+                            }
+                        }
+                    }
+                }
+                Group {
+                    title: "Look"
+                    note: "Take the font and colours of a terminal you already set up."
+                    Segmented {
+                        width: Math.min(parent.width, 420)
+                        options: [ { value: "", label: "Own" }, { value: "kitty", label: "kitty" }, { value: "ghostty", label: "Ghostty" }, { value: "alacritty", label: "Alacritty" } ]
+                        current: Theme.setting("terminal", "importLook", "")
+                        onPicked: (v) => app.setSetting("terminal", "importLook", v)
+                    }
+                    Field { width: Math.min(parent.width, 420); text: Theme.setting("terminal", "fontFamily", ""); placeholderText: "Font family"; onAccepted: app.setSetting("terminal", "fontFamily", text.trim()) }
+                    Range { width: Math.min(parent.width, 420); label: "Font size"; from: 9; to: 28; stepSize: 1; value: Theme.setting("terminal", "fontSize", 0) || 14; shown: Math.round(value) + " px"; onMoved: (v) => app.setSetting("terminal", "fontSize", Math.round(v)) }
+                    Segmented {
+                        width: Math.min(parent.width, 340)
+                        options: [ { value: "block", label: "Block" }, { value: "bar", label: "Bar" }, { value: "underline", label: "Underline" } ]
+                        current: Theme.setting("terminal", "cursor", "block")
+                        onPicked: (v) => app.setSetting("terminal", "cursor", v)
+                    }
+                    Range { width: Math.min(parent.width, 420); label: "Lines kept above the screen"; from: 1000; to: 100000; stepSize: 1000; value: Theme.setting("terminal", "scrollback", 10000); shown: Math.round(value); onMoved: (v) => app.setSetting("terminal", "scrollback", Math.round(v)) }
+                }
+                Group {
+                    title: "Banner"
+                    Toggle { width: Math.min(parent.width, 420); text: "Show the banner in new terminals"; checked: Theme.setting("terminal", "banner", true); onToggled: app.setSetting("terminal", "banner", checked) }
+                    Segmented {
+                        width: Math.min(parent.width, 340)
+                        options: [ { value: "unicode", label: "Plain" }, { value: "nerd", label: "Nerd icons" }, { value: "none", label: "No dots" } ]
+                        current: Theme.setting("terminal", "icons", "unicode")
+                        onPicked: (v) => app.setSetting("terminal", "icons", v)
+                    }
+                    Field { width: Math.min(parent.width, 420); text: Theme.setting("terminal", "logo", "builtin"); placeholderText: "builtin, none, or the path of an image"; onAccepted: app.setSetting("terminal", "logo", text.trim()) }
+                }
+                Group {
+                    title: "Other terminals"
+                    note: "Found on this machine: " + (app.externalTerminals.length ? app.externalTerminals.map(function (t) { return t.label }).join(", ") : "none") + ". {dir} and {shell} stand for the folder and the shell in a command of your own."
+                    Field { width: parent.width; text: Theme.setting("terminal", "externalTemplate", ""); placeholderText: "kitty --directory {dir} {shell}"; onAccepted: app.setSetting("terminal", "externalTemplate", text.trim()) }
+                }
             }
 
             // ---- updates and sources
