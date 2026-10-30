@@ -257,7 +257,7 @@ Flickable {
 
         // earlier versions, and what keeps automatic updates away
         Column {
-            visible: app.versions.length > 0 || app.onHold
+            visible: app.versions.length > 0 || app.onHold || root.d.tracked
             width: parent.width
             spacing: 6
             SectionLabel { width: parent.width; text: "Versions"; trailing: app.versions.length }
@@ -274,6 +274,12 @@ Flickable {
                     color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsSmall
                 }
                 Btn { id: holdOff; kind: "ghost"; compact: true; text: "Release"; enabled: !app.busy; onClicked: app.setHold(root.d.name, false) }
+            }
+            Btn {
+                visible: root.d.tracked && !app.onHold
+                kind: "ghost"; compact: true; iconName: "clock"; text: "Hold this version"; enabled: !app.busy
+                onClicked: app.setHold(root.d.name, true)
+                Accessible.name: "Hold this version: automatic updates leave it alone"
             }
             Repeater {
                 model: app.versions

@@ -22,6 +22,8 @@ ApplicationWindow {
     readonly property bool overlayDetail: shell.width - Math.max(300, detail.SplitView.preferredWidth) - 1 < centerMin
     readonly property bool detailOpen: !overlayDetail || app.selected !== "" || app.detailMode !== "skill"
     readonly property bool bandCompact: Theme.setting("layout", "bandCompact", false)
+    readonly property bool railFolded: Theme.setting("layout", "railAutoCollapse", false) && width < 1000
+    onRailFoldedChanged: rail.SplitView.preferredWidth = railFolded ? 64 : Theme.railW
     readonly property bool typing: activeFocusItem && activeFocusItem.hasOwnProperty("cursorPosition")
 
     // every panel resizes: Rail | (top bar over (Center | Detail) over the dock) | footer

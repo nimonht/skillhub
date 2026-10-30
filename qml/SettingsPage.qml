@@ -268,6 +268,7 @@ Rectangle {
                     note: "Drag any edge between panels. Ctrl+Alt with the arrow keys does the same from the keyboard, and Ctrl+Alt+0 puts everything back."
                     Btn { iconName: "refresh"; text: "Reset sizes"; onClicked: root.resetLayout() }
                 }
+                Toggle { width: Math.min(parent.width, 420); text: "Fold the rail to icons in narrow windows"; checked: Theme.setting("layout", "railAutoCollapse", false); onToggled: app.setSetting("layout", "railAutoCollapse", checked) }
                 Toggle { width: Math.min(parent.width, 420); text: "Open the activity dock at start"; checked: Theme.setting("layout", "dockAtStart", false); onToggled: app.setSetting("layout", "dockAtStart", checked) }
                 Toggle { width: Math.min(parent.width, 420); text: "Tiles only in the agent band"; checked: Theme.setting("layout", "bandCompact", false); onToggled: app.setSetting("layout", "bandCompact", checked) }
             }
