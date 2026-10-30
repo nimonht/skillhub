@@ -87,6 +87,7 @@ add_custom_command(
 
 add_library(skillhub_core STATIC
     src/core/sh_catalog.c
+    src/core/sh_auto.c
     src/core/sh_collate.c src/core/sh_collate.h
     src/core/sh_history.c src/core/sh_history.h
     src/core/sh_state.c src/core/sh_state.h
@@ -120,7 +121,7 @@ target_compile_definitions(skillhub_core PUBLIC SKILLHUB_VERSION="${SKILLHUB_VER
 find_package(Threads REQUIRED)
 target_link_libraries(skillhub_core PUBLIC skillhub_yyjson Threads::Threads)
 if(WIN32)
-    target_link_libraries(skillhub_core PUBLIC shell32 ole32 uuid)
+    target_link_libraries(skillhub_core PUBLIC shell32 ole32 uuid user32)
 endif()
 
 # `skillhub serve` (src/serve): the backend the window talks to. The only part that needs libuv, so it is linked into the
@@ -128,6 +129,7 @@ endif()
 include(cmake/Libuv.cmake)
 add_library(skillhub_serve STATIC
     src/serve/jobs.c
+    src/serve/resident.c
     src/serve/serve.c src/serve/serve.h src/serve/sh_serve.h
     src/serve/state.c
     src/serve/watch.c)

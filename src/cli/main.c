@@ -119,8 +119,8 @@ static void usage(void) {
         "  skillhub disable|enable NAME... [--agent ID]... [--shared] [--all]   per-agent switches (no option: --all)\n"
         "  skillhub enable --all-parked            bring every parked skill back (do this before going back to 1.x)\n"
         "  skillhub track NAME SOURCE [PATH]       set the upstream of a local skill\n"
-        "  skillhub autoupdate on|off|status       daily update timer (Linux: systemd user timer)\n"
-        "  skillhub watch on|off|status            auto-adopt strays (Linux: systemd path unit)\n"
+        "  skillhub autoupdate on|off|status       daily update (systemd timer, launchd agent or scheduled task)\n"
+        "  skillhub watch on|off|status            auto-adopt strays (systemd path unit, launchd agent or a logon task)\n"
         "  skillhub export [FILE] [--no-local]    write every skill to one file (https sources; local skills embedded)\n"
         "  skillhub import FILE [--yes] [--no-local] [--only a,b]   install the skills of such a file on this machine\n"
         "  skillhub providers [--all] [--json]     coding agents found on this machine and how each sees skills\n"
@@ -425,6 +425,7 @@ static int cmd_providers(sh_store *st, const args_t *a) {
             return 1;
         }
         outf("%s%s\n", a->v[1], on ? " is now managed" : " is no longer managed");
+        sh_store_sync_watcher(st);
         return 0;
     }
     if (strcmp(what, "add") == 0) {
@@ -440,6 +441,7 @@ static int cmd_providers(sh_store *st, const args_t *a) {
         }
         outf("added %s\n", id);
         free(id);
+        sh_store_sync_watcher(st);
         return 0;
     }
     if (strcmp(what, "remove") == 0) {
@@ -447,7 +449,9 @@ static int cmd_providers(sh_store *st, const args_t *a) {
             usage();
             return 2;
         }
-        return sh_store_remove_custom_provider(st, a->v[1]) ? 0 : 1;
+        if (!sh_store_remove_custom_provider(st, a->v[1])) return 1;
+        sh_store_sync_watcher(st);
+        return 0;
     }
     const bool all = has(a, "--all");
     if (has(a, "--json")) {
@@ -1011,11 +1015,10 @@ static int cmd_uninstall(sh_store *st, const args_t *a) {
 
 static int cmd_automation(sh_store *st, const char *cmd, const args_t *a) {
     if (!sh_automation_supported()) {
-        errf("skillhub %s is not available on this platform: it needs systemd user units (Linux only)\n", cmd);
+        errf("skillhub %s is not available on this platform\n", cmd);
         return 1;
     }
     const bool timer = strcmp(cmd, "autoupdate") == 0;
-    const char *unit = timer ? "skillhub-update.timer" : "skillhub-adopt.path";
     const char *what = a->n > 0 ? a->v[0] : "";
     char *e = NULL;
     if (strcmp(what, "on") == 0) {
@@ -1028,8 +1031,8 @@ static int cmd_automation(sh_store *st, const char *cmd, const args_t *a) {
         sh_store_remove_units(st, timer, !timer, &e);
     }
     free(e);
-    char *state = sh_store_unit_state(st, unit);
-    outf("%s: %s\n", unit, state);
+    char *state = sh_automation_state(st, timer);
+    outf("%s: %s\n", sh_automation_name(timer), state);
     free(state);
     return 0;
 }
@@ -1091,6 +1094,11 @@ static int run_cli(int argc, char **argv) {
         }
         return sh_serve_stdio();
     }
+    // a scheduled run lacks the login environment; what automation recorded fills in. Before anything reads a path.
+    bool scheduled = argc > 2 && strcmp(argv[1], "watch") == 0 && strcmp(argv[2], "--run") == 0;
+    for (int i = 2; i < argc; ++i) scheduled = scheduled || strcmp(argv[i], "--auto") == 0 || (argc > 1 && strcmp(argv[1], "adopt") == 0 && strcmp(argv[i], "--notify") == 0);
+    if (scheduled) sh_automation_apply_env();
+    if (argc > 2 && strcmp(argv[1], "watch") == 0 && strcmp(argv[2], "--run") == 0) return sh_watch_run();
     // --wait SECONDS (how long a changing command waits for another one to finish) is taken out before the commands see
     // their arguments
     int wait_s = 60;

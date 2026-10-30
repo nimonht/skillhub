@@ -178,7 +178,7 @@ Parameters marked `?` are optional. `names` is a list of skill names; an empty o
 | `transfer.export` | `path`, `includeLocal` | `{ "tracked":N, "local":N, "skipped":[...] }` |
 | `transfer.preview` | `path` | `{ "items":[{"name","description","local","source","files","exists","problem","installable"}] }` |
 | `transfer.import` | `path`, `names` | job |
-| `automation.status` | none | `{ "supported":true, "timer":"on", "watcher":"off", "mechanism":"systemd" }` |
+| `automation.status` | none | `{ "supported":true, "timer":"on", "watcher":"off", "mechanism":"systemd" }`; `mechanism` is `systemd`, `launchd`, `Task Scheduler` or `none` |
 | `automation.set` | `timer?`, `watcher?` (booleans) | `{ ... as automation.status }` |
 | `projects.list` | none | `{ "projects":[ <Project>, ... ], "suggested":[...] }` |
 | `projects.add` | `path` | `{}` |

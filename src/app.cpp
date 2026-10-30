@@ -939,6 +939,7 @@ void AppController::refreshAutomation() {
         if (!r.ok()) return;
         const QJsonObject o = r.result.toObject();
         automationSupported_ = o.value(QStringLiteral("supported")).toBool();
+        mechanism_ = o.value(QStringLiteral("mechanism")).toString();
         timer_ = o.value(QStringLiteral("timer")).toString(QStringLiteral("off"));
         watch_ = o.value(QStringLiteral("watcher")).toString(QStringLiteral("off"));
         emit automationChanged();

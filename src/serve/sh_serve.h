@@ -7,6 +7,7 @@ extern "C" {
 #endif
 
 int sh_serve_stdio(void);  // returns the exit code once standard input has closed and the last job has stopped
+int sh_watch_run(void);    // `skillhub watch --run`: returns only when the watcher cannot go on
 
 #ifdef __cplusplus
 }

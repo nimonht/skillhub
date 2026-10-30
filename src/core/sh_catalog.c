@@ -467,39 +467,3 @@ void sh_store_watch_dirs(const sh_store *st, sh_strv *out) {
         sh_strv_free(&own);
     }
 }
-
-bool sh_store_watcher_stale(const sh_store *st) {
-    char *unit = sh_path_join(st->home, ".config/systemd/user/skillhub-adopt.path");
-    sh_buf b = SH_BUF_INIT;
-    const bool have_file = sh_read_file(unit, 0, &b);
-    free(unit);
-    if (!have_file) {
-        sh_buf_free(&b);
-        return false;
-    }
-    sh_strv lines = SH_STRV_INIT, have = SH_STRV_INIT, want = SH_STRV_INIT;
-    sh_split(sh_buf_str(&b), b.len, '\n', false, &lines);
-    for (size_t i = 0; i < lines.len; ++i)
-        if (sh_starts_with(lines.items[i], "PathChanged=")) sh_strv_push(&have, lines.items[i] + 12);
-    sh_store_watch_dirs(st, &want);
-    sh_strv_sort(&have, NULL);
-    sh_strv_sort(&want, NULL);
-    bool same = have.len == want.len;
-    for (size_t i = 0; same && i < have.len; ++i) same = strcmp(have.items[i], want.items[i]) == 0;
-    const bool stale = want.len > 0 && !same;
-    sh_strv_free(&lines);
-    sh_strv_free(&have);
-    sh_strv_free(&want);
-    sh_buf_free(&b);
-    return stale;
-}
-
-bool sh_store_sync_watcher(sh_store *st) {
-    if (!sh_store_watcher_stale(st)) return false;
-    char *err = NULL;
-    const bool ok = sh_store_install_units(st, false, true, &err);
-    if (ok) sh_store_log(st, "updated the stray watcher for the agents on this machine");
-    else sh_store_log(st, "FAILED to update the stray watcher: %s", err ? err : "");
-    free(err);
-    return ok;
-}

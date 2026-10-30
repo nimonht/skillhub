@@ -487,8 +487,8 @@ Commands that work on many repositories (`add`, `check`, `update`, `import`) han
 | `SKILLHUB_CACHE` | the cache folder itself; being set counts, even when empty |
 | `SKILLHUB_STATE` | the state folder itself |
 | `SKILLHUB_BIN_PATH` | replaces `PATH` when looking for agents' commands (tests) |
+| `SKILLHUB_AUTOMATION_DRYRUN` | Write the unit, plist or task files and log the commands instead of running them. `systemd`, `launchd` or `schtasks` picks that backend on any system; any other value keeps this system's own |
 | `SKILLHUB_NO_SYMLINKS` | Any value: behave like an account that may not create symlinks. On Windows junctions are used for the user's own skills. Everywhere, projects get synced copies |
 | `SKILLHUB_GUI_BIN` | the window program `skillhub` starts, instead of the one next to it |
 | `SKILLHUB_BACKEND` | the backend program the window starts, instead of the one next to it |
-| `SKILLHUB_AUTOMATION_DRYRUN` | log the commands and files automation would run or write, instead of doing it (tests) |
 | `SKILLHUB_THEME`, `SKILLHUB_REDUCE_MOTION`, `SKILLHUB_NO_HOVER` | window test switches, as in 1.x |

@@ -424,7 +424,7 @@ static void m_initialize(server *s, sh_rpc_msg *m) {
     yyjson_mut_obj_add_int(d, r, "protocol", PROTOCOL);
     yyjson_mut_obj_add_str(d, r, "version", SKILLHUB_VERSION);
     yyjson_mut_obj_add_int(d, r, "pid", sh_process_id());
-    yyjson_mut_obj_add_str(d, caps, "automation", sh_automation_supported() ? "systemd" : "none");
+    yyjson_mut_obj_add_str(d, caps, "automation", sh_automation_mechanism());
     yyjson_mut_obj_add_str(d, caps, "links", sh_can_make_dir_links() ? "symlink" : "junction");
     yyjson_mut_obj_add_bool(d, caps, "projects", false);
     yyjson_mut_obj_add_bool(d, caps, "terminalFetch", false);
@@ -528,11 +528,12 @@ static void m_scope_set(server *s, sh_rpc_msg *m) {
     const char *scope = param_str(m->params, "scope");
     const bool user = !*scope || strcmp(scope, "user") == 0;
     sh_store st;
-    if (!user && !sh_store_init_project(&st, scope, NULL, NULL, NULL)) {
+    if (user) {
+        sh_store_init(&st, NULL, NULL);
+    } else if (!sh_store_init_project(&st, scope, NULL, NULL, NULL)) {
         send_error(s, m, SH_RPC_NOT_FOUND, "no such folder");
         return;
     }
-    if (user) sh_store_init(&st, NULL, NULL);
     free(s->project);
     s->project = user ? NULL : sh_strdup(st.project);
     check_map_free(&s->checks);
@@ -754,14 +755,14 @@ static void m_preview(server *s, sh_rpc_msg *m) {
 }
 
 static void automation_result(server *s, sh_rpc_msg *m, sh_store *st) {
-    char *timer = sh_store_unit_state(st, "skillhub-update.timer"), *watcher = sh_store_unit_state(st, "skillhub-adopt.path");
+    char *timer = sh_automation_state(st, true), *watcher = sh_automation_state(st, false);
     yyjson_mut_doc *d = yyjson_mut_doc_new(NULL);
     yyjson_mut_val *r = yyjson_mut_obj(d);
     const bool supported = sh_automation_supported();
     yyjson_mut_obj_add_bool(d, r, "supported", supported);
     yyjson_mut_obj_add_str(d, r, "timer", strcmp(timer, "enabled") == 0 ? "on" : "off");
     yyjson_mut_obj_add_str(d, r, "watcher", strcmp(watcher, "enabled") == 0 ? "on" : "off");
-    yyjson_mut_obj_add_str(d, r, "mechanism", supported ? "systemd" : "none");
+    yyjson_mut_obj_add_str(d, r, "mechanism", sh_automation_mechanism());
     send_result(s, m, d, r);
     yyjson_mut_doc_free(d);
     free(timer);

@@ -7,6 +7,7 @@
 #endif
 
 [Setup]
+CloseApplications=yes
 AppId={{B3A2C4E8-5D61-4F0B-9A57-2C8E1D7F6A90}
 AppName=Skill Hub
 AppVersion={#AppVersion}
@@ -44,6 +45,12 @@ Name: "{autodesktop}\Skill Hub"; Filename: "{app}\skillhub.exe"; Tasks: desktopi
 
 [Run]
 Filename: "{app}\skillhub.exe"; Description: "Start Skill Hub"; Flags: nowait postinstall skipifsilent
+
+[UninstallRun]
+Filename: "schtasks.exe"; Parameters: "/End /TN ""SkillHub\Stray watcher"""; Flags: runhidden; RunOnceId: "EndWatcher"
+Filename: "schtasks.exe"; Parameters: "/Delete /TN ""SkillHub\Stray watcher"" /F"; Flags: runhidden; RunOnceId: "DeleteWatcher"
+Filename: "schtasks.exe"; Parameters: "/Delete /TN ""SkillHub\Daily update"" /F"; Flags: runhidden; RunOnceId: "DeleteUpdate"
+Filename: "taskkill.exe"; Parameters: "/F /IM skillhubw.exe"; Flags: runhidden; RunOnceId: "StopBackend"
 
 [Code]
 const
