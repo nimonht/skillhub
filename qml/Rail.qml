@@ -100,6 +100,9 @@ Rectangle {
             }
         }
 
+        ScopeMenu { width: parent.width }
+        Item { width: 1; height: 8 }
+
         SectionLabel { width: parent.width; text: "Skills" }
         FilterItem { text: "All skills"; mode: "all"; iconName: "all"; count: app.skillCount }
         FilterItem { text: "Updates"; mode: "updates"; iconName: "upgrade"; count: app.updateCount; countColor: Theme.notifyText }
@@ -109,7 +112,7 @@ Rectangle {
         Item { width: 1; height: 10 }
         SectionLabel { width: parent.width; text: "Tools" }
         FilterItem { text: "Agents"; mode: "@providers"; iconName: "sliders"; count: app.agents.length; asAction: true; onTriggered: app.detailMode = "providers"; on: app.detailMode === "providers" }
-        FilterItem { text: "Transfer skills"; mode: "@transfer"; iconName: "export"; count: 0; asAction: true; hideCount: true; onTriggered: app.detailMode = "transfer"; on: app.detailMode === "transfer" }
+        FilterItem { visible: !app.inProject; text: "Transfer skills"; mode: "@transfer"; iconName: "export"; count: 0; asAction: true; hideCount: true; onTriggered: app.detailMode = "transfer"; on: app.detailMode === "transfer" }
 
         Item { width: 1; height: 10; visible: app.automationSupported }
         SectionLabel { width: parent.width; text: "Automation"; visible: app.automationSupported }

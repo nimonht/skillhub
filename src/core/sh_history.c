@@ -83,8 +83,9 @@ void sh_versions_free(sh_versions *v) {
 static bool plain_name(const char *n) { return *n && n[0] != '.' && !strchr(n, '/') && !strchr(n, '\\'); }
 
 // the upstream tree id the installed skill came from: the lock has it for GitHub and local folders, the record for the rest
-static const char *tree_of(const sh_source *s, const sh_trees *t, const char *name) {
-    return strcmp(s->type, "gitlab") == 0 || strcmp(s->type, "git") == 0 ? sh_trees_get(t, name) : s->hash;
+static const char *tree_of(const sh_store *st, const sh_source *s, const sh_trees *t, const char *name) {
+    const bool local = strcmp(s->type, "local") == 0;
+    return !local && (st->project || strcmp(s->type, "gitlab") == 0 || strcmp(s->type, "git") == 0) ? sh_trees_get(t, name) : s->hash;
 }
 
 // after a version came back: the lock entry it had, or (no sidecar) the current one with its hash cleared
@@ -141,7 +142,7 @@ bool sh_history_rollback(sh_store *st, const char *name, const char *stamp, char
     sh_source current;
     const bool tracked = sh_lock_entry(st, name, &current);
     sh_trees *t = sh_trees_load(st);
-    char *from = sh_strdup(tracked ? tree_of(&current, t, name) : "");
+    char *from = sh_strdup(tracked ? tree_of(st, &current, t, name) : "");
     sh_trees_free(t);
     const sh_backup_note note = {"rollback", tracked ? &current : NULL, from};
     const bool ok = sh_store_put_back(st, name, bk, &note);
@@ -215,15 +216,14 @@ struct sh_holds {
     sh_json_index *ix;
 };
 
-static yyjson_mut_val *user_holds(yyjson_mut_doc *m) {
-    return sh_json_get_or_add_obj(m, sh_json_get_or_add_obj(m, yyjson_mut_doc_get_root(m), "holds"), "user");
+static yyjson_mut_val *scope_holds(yyjson_mut_doc *m, const sh_store *st) {
+    return sh_json_get_or_add_obj(m, sh_json_get_or_add_obj(m, yyjson_mut_doc_get_root(m), "holds"), st->scope);
 }
 
 sh_holds *sh_holds_load(const sh_store *st) {
-    (void)st;
     sh_holds *h = sh_xcalloc(1, sizeof *h);
     h->doc = sh_state_load(NULL);
-    h->ix = sh_json_index_new(h->doc ? user_holds(h->doc) : NULL);
+    h->ix = sh_json_index_new(h->doc ? scope_holds(h->doc, st) : NULL);
     return h;
 }
 
@@ -240,10 +240,9 @@ void sh_holds_free(sh_holds *h) {
 }
 
 bool sh_hold_set(sh_store *st, const char *name, const char *from_tree, char **err) {
-    (void)st;
     yyjson_mut_doc *m = sh_state_load(err);
     if (!m) return false;
-    yyjson_mut_val *holds = user_holds(m);
+    yyjson_mut_val *holds = scope_holds(m, st);
     yyjson_mut_val *entry = yyjson_mut_obj(m);
     sh_json_set_str(m, entry, "fromTree", from_tree);
     char *now = sh_now_iso();
@@ -257,10 +256,9 @@ bool sh_hold_set(sh_store *st, const char *name, const char *from_tree, char **e
 }
 
 bool sh_holds_release(sh_store *st, const char *const *names, size_t n) {
-    (void)st;
     yyjson_mut_doc *m = sh_state_load(NULL);
     if (!m) return false;
-    yyjson_mut_val *holds = user_holds(m);
+    yyjson_mut_val *holds = scope_holds(m, st);
     bool changed = false;
     for (size_t i = 0; i < n; ++i) {
         if (!yyjson_mut_obj_get(holds, names[i])) continue;

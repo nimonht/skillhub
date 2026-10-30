@@ -138,7 +138,21 @@ Written exactly like `npx skills` `src/local-lock.ts`, because it is committed a
 }
 ```
 
-- Skill names sorted; two-space indentation; trailing newline.
+- Skill names sorted; two-space indentation; trailing newline. No timestamps: two branches that add different skills merge
+  without a conflict.
+- Project scope: the shared folder is `<project>/.agents/skills`. Agents whose `projectDir` is `.agents/skills` read it
+  themselves, the others get relative links inside the repository, never into `~`. Backups live outside the repository, in
+  `<state>/projects/<h8>/backup`. `state.json` and `sources.json` keep a project's holds and records under the key
+  `project:<root>`.
+- This file comes with the repository, so it is untrusted: a `local` source outside the project is never read, and a link
+  in the project's shared folder is no skill.
+- Where symlinks cannot be made, agents with a folder of their own get a copy that relink keeps identical (link state
+  `synced`, healthy): a junction holds an absolute path, so it could not be committed. A copy that drifted is kept in
+  `_conflicts` before it is replaced. A text file where a link belongs (git with `core.symlinks` off) is left alone, and
+  `doctor` says so.
+- There are no live links in a project (a link to a folder on one machine means nothing to the team) and no personal
+  switches. A project's tree ids are kept in `sources.json`, as for GitLab, so a skill npx installed is offered as an update
+  once.
 - Optional fields: `sourceUrl`, `ref`, `skillPath`, `version`, `via`, `subagents`, `wellKnownDigest`. Unknown fields are
   kept.
 - `local` sources are stored relative to the project: `./path`, or `../path` when outside it; a path on another Windows
@@ -473,7 +487,7 @@ Commands that work on many repositories (`add`, `check`, `update`, `import`) han
 | `SKILLHUB_CACHE` | the cache folder itself; being set counts, even when empty |
 | `SKILLHUB_STATE` | the state folder itself |
 | `SKILLHUB_BIN_PATH` | replaces `PATH` when looking for agents' commands (tests) |
-| `SKILLHUB_NO_SYMLINKS` | Windows only, any value: behave like an account that may not create symlinks (junctions are used) |
+| `SKILLHUB_NO_SYMLINKS` | Any value: behave like an account that may not create symlinks. On Windows junctions are used for the user's own skills. Everywhere, projects get synced copies |
 | `SKILLHUB_GUI_BIN` | the window program `skillhub` starts, instead of the one next to it |
 | `SKILLHUB_BACKEND` | the backend program the window starts, instead of the one next to it |
 | `SKILLHUB_AUTOMATION_DRYRUN` | log the commands and files automation would run or write, instead of doing it (tests) |

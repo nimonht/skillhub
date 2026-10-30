@@ -102,6 +102,7 @@ add_library(skillhub_core STATIC
     src/core/sh_link.c src/core/sh_link.h
     src/core/sh_lock.c
     src/core/sh_origin.c src/core/sh_origin.h
+    src/core/sh_projects.c src/core/sh_projects.h
     src/core/sh_path.c src/core/sh_path.h
     src/core/sh_proc.c src/core/sh_proc.h
     src/core/sh_rpc.c src/core/sh_rpc.h

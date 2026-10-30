@@ -71,7 +71,8 @@ for m in re.finditer(r"^  ('?)([a-z0-9-]+)\1: \{\n(.*?)^  \},", body, re.S | re.
                 x = parse_join(e)
                 if x:
                     detect.append(x)
-    entries[key] = {"id": key, "label": name, "dir": d, "detect": detect}
+    project = re.search(r"skillsDir: '([^']+)'", block)
+    entries[key] = {"id": key, "label": name, "dir": d, "projectDir": project.group(1) if project else ".agents/skills", "detect": detect}
 
 # --- hand-written knowledge the registry does not carry ------------------------------------------------------------
 def pdir(k): return entries[k]["dir"]
@@ -99,7 +100,7 @@ EXTRA_DIRS = {"codex": ["${CODEX_HOME:-~/.codex}/skills"]}
 # One Antigravity (the registry lists the IDE and the CLI separately; both are wired through ~/.gemini/config/skills.json).
 for k in ("antigravity", "antigravity-cli"):
     entries.pop(k, None)
-entries["antigravity"] = {"id": "antigravity", "label": "Antigravity", "dir": "", "mode": "config",
+entries["antigravity"] = {"id": "antigravity", "label": "Antigravity", "dir": "", "projectDir": ".agents/skills", "mode": "config",
                           "configFile": "~/.gemini/config/skills.json",
                           "detect": ["~/.gemini/antigravity", "~/.gemini/antigravity-cli", "~/.antigravity-ide"],
                           "extraDirs": ["~/.gemini/antigravity/skills", "~/.gemini/antigravity-cli/skills"]}
@@ -125,7 +126,7 @@ for k, e in entries.items():
 FIRST = ["claude-code", "codex", "gemini-cli", "antigravity", "cursor", "github-copilot", "opencode", "windsurf", "zed", "amp",
          "goose", "kiro-cli", "qwen-code", "cline", "roo", "kilo", "junie", "droid", "openhands", "continue"]
 order = [k for k in FIRST if k in entries] + sorted(k for k in entries if k not in FIRST)
-out = {"format": "skillhub-providers", "version": 1,
+out = {"format": "skillhub-providers", "version": 2,
        "source": f"vercel-labs/skills src/agents.ts @ {commit} (MIT) with skillhub overrides",
        "providers": [entries[k] for k in order]}
 json.dump(out, sys.stdout, indent=1, ensure_ascii=False)

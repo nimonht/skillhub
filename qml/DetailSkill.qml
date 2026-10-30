@@ -15,6 +15,7 @@ Flickable {
     }
     property bool confirmRemove: false
     property bool editSource: false
+    property bool pickProject: false
     property bool moreText: false
     contentWidth: width
     contentHeight: col.height + 40
@@ -101,7 +102,23 @@ Flickable {
             Btn { visible: root.d.state === "available"; iconName: "upgrade"; text: "Update now"; enabled: !app.busy; onClicked: app.updateSkill(root.d.name) }
             Btn { visible: root.d.state === "tracked" || root.d.state === "error"; iconName: "refresh"; text: root.d.state === "error" ? "Retry" : "Check and update"; enabled: !app.busy; onClicked: app.updateSkill(root.d.name) }
             Btn { visible: !root.d.tracked; iconName: "branch"; text: "Set update source"; onClicked: root.editSource = !root.editSource }
+            Btn { visible: !app.inProject && app.projects.length > 0; iconName: "branch"; text: "Copy to project"; enabled: !app.busy; onClicked: root.pickProject = !root.pickProject }
             Btn { kind: "danger"; iconName: "trash"; text: "Remove"; enabled: !app.busy; onClicked: root.confirmRemove = !root.confirmRemove }
+        }
+        Column {
+            visible: root.pickProject && !app.inProject
+            width: parent.width
+            spacing: 4
+            Repeater {
+                model: app.projects
+                delegate: Btn {
+                    required property var modelData
+                    kind: "ghost"; compact: true; iconName: "branch"
+                    text: modelData.name
+                    enabled: !app.busy
+                    onClicked: { root.pickProject = false; app.copyToProject(root.d.name, modelData.path) }
+                }
+            }
         }
         Column {   // inline instead of a modal
             visible: root.editSource
@@ -170,10 +187,11 @@ Flickable {
                         elide: Text.ElideRight
                         text: modelData.state === "link" ? "symlink to the shared folder"
                               : modelData.state === "off" ? "turned off for this agent"
+                              : modelData.state === "synced" ? "a copy kept identical"
                               : modelData.state === "missing" ? "no link, repair needed"
                               : modelData.state === "copy" ? "own copy, not the shared one"
                               : "link points elsewhere"
-                        color: (modelData.state === "link" || modelData.state === "off") ? Theme.text2 : Theme.notifyText
+                        color: (modelData.state === "link" || modelData.state === "off" || modelData.state === "synced") ? Theme.text2 : Theme.notifyText
                         font.family: Theme.ui
                         font.pixelSize: Theme.fsSmall
                         anchors.verticalCenter: parent.verticalCenter
@@ -185,6 +203,7 @@ Flickable {
                         implicitWidth: 56
                         text: modelData.label
                         showLabel: false
+                        visible: !app.inProject
                         checked: modelData.state !== "off"
                         enabled: !app.busy
                         onToggled: app.setAgentEnabled([root.d.name], modelData.id, checked)
@@ -220,11 +239,20 @@ Flickable {
                     implicitWidth: 56
                     text: "Shared-folder readers"
                     showLabel: false
+                    visible: !app.inProject
                     checked: !root.d.parked
                     enabled: !app.busy
                     onToggled: app.setAgentEnabled([root.d.name], "@shared", checked)
                 }
             }
+        }
+
+        Text {
+            visible: app.inProject
+            width: parent.width
+            wrapMode: Text.Wrap
+            text: "A project's skills are shared with its team, so they have no personal switches."
+            color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall; lineHeight: 1.2
         }
 
         // earlier versions, and what keeps automatic updates away

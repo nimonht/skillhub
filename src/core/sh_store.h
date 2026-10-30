@@ -19,6 +19,7 @@ typedef struct sh_agent {
     char *label;
     char *mode;          // link: one symlink per skill in `dir` | native: reads the shared folder | config: listed in a config file
     char *dir;           // where the agent reads user-level skills (native: the shared folder)
+    char *project_dir;   // where it reads a project's skills, relative to the project; "" = unknown
     bool linked;         // mode == link
     sh_strv extra_dirs;  // other places it may keep skills (legacy folders): scanned for strays
     sh_strv ignore;      // entries owned by the agent itself, never touched
@@ -31,7 +32,7 @@ typedef struct sh_agent {
     bool custom;         // added by the user
 } sh_agent;
 
-typedef enum { SH_LINK_NATIVE, SH_LINK_LINKED, SH_LINK_MISSING, SH_LINK_COPY, SH_LINK_FOREIGN, SH_LINK_OFF } sh_link_state;
+typedef enum { SH_LINK_NATIVE, SH_LINK_LINKED, SH_LINK_MISSING, SH_LINK_COPY, SH_LINK_FOREIGN, SH_LINK_OFF, SH_LINK_SYNCED } sh_link_state;
 
 typedef struct sh_source {
     char *type;         // sourceType: "github" (also when empty: 1.x wrote none), "gitlab", "git", "local", or one npx runs
@@ -111,6 +112,8 @@ struct sh_mutex;
 
 typedef struct sh_store {
     char *home;
+    char *project;        // the project this store works on, or NULL: the user's own skills
+    char *scope;          // "user" or "project:<root>": the key in state.json and sources.json
     char *central;
     char *lock_path;      // the lock file new entries go to
     char *lock_other;     // a second lock file that also exists (docs/formats.md, section 2), or NULL
@@ -120,14 +123,18 @@ typedef struct sh_store {
     char *state;          // durable internal state: the mutation lock, the swap journal
     sh_agent *providers;  // every agent in the catalog plus the user's own, with the detection result
     size_t n_providers;
-    sh_agent **agents;    // the managed ones (detected, or switched on), pointing into `providers`
+    sh_agent **agents;    // the managed ones (detected, or switched on), pointing into `providers`, or `project_agents`
     size_t n_agents;
+    sh_agent *project_agents;  // the same agents at their folders in the project
     sh_log_fn log;        // called from the engine's worker threads too, one line at a time
     void *log_user;
     struct sh_mutex *log_lock;
 } sh_store;
 
 void sh_store_init(sh_store *st, sh_log_fn log, void *user);
+// A store of a project's skills (docs/formats.md, section 3): <root>/.agents/skills, skills-lock.json, and agents at their
+// project folders. Everything else works as on the user's own skills. false with *err when `root` is no folder.
+bool sh_store_init_project(sh_store *st, const char *root, sh_log_fn log, void *user, char **err);
 void sh_store_free(sh_store *st);
 void sh_store_log(sh_store *st, const char *fmt, ...) SH_PRINTF(2, 3);
 
@@ -170,6 +177,7 @@ bool sh_lock_put_many(sh_store *st, const char *const *names, const sh_source *c
 bool sh_lock_files_put(sh_store *st, const char *const *names, const sh_source *const *srcs, size_t n);
 bool sh_lock_entry(const sh_store *st, const char *name, sh_source *out);  // false when the lock has no such entry
 yyjson_mut_val *sh_source_to_json(yyjson_mut_doc *m, const sh_source *src);
+void sh_source_resolve(const sh_store *st, sh_source *s);  // a project lock holds local sources relative to the project
 
 // <cache>/sources.json: update data of Skill Hub's own (docs/formats.md, section 5). For GitLab and git sources the lock
 // holds npx's SHA-256 folder hash, which cannot be compared with upstream without downloading it; the git tree id each

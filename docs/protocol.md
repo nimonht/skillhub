@@ -181,9 +181,11 @@ Parameters marked `?` are optional. `names` is a list of skill names; an empty o
 | `automation.status` | none | `{ "supported":true, "timer":"on", "watcher":"off", "mechanism":"systemd" }` |
 | `automation.set` | `timer?`, `watcher?` (booleans) | `{ ... as automation.status }` |
 | `projects.list` | none | `{ "projects":[ <Project>, ... ], "suggested":[...] }` |
-| `projects.add` | `path` | `{ <Project> }` |
+| `projects.add` | `path` | `{}` |
 | `projects.remove` | `path` | `{}` |
-| `scope.set` | `scope` | snapshot page 0 |
+| `projects.setAuto` | `path`, `on` | `{}` |
+| `scope.set` | `scope` (`user`, or a project's folder) | `{ "scope", "central" }`, then a `state.delta` as for any change. Refused with `1001` while a job runs. Jobs, `skills.read` and `skills.history` then work on that scope. A new backend starts on `user` |
+| `skills.copyToProject` | `name`, `project` | job |
 | `settings.get` | none | the whole `settings.json` object |
 | `settings.set` | `patch` (an object merged into the settings; a `null` value removes that key) | the whole object; the backend also sends `settings.changed`. Settings are not skills, so this needs no mutation lock and works while a job runs |
 | `system.info` | none | `{ "user","host","os","kernel","shell","terminal","uptime","paths":{...} }` |
@@ -192,15 +194,16 @@ Parameters marked `?` are optional. `names` is a list of skill names; an empty o
 | `palette.derive` | `seed` (`#RRGGBB`), `mode` (`dark` or `light`) | `{ "roles":{"action","actionInk","mark","markText","markLow","focus","selected","inkOk"}, "clash":"" }` |
 | `jobs.cancel` | `job` | `{}` |
 
-`<Project>`: `{ "path", "name", "skills":N, "problems":N, "autoUpdate":false }`.
+`<Project>`: `{ "path", "name", "skills":N, "autoUpdate":false }`.
 
 What 2.0's backend answers today (milestone M1c): `initialize`, `shutdown`, `state.snapshot`, `skills.read`,
 `skills.check`, `skills.update`, `skills.install`, `skills.remove`, `skills.track`, `skills.diff`, `skills.history`,
-`skills.rollback`, `skills.restore`, `skills.hold`, `skills.setAgentEnabled`, `sources.discover`, `adopt`, `relink`,
+`skills.rollback`, `skills.restore`, `skills.hold`, `skills.setAgentEnabled`, `skills.copyToProject`, `sources.discover`,
+`adopt`, `relink`, `scope.set`, `projects.list`, `projects.add`, `projects.remove`, `projects.setAuto`,
 `providers.list`, `providers.setManaged`, `providers.addCustom`, `providers.removeCustom`, `providers.rescan`,
 `transfer.export`, `transfer.preview`, `transfer.import`, `automation.status`, `automation.set`, `settings.get`,
-`settings.set` and `jobs.cancel`. The others arrive with the features they belong to (projects; the terminal and `fetch`;
-the accent engine) and until then get `-32601`.
+`settings.set` and `jobs.cancel`. The others arrive with the features they belong to (the terminal and `fetch`; the accent
+engine) and until then get `-32601`.
 
 ### Notifications from the backend
 

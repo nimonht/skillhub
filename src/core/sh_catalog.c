@@ -126,6 +126,7 @@ static void agent_from_json(yyjson_val *o, bool custom, sh_agent *a) {
     const char *mode = sh_json_str(o, "mode");
     a->mode = sh_strdup(*mode ? mode : "link");
     a->dir = sh_expand_path(sh_json_str(o, "dir"));
+    a->project_dir = sh_strdup(sh_json_str(o, "projectDir"));
     a->linked = strcmp(a->mode, "link") == 0;
     expand_all(sh_json_arr(o, "extraDirs"), &a->extra_dirs);
     strings(sh_json_arr(o, "ignore"), &a->ignore);
@@ -141,6 +142,7 @@ static void agent_free(sh_agent *a) {
     free(a->label);
     free(a->mode);
     free(a->dir);
+    free(a->project_dir);
     sh_strv_free(&a->extra_dirs);
     sh_strv_free(&a->ignore);
     sh_strv_free(&a->bins);

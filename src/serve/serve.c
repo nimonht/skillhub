@@ -15,6 +15,7 @@
 #include "sh_link.h"
 #include "sh_path.h"
 #include "sh_proc.h"
+#include "sh_projects.h"
 #include "sh_utf.h"
 
 #ifdef _WIN32
@@ -246,15 +247,21 @@ struct waiting {
 
 typedef struct {
     server *sv;
+    char *project;
     check_map checks;
     sh_strv just_updated;
 } scan_args;
 
+void scope_store(const char *project, sh_store *st, sh_log_fn log, void *user) {
+    if (!project || !sh_store_init_project(st, project, log, user, NULL)) sh_store_init(st, log, user);
+}
+
 static void scan_main(void *arg) {
     scan_args *a = arg;
-    scan_result *r = scan_build(&a->checks, &a->just_updated);
+    scan_result *r = scan_build(a->project, &a->checks, &a->just_updated);
     check_map_free(&a->checks);
     sh_strv_free(&a->just_updated);
+    free(a->project);
     post_event(a->sv, EV_SCAN_DONE, NULL, NULL, 0, 0, 0, r);
     free(a);
 }
@@ -266,6 +273,7 @@ void request_scan(server *s) {
     }
     scan_args *a = sh_xcalloc(1, sizeof *a);
     a->sv = s;
+    a->project = s->project ? sh_strdup(s->project) : NULL;
     a->checks = check_map_copy(&s->checks);
     for (size_t i = 0; i < s->just_updated.len; ++i) sh_strv_push(&a->just_updated, s->just_updated.items[i]);
     s->scanner = sh_thread_start(scan_main, a);
@@ -273,6 +281,7 @@ void request_scan(server *s) {
     if (!s->scanner) {
         check_map_free(&a->checks);
         sh_strv_free(&a->just_updated);
+        free(a->project);
         free(a);
     }
 }
@@ -510,10 +519,88 @@ static bool m_from_state(server *s, sh_rpc_msg *m) {
     return true;
 }
 
+// `scope`: "user", or a project's folder. The window hears of the change as a delta, like any other.
+static void m_scope_set(server *s, sh_rpc_msg *m) {
+    if (s->job) {
+        send_error(s, m, SH_RPC_BUSY, "another job is running");
+        return;
+    }
+    const char *scope = param_str(m->params, "scope");
+    const bool user = !*scope || strcmp(scope, "user") == 0;
+    sh_store st;
+    if (!user && !sh_store_init_project(&st, scope, NULL, NULL, NULL)) {
+        send_error(s, m, SH_RPC_NOT_FOUND, "no such folder");
+        return;
+    }
+    if (user) sh_store_init(&st, NULL, NULL);
+    free(s->project);
+    s->project = user ? NULL : sh_strdup(st.project);
+    check_map_free(&s->checks);
+    memset(&s->checks, 0, sizeof s->checks);
+    yyjson_mut_doc *d = yyjson_mut_doc_new(NULL);
+    yyjson_mut_val *r = yyjson_mut_obj(d);
+    yyjson_mut_obj_add_strcpy(d, r, "scope", st.scope);
+    yyjson_mut_obj_add_strcpy(d, r, "central", st.central);
+    send_result(s, m, d, r);
+    yyjson_mut_doc_free(d);
+    sh_store_free(&st);
+    request_scan(s);
+}
+
+static void m_projects_list(server *s, sh_rpc_msg *m) {
+    sh_projects p;
+    char *err = NULL;
+    if (!sh_projects_load(&p, &err)) {
+        send_error(s, m, SH_RPC_LOCKED, err ? err : "projects.json cannot be read");
+        free(err);
+        return;
+    }
+    yyjson_mut_doc *d = yyjson_mut_doc_new(NULL);
+    yyjson_mut_val *r = yyjson_mut_obj(d), *list = yyjson_mut_arr(d), *found = yyjson_mut_arr(d);
+    for (size_t i = 0; i < p.len; ++i) {
+        yyjson_mut_val *o = yyjson_mut_obj(d);
+        yyjson_mut_obj_add_strcpy(d, o, "path", p.items[i].path);
+        yyjson_mut_obj_add_strcpy(d, o, "name", p.items[i].name);
+        yyjson_mut_obj_add_bool(d, o, "autoUpdate", p.items[i].auto_update);
+        char *skills = sh_path_join(p.items[i].path, ".agents/skills");
+        sh_strv names = SH_STRV_INIT;
+        sh_list_dir(skills, SH_LIST_DIRS, &names);
+        yyjson_mut_obj_add_uint(d, o, "skills", names.len);
+        sh_strv_free(&names);
+        free(skills);
+        yyjson_mut_arr_append(list, o);
+    }
+    sh_strv suggested = SH_STRV_INIT;
+    sh_projects_suggest(&suggested);
+    for (size_t i = 0; i < suggested.len; ++i) yyjson_mut_arr_add_strcpy(d, found, suggested.items[i]);
+    yyjson_mut_obj_add_val(d, r, "projects", list);
+    yyjson_mut_obj_add_val(d, r, "suggested", found);
+    send_result(s, m, d, r);
+    yyjson_mut_doc_free(d);
+    sh_strv_free(&suggested);
+    sh_projects_free(&p);
+}
+
+static void m_projects_change(server *s, sh_rpc_msg *m) {
+    char *err = NULL;
+    const char *path = param_str(m->params, "path");
+    const bool ok = strcmp(m->method, "projects.add") == 0 ? sh_projects_add(path, &err)
+                    : strcmp(m->method, "projects.remove") == 0 ? sh_projects_remove(path, &err)
+                                                                : sh_projects_set_auto(path, param_bool(m->params, "on", false), &err);
+    if (ok) {
+        yyjson_mut_doc *d = yyjson_mut_doc_new(NULL);
+        send_result(s, m, d, yyjson_mut_obj(d));
+        yyjson_mut_doc_free(d);
+    } else {
+        send_error(s, m, SH_RPC_NOT_FOUND, err ? err : "no such project");
+    }
+    free(err);
+}
+
 static void m_history(server *s, sh_rpc_msg *m) {
     const char *name = param_str(m->params, "name");
     sh_store st;
-    sh_store_init(&st, NULL, NULL);
+    scope_store(s->project, &st, NULL, NULL);
     sh_versions v;
     sh_history_list(&st, name, &v);
     sh_holds *holds = sh_holds_load(&st);
@@ -544,8 +631,10 @@ static void m_read(server *s, sh_rpc_msg *m) {
         return;
     }
     sh_store st;
-    sh_store_init(&st, NULL, NULL);
-    char *path = sh_strfmt("%s/%s/SKILL.md", st.central, name);
+    scope_store(s->project, &st, NULL, NULL);
+    char *dir = sh_store_skill_dir(&st, name);
+    char *path = sh_path_join(dir, "SKILL.md");
+    free(dir);
     sh_buf b = SH_BUF_INIT;
     if (!sh_read_file(path, PREVIEW_MAX, &b)) {
         send_error(s, m, SH_RPC_NOT_FOUND, "no such skill");
@@ -766,6 +855,11 @@ typedef struct {
 static const immediate IMMEDIATE[] = {
     {"skills.read", m_read},
     {"skills.history", m_history},
+    {"scope.set", m_scope_set},
+    {"projects.list", m_projects_list},
+    {"projects.add", m_projects_change},
+    {"projects.remove", m_projects_change},
+    {"projects.setAuto", m_projects_change},
     {"providers.addCustom", m_providers_add},
     {"providers.removeCustom", m_providers_remove},
     {"transfer.export", m_export},

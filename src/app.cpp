@@ -278,8 +278,12 @@ void AppController::onReady(bool restarted) {
     if (restarted) {
         job_.clear();
         setBusy(false);
+        scope_.clear();  // a new backend starts on the user's own skills
+        scopeCentral_.clear();
+        emit scopeChanged();
         emit toast(QStringLiteral("warn"), tr("The background service restarted"));
     }
+    loadProjects();
     loadSettings();
     refreshAutomation();
     loadSnapshot();
@@ -292,7 +296,57 @@ QString AppController::tilde(const QString &path) const {
     return path;
 }
 
+QString AppController::scopeLabel() const {
+    for (const QVariant &v : projects_)
+        if (v.toMap().value(QStringLiteral("path")).toString() == scope_) return v.toMap().value(QStringLiteral("name")).toString();
+    return scope_.isEmpty() ? tr("Your skills") : scope_.section(QLatin1Char('/'), -1);
+}
+
+void AppController::loadProjects() {
+    core_.call(QStringLiteral("projects.list"), {}, [this](const CoreReply &r) {
+        if (!r.ok()) return;
+        const QJsonObject o = r.result.toObject();
+        projects_ = o.value(QStringLiteral("projects")).toArray().toVariantList();
+        suggested_.clear();
+        for (const QJsonValue &v : o.value(QStringLiteral("suggested")).toArray()) suggested_ << v.toString();
+        emit projectsChanged();
+        emit scopeChanged();  // the label is the project's name
+    });
+}
+
+void AppController::setScope(const QString &path) {
+    if (busy_ || path == scope_) return;
+    core_.call(QStringLiteral("scope.set"), {{QStringLiteral("scope"), path.isEmpty() ? QStringLiteral("user") : path}}, [this, path](const CoreReply &r) {
+        if (!r.ok()) {
+            emit toast(QStringLiteral("error"), r.message());
+            return;
+        }
+        scope_ = path;
+        scopeCentral_ = path.isEmpty() ? QString() : r.result.toObject().value(QStringLiteral("central")).toString();
+        select(QString());
+        setDetailMode(QStringLiteral("skill"));
+        emit scopeChanged();
+        emit countsChanged();
+    });
+}
+
+void AppController::addProject(const QString &path) {
+    core_.call(QStringLiteral("projects.add"), {{QStringLiteral("path"), path}}, [this, path](const CoreReply &r) {
+        if (!r.ok()) {
+            emit toast(QStringLiteral("error"), r.message());
+            return;
+        }
+        loadProjects();
+        setScope(path);
+    });
+}
+
+void AppController::copyToProject(const QString &name, const QString &project) {
+    startJob(QStringLiteral("skills.copyToProject"), {{QStringLiteral("name"), name}, {QStringLiteral("project"), project}}, tr("Copying %1").arg(name), QStringLiteral("copy"), false);
+}
+
 QString AppController::centralPath() const {
+    if (!scopeCentral_.isEmpty()) return tilde(scopeCentral_);
     return tilde(core_.init().value(QStringLiteral("paths")).toObject().value(QStringLiteral("central")).toString());
 }
 
@@ -727,6 +781,10 @@ void AppController::jobDone(const QJsonObject &done) {
     } else if (kind == QLatin1String("restore")) {
         msg = done.value(QStringLiteral("ok")).toBool() ? tr("Restored") : error;
         level = done.value(QStringLiteral("ok")).toBool() ? QStringLiteral("ok") : QStringLiteral("error");
+    } else if (kind == QLatin1String("copy")) {
+        msg = error.isEmpty() ? tr("Copied to the project") : error;
+        level = error.isEmpty() ? QStringLiteral("ok") : QStringLiteral("error");
+        loadProjects();
     } else if ((kind == QLatin1String("hold") || kind == QLatin1String("setAgentEnabled")) && !error.isEmpty()) {
         msg = error;
         level = QStringLiteral("error");
@@ -904,7 +962,7 @@ void AppController::setWatcher(bool on) {
 }
 
 void AppController::openFolder() {
-    QDesktopServices::openUrl(QUrl::fromLocalFile(core_.init().value(QStringLiteral("paths")).toObject().value(QStringLiteral("central")).toString()));
+    QDesktopServices::openUrl(QUrl::fromLocalFile(!scopeCentral_.isEmpty() ? scopeCentral_ : core_.init().value(QStringLiteral("paths")).toObject().value(QStringLiteral("central")).toString()));
 }
 
 void AppController::copyText(const QString &text) {

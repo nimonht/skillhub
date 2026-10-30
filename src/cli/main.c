@@ -17,6 +17,7 @@
 #include "sh_history.h"
 #include "sh_json.h"
 #include "sh_path.h"
+#include "sh_projects.h"
 #include "sh_serve.h"
 #include "sh_store.h"
 #include "sh_str.h"
@@ -79,6 +80,7 @@ static const char *link_word(sh_link_state s) {
     case SH_LINK_COPY: return "COPY";
     case SH_LINK_FOREIGN: return "OTHER";
     case SH_LINK_OFF: return "off";
+    case SH_LINK_SYNCED: return "synced";
     }
     return "";
 }
@@ -103,6 +105,10 @@ static void usage(void) {
         "  skillhub check                  fetch upstream, show available updates (exit 10 if any)\n"
         "  skillhub update [--all|NAME...] [--auto] [--notify]\n"
         "  skillhub add SOURCE... [--skill a,b | --all] [--link]   owner/repo, a GitLab or git URL, or a folder (--link: live)\n"
+        "  skillhub --project PATH COMMAND         a project's skills (<PATH>/.agents/skills, skills-lock.json), -C for short:\n"
+        "                                          list add remove check update diff history rollback restore hold release adopt doctor\n"
+        "  skillhub projects list [--json] | add PATH | remove PATH | auto PATH on|off   the projects known here; auto: the daily update\n"
+        "  skillhub copy NAME PATH                 copy a skill of yours into a project, with its source\n"
         "  skillhub remove NAME\n"
         "  skillhub restore NAME                   bring back a removed skill\n"
         "  skillhub diff NAME [--stat]             what an update would change, against the files on disk\n"
@@ -132,6 +138,8 @@ typedef struct {
     char **v;
     int n;
 } args_t;
+
+static int cmd_check_update(sh_store *st, const args_t *a, bool do_update);
 
 static bool has(const args_t *a, const char *flag) {
     for (int i = 0; i < a->n; ++i)
@@ -260,6 +268,9 @@ static int cmd_doctor(sh_store *st, const args_t *a) {
             const sh_link_state ls = sk.items[i].links[k];
             if (ls == SH_LINK_MISSING || ls == SH_LINK_COPY || ls == SH_LINK_FOREIGN) {
                 outf("link: %s / %s = %s\n", sk.items[i].name, st->agents[k]->id, link_word(ls));
+                char *lp = sh_path_join(st->agents[k]->dir, sk.items[i].name);
+                if (st->project && sh_is_file(lp)) out("  a text file stands where a link belongs: git wrote it with core.symlinks off, so it is left alone\n");
+                free(lp);
                 ++problems;
             }
         }
@@ -723,6 +734,32 @@ static int cmd_switch(sh_store *st, const args_t *a, bool on) {
     return rc;
 }
 
+// the projects that asked for it, after the user's own skills
+static int update_projects(void) {
+    sh_projects p;
+    if (!sh_projects_load(&p, NULL)) return 0;
+    int rc = 0;
+    for (size_t i = 0; i < p.len; ++i) {
+        if (!p.items[i].auto_update) continue;
+        sh_store st;
+        char *err = NULL;
+        if (!sh_store_init_project(&st, p.items[i].path, log_line, NULL, &err)) {
+            errf("%s\n", err ? err : "");
+            free(err);
+            rc = 1;
+            continue;
+        }
+        outf("%s:\n", p.items[i].name);
+        char flag_all[] = "--all", flag_auto[] = "--auto";
+        char *flags[] = {flag_all, flag_auto};
+        const args_t all = {flags, 2};
+        if (cmd_check_update(&st, &all, true) != 0) rc = 1;
+        sh_store_free(&st);
+    }
+    sh_projects_free(&p);
+    return rc;
+}
+
 static int cmd_check_update(sh_store *st, const args_t *a, bool do_update) {
     sh_skills sk;
     sh_store_scan(st, &sk);
@@ -798,6 +835,7 @@ static int cmd_check_update(sh_store *st, const args_t *a, bool do_update) {
     sh_strv_free(&changed);
     sh_strv_free(&names);
     sh_skills_free(&sk);
+    if (do_update && !st->project && has(a, "--auto") && update_projects() != 0 && rc == 0) rc = 1;
     return rc;
 }
 
@@ -827,6 +865,10 @@ static size_t chosen(sh_store *st, const sh_discovery *found, size_t n, bool all
 // skillhub add SOURCE... [--skill a,b | --all] [--link]: one source behaves exactly as in 1.x; several are read, then
 // installed, all at once
 static int cmd_add(sh_store *st, const args_t *a) {
+    if (st->project && has(a, "--link")) {
+        errf("a live link leads to a folder on this machine, and a project is shared: copy the skill instead\n");
+        return 2;
+    }
     sh_strv repos = SH_STRV_INIT;
     for (int i = 0; i < a->n; ++i) {
         if (strcmp(a->v[i], "--skill") == 0) {
@@ -890,6 +932,69 @@ static int cmd_add(sh_store *st, const args_t *a) {
     return rc;
 }
 
+static int cmd_projects(const args_t *a) {
+    const char *what = a->n > 0 ? a->v[0] : "list";
+    char *err = NULL;
+    int rc = 0;
+    if (strcmp(what, "add") == 0 && a->n > 1) {
+        rc = sh_projects_add(a->v[1], &err) ? 0 : 1;
+    } else if (strcmp(what, "remove") == 0 && a->n > 1) {
+        rc = sh_projects_remove(a->v[1], &err) ? 0 : 1;
+    } else if (strcmp(what, "auto") == 0 && a->n > 2) {
+        rc = sh_projects_set_auto(a->v[1], strcmp(a->v[2], "on") == 0, &err) ? 0 : 1;
+    } else if (strcmp(what, "list") == 0) {
+        sh_projects p;
+        if (!sh_projects_load(&p, &err)) {
+            rc = 1;
+        } else if (has(a, "--json")) {
+            yyjson_mut_doc *d = yyjson_mut_doc_new(NULL);
+            yyjson_mut_val *arr = yyjson_mut_arr(d);
+            yyjson_mut_doc_set_root(d, arr);
+            for (size_t i = 0; i < p.len; ++i) {
+                yyjson_mut_val *o = yyjson_mut_obj(d);
+                yyjson_mut_obj_add_strcpy(d, o, "path", p.items[i].path);
+                yyjson_mut_obj_add_strcpy(d, o, "name", p.items[i].name);
+                yyjson_mut_obj_add_bool(d, o, "autoUpdate", p.items[i].auto_update);
+                yyjson_mut_arr_append(arr, o);
+            }
+            char *json = yyjson_mut_write(d, YYJSON_WRITE_PRETTY_TWO_SPACES, NULL);
+            outf("%s\n", json);
+            free(json);
+            yyjson_mut_doc_free(d);
+        } else {
+            for (size_t i = 0; i < p.len; ++i) {
+                padded(p.items[i].name, 24);
+                outf("%s%s\n", p.items[i].path, p.items[i].auto_update ? "  (daily update)" : "");
+            }
+            sh_strv found = SH_STRV_INIT;
+            sh_projects_suggest(&found);
+            for (size_t i = 0; i < found.len; ++i) outf("not added: %s\n", found.items[i]);
+            sh_strv_free(&found);
+        }
+        sh_projects_free(&p);
+    } else {
+        usage();
+        rc = 2;
+    }
+    if (err) errf("%s\n", err);
+    free(err);
+    return rc;
+}
+
+static int cmd_copy(sh_store *st, const args_t *a) {
+    if (a->n < 2) {
+        usage();
+        return 2;
+    }
+    sh_engine *engine = sh_engine_new(st);
+    char *err = NULL;
+    const bool ok = sh_engine_copy_to_project(engine, a->v[0], a->v[1], &err);
+    if (!ok) errf("%s\n", err ? err : "");
+    free(err);
+    sh_engine_free(engine);
+    return ok ? 0 : 1;
+}
+
 static int cmd_uninstall(sh_store *st, const args_t *a) {
     const bool dry = has(a, "--dry-run");
     if (!dry && !has(a, "--yes")) {
@@ -941,7 +1046,7 @@ static bool is_any(const char *s, const char *const *words) {
 
 // commands that change skills, links, lock files or config
 static bool mutates(const char *cmd, const args_t *a) {
-    static const char *const always[] = {"adopt", "update", "remove", "restore", "rollback", "hold", "release", "enable", "disable", "track", "import", "uninstall", NULL};
+    static const char *const always[] = {"adopt", "update", "remove", "restore", "rollback", "hold", "release", "enable", "disable", "copy", "track", "import", "uninstall", NULL};
     static const char *const provider_changes[] = {"enable", "disable", "add", "remove", NULL};
     static const char *const switches[] = {"on", "off", NULL};
     if (is_any(cmd, always)) return true;
@@ -989,6 +1094,7 @@ static int run_cli(int argc, char **argv) {
     // --wait SECONDS (how long a changing command waits for another one to finish) is taken out before the commands see
     // their arguments
     int wait_s = 60;
+    const char *project = NULL;
     char **args = sh_xcalloc((size_t)argc + 1, sizeof *args);
     int n_args = 0;
     for (int i = 0; i < argc; ++i) {
@@ -996,13 +1102,40 @@ static int run_cli(int argc, char **argv) {
             wait_s = atoi(argv[++i]);
             continue;
         }
+        if (i >= 1 && (strcmp(argv[i], "--project") == 0 || strcmp(argv[i], "-C") == 0) && i + 1 < argc) {
+            project = argv[++i];
+            continue;
+        }
         args[n_args++] = argv[i];
     }
     argc = n_args;
     argv = args;
-    sh_store st;
-    sh_store_init(&st, log_line, NULL);
     const char *cmd = argc > 1 ? argv[1] : "";
+    static const char *const in_projects[] = {"list", "add", "remove", "check", "update", "diff", "history", "rollback", "restore", "hold", "release", "adopt", "doctor", NULL};
+    if (project && !is_any(cmd, in_projects)) {
+        errf("%s does not work with --project\n", *cmd ? cmd : "this");
+        free(args);
+        return 2;
+    }
+    if (strcmp(cmd, "projects") == 0) {
+        const args_t pa = {argv + 2, argc > 2 ? argc - 2 : 0};
+        const int rc = cmd_projects(&pa);
+        fflush(stdout);
+        free(args);
+        return rc;
+    }
+    sh_store st;
+    if (project) {
+        char *err = NULL;
+        if (!sh_store_init_project(&st, project, log_line, NULL, &err)) {
+            errf("%s\n", err ? err : "");
+            free(err);
+            free(args);
+            return 1;
+        }
+    } else {
+        sh_store_init(&st, log_line, NULL);
+    }
     const args_t a = {argv + 2, argc > 2 ? argc - 2 : 0};
     sh_flock *lock = NULL;
     const lock_outcome got = mutates(cmd, &a) ? take_mutation_lock(cmd, &a, wait_s, &lock) : LOCK_HELD;
@@ -1028,6 +1161,7 @@ static int run_cli(int argc, char **argv) {
     else if (strcmp(cmd, "restore") == 0) rc = cmd_restore(&st, &a);
     else if (strcmp(cmd, "hold") == 0 || strcmp(cmd, "release") == 0) rc = cmd_hold(&st, cmd, &a);
     else if (strcmp(cmd, "disable") == 0 || strcmp(cmd, "enable") == 0) rc = cmd_switch(&st, &a, strcmp(cmd, "enable") == 0);
+    else if (strcmp(cmd, "copy") == 0) rc = cmd_copy(&st, &a);
     else if (strcmp(cmd, "remove") == 0) {
         if (a.n == 0) {
             usage();

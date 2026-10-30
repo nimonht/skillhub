@@ -55,6 +55,9 @@ void sh_discovery_free(sh_discovery *d);
 // worked. `link`: skills from a local folder become live links to it instead of copies.
 int sh_engine_install(sh_engine *e, const sh_candidate *const *cands, size_t n, bool link, bool *done);
 
+// Copies an installed skill into a project, with its source, so the team gets it from the project's own lock file.
+bool sh_engine_copy_to_project(sh_engine *e, const char *name, const char *project, char **err);
+
 // The skills of an import file that come from a remote repository (checked by the caller before). A skill whose folder
 // moved upstream is found by name. why[i] is set for each one that failed; done[i] tells which ones worked.
 typedef enum { SH_IMPORT_OK, SH_IMPORT_UNREACHABLE, SH_IMPORT_GONE, SH_IMPORT_FAILED } sh_import_why;

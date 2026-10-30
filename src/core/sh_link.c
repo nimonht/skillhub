@@ -178,6 +178,21 @@ bool sh_remove_link(const char *link_path) {
     return ok;
 }
 
+bool sh_can_make_symlinks(void) {
+    static int known = -1;
+    if (known >= 0) return known == 1;
+    known = 0;
+    if (sh_env_is_set("SKILLHUB_NO_SYMLINKS")) return false;
+    wchar_t tmp[MAX_PATH + 1], link[MAX_PATH + 32];
+    if (GetTempPathW(MAX_PATH + 1, tmp) == 0) return false;
+    swprintf(link, sizeof link / sizeof link[0], L"%lsskillhub-symlink-%lu", tmp, (unsigned long)GetCurrentProcessId());
+    if (CreateSymbolicLinkW(link, L"t", SYMBOLIC_LINK_FLAG_DIRECTORY | SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE)) {
+        known = 1;
+        RemoveDirectoryW(link);
+    }
+    return known == 1;
+}
+
 bool sh_can_make_dir_links(void) {
     static int known = -1;
     if (known >= 0) return known == 1;
@@ -265,5 +280,7 @@ bool sh_make_dir_link(const char *link_path, const char *target) { return symlin
 bool sh_remove_link(const char *link_path) { return sh_is_link(link_path) && unlink(link_path) == 0; }
 
 bool sh_can_make_dir_links(void) { return true; }
+
+bool sh_can_make_symlinks(void) { return !sh_env_is_set("SKILLHUB_NO_SYMLINKS"); }
 
 #endif

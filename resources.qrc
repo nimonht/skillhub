@@ -40,6 +40,7 @@
         <file alias="Scroll.qml">qml/Scroll.qml</file>
         <file alias="PaneHandle.qml">qml/PaneHandle.qml</file>
         <file alias="ReviewPage.qml">qml/ReviewPage.qml</file>
+        <file alias="ScopeMenu.qml">qml/ScopeMenu.qml</file>
         <file alias="SectionLabel.qml">qml/SectionLabel.qml</file>
         <file alias="Segmented.qml">qml/Segmented.qml</file>
         <file alias="SkillRow.qml">qml/SkillRow.qml</file>

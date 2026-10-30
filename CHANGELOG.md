@@ -16,6 +16,9 @@
   that read the shared folder switch together: the skill is parked in `~/.agents/.parked`, with its lock entry kept in
   `state.json`, so `npx skills update -g` does not bring it back. Parked skills keep updating. Before going back to 1.x, run
   `skillhub enable --all-parked`.
+- **Project skills.** `--project PATH` (or `-C`) on the commands that work on skills, a scope switcher in the window, and
+  `skillhub projects`. A project keeps its skills in `.agents/skills`, with relative links for agents that need them and a
+  `skills-lock.json` as npx writes it. `skillhub copy` and *Copy to project* bring a skill of yours in, with its source.
 - Automatic updates leave out updates that add or change scripts until you review them (`updates.autoSkipScripts`).
 - Export files move to version 2 and carry those sources; version 1 still reads. Import accepts remote sources over https
   only, so a hostile file cannot reach a local folder or use your SSH keys.
