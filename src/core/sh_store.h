@@ -34,7 +34,9 @@ typedef struct sh_agent {
 typedef enum { SH_LINK_NATIVE, SH_LINK_LINKED, SH_LINK_MISSING, SH_LINK_COPY, SH_LINK_FOREIGN } sh_link_state;
 
 typedef struct sh_source {
-    char *source;       // "owner/repo"
+    char *type;         // sourceType: "github" (also when empty: 1.x wrote none), "gitlab", "git", "local", or one npx runs
+    char *ref;          // branch or tag the skill follows ("" = the default branch)
+    char *source;       // "owner/repo", the repository URL, or the local folder
     char *url;          // clone URL
     char *skill_path;   // path of SKILL.md inside the repository
     char *hash;         // git tree SHA of the installed folder ("" = unknown)
@@ -52,6 +54,7 @@ typedef struct sh_skill {
     sh_link_state *links;  // one per managed agent, in the order of sh_store.agents
     size_t n_links;
     sh_update update;
+    bool live;       // a link to a local folder: its edits show at once, and there is nothing to update
     char *new_hash;
     char *new_path;  // SKILL.md path upstream when the skill moved
     char *note;
@@ -72,8 +75,9 @@ typedef struct sh_candidate {
     char *name;
     char *description;
     char *dir;   // folder inside the repository
-    char *slug;  // owner/repo
+    char *slug;  // where it comes from: owner/repo, the repository URL, or the local folder
     char *url;
+    char *key;   // the repository in the engine that found it
 } sh_candidate;
 
 typedef struct { sh_candidate *items; size_t len; } sh_candidates;
@@ -88,8 +92,9 @@ typedef struct sh_import_file {
 typedef struct sh_import_item {
     char *name;
     char *description;
-    bool local;               // the files are embedded; otherwise installed from a GitHub repository
+    bool local;               // the files are embedded; otherwise installed from a repository, over https
     char *source, *url, *skill_path;
+    char *ref;                // branch or tag ("" = the default branch)
     sh_import_file *files;
     size_t n_files;
     long long bytes;
@@ -153,10 +158,20 @@ void sh_source_from_mut_json(yyjson_mut_val *entry, sh_source *out);
 void sh_source_free(sh_source *s);
 void sh_source_copy(const sh_source *from, sh_source *to);
 bool sh_source_tracked(const sh_source *s);
+bool sh_source_runnable(const sh_source *s);  // a type Skill Hub can update (the others are managed by npx)
 // Sets (src non-NULL) or removes the entry `name`, re-reading and merging so other tools' entries survive.
 bool sh_lock_put(sh_store *st, const char *name, const sh_source *src);
 // The same for many entries at once: each lock file is read and written once (the engine's group commits).
 bool sh_lock_put_many(sh_store *st, const char *const *names, const sh_source *const *srcs, size_t n);
+
+// <cache>/sources.json: update data of Skill Hub's own (docs/formats.md, section 5). For GitLab and git sources the lock
+// holds npx's SHA-256 folder hash, which cannot be compared with upstream without downloading it; the git tree id each
+// skill was installed from is kept here instead. Derived data: when it is lost, the next update restores it.
+typedef struct sh_trees sh_trees;
+sh_trees *sh_trees_load(const sh_store *st);
+const char *sh_trees_get(const sh_trees *t, const char *name);  // "" when unknown
+void sh_trees_free(sh_trees *t);
+void sh_trees_put_many(sh_store *st, const char *const *names, const char *const *ids, size_t n);
 
 // ---- skills (sh_store.c) ----
 void sh_store_scan(const sh_store *st, sh_skills *out);
@@ -166,13 +181,15 @@ int sh_store_relink(sh_store *st);  // point every link-mode agent at the shared
 bool sh_store_remove_skill(sh_store *st, const char *name);
 // Set the upstream of a local skill (sh_engine.c: it reads the repository to find the skill by name).
 bool sh_store_track(sh_store *st, const char *name, const char *repo_input, const char *path, char **err);
-char *sh_slug_from_input(const char *in, char **url);  // "owner/repo" from owner/repo or a github.com URL, else NULL
 char *sh_dir_of(const char *skill_md_path);
 // A fresh staging folder name for `label`, unique across threads and processes (the folder is not created).
 char *sh_store_stage_dir(const sh_store *st, const char *label);
 // Checks a staged skill folder (a SKILL.md with a description) and swaps it in as skill `name`, keeping the folder it
 // replaces as a backup. The stage is gone afterwards either way. Safe from worker threads for different names.
 bool sh_store_place(sh_store *st, const char *name, const char *stage);
+// The same for a live link: skill `name` becomes a link to the folder `target`, whose edits every agent then sees at once.
+// The folder itself is never moved or changed.
+bool sh_store_place_link(sh_store *st, const char *name, const char *target);
 // Cleans up after a process that died while changing skills (docs/formats.md, section 8): puts back a folder an
 // interrupted swap had moved aside, removes staging folders, and (`git_locks`) removes git lock files older than ten
 // minutes from cache clones nobody is using. Only call it while holding the mutation lock. Returns the folders put back.

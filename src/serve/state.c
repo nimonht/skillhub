@@ -259,7 +259,8 @@ static yyjson_mut_val *row_json(yyjson_mut_doc *d, const sh_store *st, const sh_
     yyjson_mut_obj_add_strcpy(d, o, "name", s->name);
     yyjson_mut_obj_add_strcpy(d, o, "description", s->description);
     yyjson_mut_obj_add_strcpy(d, o, "source", tracked ? s->src.source : "");
-    yyjson_mut_obj_add_str(d, o, "sourceType", tracked ? "github" : "");
+    yyjson_mut_obj_add_strcpy(d, o, "sourceType", !tracked ? "" : *s->src.type ? s->src.type : "github");
+    yyjson_mut_obj_add_bool(d, o, "live", s->live);
     yyjson_mut_obj_add_str(d, o, "status", status);
     yyjson_mut_obj_add_strcpy(d, o, "note", note);
     yyjson_mut_val *links = yyjson_mut_arr(d);

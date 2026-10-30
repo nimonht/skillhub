@@ -96,6 +96,14 @@ These follow `npx skills` `src/add.ts`, so both tools understand each other's en
 
 Entries of a type Skill Hub does not run are listed as "managed by npx": never fetched, never updated, never rewritten.
 
+An entry may also hold `ref`, the branch or tag it follows, absent for the default branch. An entry written by 1.x, or by
+npx before it wrote `sourceType`, has none and counts as `github`.
+
+**Live links.** A `local` entry whose folder in the shared folder is a link to the source folder, not a copy, is a live
+link: edits reach every agent at once. The scan accepts a link there only for an entry of type `local`, so a stray link
+never turns into a skill. A live link is always current, updates skip it, and removing it removes the link alone. Its
+target is never moved, changed or backed up. Everything else that walks the shared folder reads through the link as usual.
+
 ### Reading and writing
 
 - Read the whole file. If it does not parse, read it once more after 200 ms (npx writes without locking). If it still fails,
@@ -191,14 +199,18 @@ Written exactly like `npx skills` `src/local-lock.ts`, because it is committed a
 - Clones made by 1.x are full working trees, sometimes with a local path as `origin` (the tests seed one). They are used as
   they are. New clones are made with `--depth 1 --no-checkout`: everything is read from the object store (`ls-tree`,
   `cat-file --batch`), never from a working tree.
-- Bringing a clone up to date: `git ls-remote origin HEAD` is compared with the clone's own `HEAD`. When they match,
-  nothing is downloaded. Otherwise `git fetch --depth 1 origin HEAD` runs and `HEAD` is moved to `FETCH_HEAD` with
-  `git update-ref --no-deref` (a 1.x clone's working tree is left as it was). The clone's `HEAD` is the only record of
+- Bringing a clone up to date: `git ls-remote origin <ref>` (`HEAD` without a ref; `<ref>` and `<ref>^{}`, so a tag is
+  followed to its commit, with a tag winning over a branch of the same name) is compared with the clone's own `HEAD`.
+  When they match, nothing is downloaded. Otherwise `git fetch --depth 1 origin <ref>` runs and `HEAD` is moved to
+  `FETCH_HEAD^{commit}` with `git update-ref --no-deref` (a 1.x clone's working tree is left as it was). The clone's `HEAD` is the only record of
   what the cache holds; `sources.json` never decides whether to fetch, because a separate record could run ahead of the
   clone after a crash.
-- Every git command runs with `-c core.longpaths=true -c gc.auto=0 -c maintenance.auto=false -c core.fsmonitor=false`,
-  `GIT_TERMINAL_PROMPT=0` and `GCM_INTERACTIVE=never`. Skill Hub never runs garbage collection in the cache, so objects
-  read by id stay valid while other threads and processes fetch.
+- Every git command runs with `-c core.longpaths=true -c gc.auto=0 -c maintenance.auto=false -c core.fsmonitor=false
+  -c protocol.ext.allow=never -c protocol.fd.allow=never`, `GIT_TERMINAL_PROMPT=0` and `GCM_INTERACTIVE=never`. Skill Hub
+  never runs garbage collection in the cache, so objects read by id stay valid while other threads and processes fetch.
+- Transports: `ext::` and `fd::` can run commands, so they are never allowed, and git applies that to a URL after any
+  `insteadOf` rewrite. Everything else stays as the user's git config has it, so `insteadOf` rules, SSH and private mirrors
+  keep working. What decides which sources an untrusted file may name is the import check in section 9.
 - Staging folders are created on the same volume as the shared folder when the cache is on a different one, so the
   final move is a rename.
 
@@ -214,7 +226,13 @@ Written exactly like `npx skills` `src/local-lock.ts`, because it is committed a
 ```
 
 `trees` is keyed by scope (`user` or `project:<path>`). `contentHash` is the SHA-256 folder hash Skill Hub last computed,
-for local, gitlab and git sources and for project locks.
+for local, gitlab and git sources and for project locks. `repos`, `lastCheck`, `contentHash` and `commit` are reserved;
+2.0 so far writes `treeSha`.
+
+`treeSha` is what makes GitLab and git checks cheap: their lock entries hold a hash of the files, and comparing that with
+upstream would mean downloading them. So `check` compares the git tree id of the folder upstream with the id on record.
+A skill with none on record (installed by npx, or this file was deleted) is offered as an update once, which writes it.
+GitHub entries need no record because their hash in the lock is the tree id. A `local` source hashes the folder itself.
 
 ## 6. Config (`<config>`)
 
@@ -374,8 +392,11 @@ Version 2 is written; versions 1 and 2 are read.
   per skill. 1.x checked them only on import, so a large library could export a file it could not import again. A skill
   over a limit is left out of the export and listed.
 - Remote entries must use `https`. Local paths, `file:`, `ssh:` and `git@` sources are rejected on import, so a hostile
-  file cannot make Skill Hub copy a folder from this machine or use its SSH keys. The URL in the file is rebuilt from the
-  validated source, as in 1.x. Version 1 entries are GitHub-only, as before.
+  file cannot make Skill Hub copy a folder from this machine or use its SSH keys. So are URLs with a user name or token
+  in them, a `#ref` or a folder inside `source`, and a `ref` that is not a plain branch or tag. The URL in the file is rebuilt from the
+  validated source, as in 1.x. An entry without `sourceType` is GitHub-only, as version 1 files are.
+- A skill whose source cannot be imported elsewhere travels as files instead (`"local": true`): local folders, live links,
+  ssh sources and types managed by npx. Its source stays behind, so the file names no path of this machine.
 - Names: `^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$` without `..`. File paths: relative, `/`-separated, at most 300 characters, no
   empty, `.` or `..` segments, no backslash, no NUL, no segment named `.git` in any letter case, no Windows reserved name
   (`CON`, `PRN`, `AUX`, `NUL`, `COM1`–`COM9`, `LPT1`–`LPT9`, with or without an extension), no `:`, no segment ending in

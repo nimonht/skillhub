@@ -1,25 +1,23 @@
-// libFuzzer target: repository names typed by users and read from export files.
+// libFuzzer target: sources typed by users and read from export files.
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "sh_store.h"
+#include "sh_origin.h"
 #include "sh_str.h"
 
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     char *s = sh_strndup((const char *)data, size);
-    char *url = NULL;
-    char *slug = sh_slug_from_input(s, &url);
-    if (slug) {
-        // a slug is exactly owner/repo made of safe characters
-        const char *slash = strchr(slug, '/');
-        if (!slash || strchr(slash + 1, '/') || slash == slug || !slash[1]) abort();
-        for (const char *c = slug; *c; ++c)
-            if (!(*c == '/' || *c == '.' || *c == '-' || *c == '_' || (*c >= '0' && *c <= '9') || (*c >= 'A' && *c <= 'Z') || (*c >= 'a' && *c <= 'z'))) abort();
+    sh_origin o;
+    if (sh_origin_parse(s, &o, NULL)) {
+        // what reaches git is never an option, and the cache folder stays inside the cache
+        if (*o.url == '-' || !*o.url || !*o.source || !sh_origin_ref_ok(o.ref)) abort();
+        char *dir = sh_origin_cache_dir(&o, "/cache");
+        if (!sh_starts_with(dir, "/cache/repos/") || strstr(dir, "/../") || sh_ends_with(dir, "/..")) abort();
+        free(dir);
+        sh_origin_free(&o);
     }
-    free(slug);
-    free(url);
     free(s);
     return 0;
 }

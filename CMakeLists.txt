@@ -87,6 +87,7 @@ add_custom_command(
 
 add_library(skillhub_core STATIC
     src/core/sh_catalog.c
+    src/core/sh_collate.c src/core/sh_collate.h
     src/core/sh_engine.c src/core/sh_engine.h
     src/core/sh_exe.c src/core/sh_exe.h
     src/core/sh_frontmatter.c src/core/sh_frontmatter.h
@@ -96,6 +97,7 @@ add_library(skillhub_core STATIC
     src/core/sh_json.c src/core/sh_json.h
     src/core/sh_link.c src/core/sh_link.h
     src/core/sh_lock.c
+    src/core/sh_origin.c src/core/sh_origin.h
     src/core/sh_path.c src/core/sh_path.h
     src/core/sh_proc.c src/core/sh_proc.h
     src/core/sh_rpc.c src/core/sh_rpc.h

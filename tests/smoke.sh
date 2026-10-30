@@ -108,7 +108,7 @@ EXPORT="$H/export.json"
 python3 - "$EXPORT" <<'PY' || fail "export file structure"
 import json, sys
 d = json.load(open(sys.argv[1]))
-assert d["format"] == "skillhub-export" and d["version"] == 1
+assert d["format"] == "skillhub-export" and d["version"] == 2
 by = {s["name"]: s for s in d["skills"]}
 assert {"alpha", "gamma"} <= set(by), set(by)
 assert all(s.get("local") for s in d["skills"])          # nothing in this fake home has an upstream

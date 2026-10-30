@@ -100,7 +100,7 @@ static void build_upstream(void) {
 
 static void open_repo(sh_repo *r) {
     char *dir = at("cache/repos/up"), *url = at("upstream"), *err = NULL;
-    CHECK(sh_repo_open(r, dir, url, NULL, &err));
+    CHECK(sh_repo_open(r, dir, url, "", NULL, &err));
     if (err) fprintf(stderr, "open: %s\n", err);
     free(err);
     free(url);
@@ -274,8 +274,8 @@ static void lock_batch(void) {
     st.lock_path = at("lock.json");
     const char *text = "{\"version\":3,\"skills\":{\"keep\":{\"source\":\"x/y\",\"extra\":1}}}";
     sh_write_file(st.lock_path, text, strlen(text));
-    sh_source s1 = {sh_strdup("o/one"), sh_strdup(""), sh_strdup("SKILL.md"), sh_strdup("h1"), sh_strdup("t"), sh_strdup("t")};
-    sh_source s2 = {sh_strdup("o/two"), sh_strdup(""), sh_strdup("SKILL.md"), sh_strdup("h2"), sh_strdup("t"), sh_strdup("t")};
+    sh_source s1 = {sh_strdup("github"), sh_strdup(""), sh_strdup("o/one"), sh_strdup(""), sh_strdup("SKILL.md"), sh_strdup("h1"), sh_strdup("t"), sh_strdup("t")};
+    sh_source s2 = {sh_strdup("github"), sh_strdup(""), sh_strdup("o/two"), sh_strdup(""), sh_strdup("SKILL.md"), sh_strdup("h2"), sh_strdup("t"), sh_strdup("t")};
     const char *names[] = {"dup", "new", "dup", "keep"};
     const sh_source *srcs[] = {&s1, &s1, &s2, &s2};
     CHECK(sh_lock_put_many(&st, names, srcs, 4));

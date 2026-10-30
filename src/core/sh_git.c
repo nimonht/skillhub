@@ -12,9 +12,6 @@
 #include <strings.h>
 #endif
 
-#define MAX_FILES 5000
-#define MAX_BYTES (128LL * 1024 * 1024)
-
 // ---- running git ----
 
 void sh_git_result_free(sh_git_result *r) {
@@ -22,9 +19,11 @@ void sh_git_result_free(sh_git_result *r) {
     free(r->err);
 }
 
-// Options for every call: long paths on Windows (some skill repositories nest deeper than 260 characters), and no
-// background work in the cache clones, which other threads and processes read at the same time.
-static const char *const CONFIG[] = {"core.longpaths=true", "gc.auto=0", "maintenance.auto=false", "core.fsmonitor=false"};
+// Options for every call: long paths on Windows (some skill repositories nest deeper than 260 characters), no background
+// work in the cache clones, which other threads and processes read at the same time, and never the two transports that
+// run commands (ext::, fd::), whatever the user's git config says, so a URL in a lock or export file cannot start a program.
+static const char *const CONFIG[] = {"core.longpaths=true", "gc.auto=0", "maintenance.auto=false", "core.fsmonitor=false",
+                                     "protocol.ext.allow=never", "protocol.fd.allow=never"};
 #define N_CONFIG (sizeof CONFIG / sizeof CONFIG[0])
 
 static const char *const *git_argv(const char *const *args) {
@@ -136,21 +135,48 @@ static bool read_heads(sh_repo *r, char **err) {
     return ok;
 }
 
-// the commit upstream's HEAD points to, or NULL
-static char *remote_head(const sh_repo *r, char **err) {
-    const char *args[] = {"ls-remote", "--quiet", "origin", "HEAD", NULL};
+// how well an `ls-remote` line matches what git fetch would take for `ref`: tags before branches, and for an annotated tag
+// the commit it points to ("^{}"), which is what the clone's HEAD holds. ls-remote also lists refs that merely end in
+// the name (refs/heads/feature/main for "main"): those do not count.
+static int match_rank(const char *name, const char *ref) {
+    if (!*ref) return strcmp(name, "HEAD") == 0 ? 1 : 0;
+    char *peeled = sh_strfmt("refs/tags/%s^{}", ref), *tag = sh_strfmt("refs/tags/%s", ref), *branch = sh_strfmt("refs/heads/%s", ref);
+    const int rank = strcmp(name, peeled) == 0 ? 3 : strcmp(name, tag) == 0 ? 2 : strcmp(name, branch) == 0 ? 1 : 0;
+    free(peeled);
+    free(tag);
+    free(branch);
+    return rank;
+}
+
+// the commit upstream's `ref` (HEAD when empty) points to, or NULL
+static char *remote_head(const sh_repo *r, const char *ref, char **err) {
+    char *peeled = *ref ? sh_strfmt("%s^{}", ref) : NULL;
+    const char *args[] = {"ls-remote", "--quiet", "origin", *ref ? ref : "HEAD", peeled, NULL};
     sh_git_result g = sh_git_run(args, r->dir, 0);
+    free(peeled);
     char *head = NULL;
     if (!failed(&g, err)) {
-        const char *out = sh_buf_str(&g.out);
-        const size_t n = strcspn(out, "\t \n");
-        if (n > 0) head = sh_strndup(out, n);
+        sh_strv lines = SH_STRV_INIT;
+        sh_split(sh_buf_str(&g.out), g.out.len, '\n', true, &lines);
+        int best = 0;
+        for (size_t i = 0; i < lines.len; ++i) {
+            char *tab = strchr(lines.items[i], '\t');
+            if (!tab) continue;
+            const int rank = match_rank(tab + 1, ref);
+            if (rank > best) {
+                best = rank;
+                free(head);
+                head = sh_strndup(lines.items[i], (size_t)(tab - lines.items[i]));
+            }
+        }
+        sh_strv_free(&lines);
+        if (!head && err) *err = *ref ? sh_strfmt("upstream has no branch or tag %s", ref) : sh_strdup("the repository is empty");
     }
     sh_git_result_free(&g);
     return head;
 }
 
-static bool update_clone(sh_repo *r, const char *url, sh_limiter *fetches, char **err) {
+static bool update_clone(sh_repo *r, const char *url, const char *ref, sh_limiter *fetches, char **err) {
     char *host = url_host(url);
     bool ok;
     if (!sh_repo_cloned(r->dir)) {
@@ -159,22 +185,23 @@ static bool update_clone(sh_repo *r, const char *url, sh_limiter *fetches, char 
         free(parent);
         sh_remove_tree(r->dir);  // what a broken clone left behind
         // no working tree: everything is read from the object store
-        const char *args[] = {"clone", "--depth", "1", "--no-checkout", "--quiet", "--", url, r->dir, NULL};
-        sh_git_result g = network_git(args, NULL, host, fetches);
+        const char *plain[] = {"clone", "--depth", "1", "--no-checkout", "--quiet", "--", url, r->dir, NULL};
+        const char *at_ref[] = {"clone", "--depth", "1", "--no-checkout", "--quiet", "--branch", ref, "--", url, r->dir, NULL};
+        sh_git_result g = network_git(*ref ? at_ref : plain, NULL, host, fetches);
         ok = !failed(&g, err) && read_heads(r, err);
         sh_git_result_free(&g);
     } else if (!read_heads(r, err)) {
         ok = false;
     } else {
-        char *remote = remote_head(r, err);
+        char *remote = remote_head(r, ref, err);
         ok = remote != NULL;
-        if (ok && strcmp(remote, r->head) != 0) {  // upstream moved: download its HEAD and point the clone at it
-            const char *fetch[] = {"fetch", "--depth", "1", "--quiet", "origin", "HEAD", NULL};
+        if (ok && strcmp(remote, r->head) != 0) {  // upstream moved: download that commit and point the clone at it
+            const char *fetch[] = {"fetch", "--depth", "1", "--quiet", "origin", *ref ? ref : "HEAD", NULL};
             sh_git_result g = network_git(fetch, r->dir, host, fetches);
             ok = !failed(&g, err);
             sh_git_result_free(&g);
             if (ok) {
-                const char *move[] = {"update-ref", "--no-deref", "HEAD", "FETCH_HEAD", NULL};
+                const char *move[] = {"update-ref", "--no-deref", "HEAD", "FETCH_HEAD^{commit}", NULL};  // a tag peeled to its commit
                 g = sh_git_run(move, r->dir, 0);
                 ok = !failed(&g, err) && read_heads(r, err);
                 sh_git_result_free(&g);
@@ -226,7 +253,7 @@ static bool read_tree(sh_repo *r, char **err) {
     return true;
 }
 
-bool sh_repo_open(sh_repo *r, const char *dir, const char *url, sh_limiter *fetches, char **err) {
+bool sh_repo_open(sh_repo *r, const char *dir, const char *url, const char *ref, sh_limiter *fetches, char **err) {
     memset(r, 0, sizeof *r);
     r->dir = sh_strdup(dir);
     char *lock_path = sh_strfmt("%s.lock", dir);
@@ -236,7 +263,7 @@ bool sh_repo_open(sh_repo *r, const char *dir, const char *url, sh_limiter *fetc
         if (err) *err = sh_strfmt("%s is in use by another Skill Hub", dir);
         return false;
     }
-    const bool ok = update_clone(r, url, fetches, err) && read_tree(r, err);
+    const bool ok = update_clone(r, url, ref, fetches, err) && read_tree(r, err);
     sh_flock_release(lock);
     return ok;
 }
@@ -429,7 +456,7 @@ static void x_begin(void *user, size_t i, long long size) {
         return;
     }
     x->bytes[f->job] += size;
-    if (x->bytes[f->job] > MAX_BYTES) {
+    if (x->bytes[f->job] > SH_SKILL_MAX_BYTES) {
         fail_job(j, sh_strdup("more than 128 MB"));
         return;
     }
@@ -488,7 +515,7 @@ static void list_files(const sh_repo *r, sh_extract *j, size_t job, file_item **
         ++count;
     }
     free(prefix);
-    if (count > MAX_FILES) {
+    if (count > SH_SKILL_MAX_FILES) {
         fail_job(j, sh_strdup("more than 5000 files"));
         *n = first;
     }

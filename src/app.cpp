@@ -522,6 +522,8 @@ void AppController::rebuildDetail() {
                               {QStringLiteral("note"), s->note},
                               {QStringLiteral("path"), s->path},
                               {QStringLiteral("source"), s->source},
+                              {QStringLiteral("sourceType"), s->sourceType},
+                              {QStringLiteral("live"), s->live},
                               {QStringLiteral("upstreamPath"), s->upstreamPath},
                               {QStringLiteral("hash"), s->hash.left(8)},
                               {QStringLiteral("installed"), dateOf(s->installedAt)},
@@ -612,6 +614,8 @@ void AppController::jobDone(const QJsonObject &done) {
                                        {QStringLiteral("installed"), c.value(QStringLiteral("installed")).toBool()}};
         }
         candidateError_ = error;
+        candidateType_ = done.value(QStringLiteral("sourceType")).toString();
+        candidateHost_ = done.value(QStringLiteral("host")).toString();
         emit candidatesChanged();
         return;
     } else if (kind == QLatin1String("setManaged") && !error.isEmpty()) {
@@ -680,10 +684,13 @@ void AppController::discover(const QString &repo) {
              QStringLiteral("discover"), false);
 }
 
-void AppController::installChosen(const QStringList &names) {
+void AppController::installChosen(const QStringList &names, bool live) {
     if (busy_ || names.isEmpty()) return;
     const QString first = names.first(), repo = candidateRepo_;
-    startJob(QStringLiteral("skills.install"), {{QStringLiteral("source"), repo}, {QStringLiteral("skills"), QJsonArray::fromStringList(names)}},
+    startJob(QStringLiteral("skills.install"),
+             {{QStringLiteral("source"), repo},
+              {QStringLiteral("skills"), QJsonArray::fromStringList(names)},
+              {QStringLiteral("mode"), live ? QStringLiteral("link") : QStringLiteral("copy")}},
              tr("Installing skills"), QStringLiteral("install"), true);
     closeAdd();
     select(first);

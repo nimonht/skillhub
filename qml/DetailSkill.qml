@@ -6,8 +6,13 @@ import "."
 Flickable {
     id: root
     // defaults for the moment before a skill is selected (older Qt versions warn when undefined is assigned to a string)
-    readonly property var d: Object.assign({ name: "", description: "", state: "", note: "", path: "", source: "", upstreamPath: "", hash: "",
+    readonly property var d: Object.assign({ name: "", description: "", state: "", note: "", path: "", source: "", sourceType: "", live: false, upstreamPath: "", hash: "",
                                              installed: "", updated: "", tracked: false, links: [] }, app.detail)
+    readonly property string sourceText: {
+        if (d.source === "") return "none, local skill"
+        if (d.live) return d.source + " (live link)"
+        return ["github", "gitlab", "git", "local"].indexOf(d.sourceType) < 0 ? d.source + " (managed by npx)" : d.source
+    }
     property bool confirmRemove: false
     property bool editSource: false
     property bool moreText: false
@@ -179,7 +184,7 @@ Flickable {
             width: parent.width
             spacing: 6
             SectionLabel { width: parent.width; text: "Source" }
-            Meta { label: "Repository"; value: root.d.source !== "" ? root.d.source : "none, local skill" }
+            Meta { label: root.d.sourceType === "local" ? "Folder source" : "Repository"; value: root.sourceText }
             Meta { label: "Upstream"; value: root.d.upstreamPath }
             Meta { label: "Version"; value: root.d.tracked ? (root.d.hash !== "" ? root.d.hash : "unknown until the first update") : "" }
             Meta { label: "Installed"; value: root.d.installed }

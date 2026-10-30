@@ -37,7 +37,10 @@ that into one directory plus a few symlinks, and tells you the moment something 
   documented `skills.json`. Skill Hub never writes into an agent it does not manage.
 - **Sees the whole picture**: one column per managed agent above the list, one port per skill in it. A glance tells you which
   agent can't see which skill; click a column header to inspect that agent and repair it.
-- **Transfer between machines**: *Export* writes one JSON file with every skill (GitHub skills as their source, local skills
+- **Takes skills from anywhere**: GitHub, GitLab (nested groups and self-hosted too), any git URL over https or ssh, a branch
+  or tag (`#ref`), or a folder on your machine. A folder is copied and updates when you choose, or stays a live link while
+  you write the skill, so your edits reach every agent at once.
+- **Transfer between machines**: *Export* writes one JSON file with every skill (remote skills as their source, local skills
   with their files); *Import* on the other machine shows what is inside, then downloads and installs everything. Drag the
   file onto the window, or use `skillhub export` / `skillhub import`.
 - **Adopts the mess**: finds real skill folders sitting in agent directories, moves them into the shared folder, sets
@@ -142,6 +145,9 @@ skillhub import my-skills.json             # on the other machine: shows what is
 
 skillhub add greensock/gsap-skills --all            # install every skill of a repo
 skillhub add kaankiziltug/logo-design-skill --skill logo-design
+skillhub add https://gitlab.com/group/sub/repo --all    # GitLab, or any git URL (https, ssh, git@host:path)
+skillhub add https://git.example.com/team/repo.git#dev  # a branch or tag
+skillhub add ~/work/my-skills --skill draft --link      # a local folder as a live link (without --link: a copy)
 skillhub track my-skill owner/repo                  # give a local skill an upstream
 skillhub check                                      # fetch upstream, list updates (exit code 10 if any)
 skillhub update --all                               # apply them
@@ -233,14 +239,13 @@ manager or `sudo cmake --build build --target uninstall`; both remove only files
 - Windows links agents' folders with symlinks when Windows allows them (Developer Mode or administrator) and with junctions otherwise, so no setting is needed.
 - The catalog is as good as its source. Claude Code and Codex were tested live; Gemini CLI, Antigravity and Zed follow their documentation; for the other agents, where they read skills comes from the skills CLI registry. Report a wrong entry and it will be fixed.
 - Antigravity wiring follows its documented `skills.json` mechanism; it is the least battle-tested agent here.
-- GitHub repositories only (no GitLab or local-path sources yet).
 
 ## Roadmap
 
 - [ ] Show a diff before applying an update, and one-click rollback in the GUI
 - [ ] Per-agent enable/disable for a skill
 - [ ] Project-level skills (`.claude/skills` in a repository), not only user-level ones
-- [ ] GitLab / arbitrary git URLs and local-path sources
+- [x] GitLab / arbitrary git URLs and local-path sources
 - [ ] Daily update and stray watcher on macOS (launchd) and Windows (Task Scheduler)
 
 ## Contributing

@@ -2,19 +2,27 @@ import QtQuick
 import QtQuick.Controls.Basic
 import "."
 
-// Add skills from a GitHub repository: read the repo, tick the skills, install. Inline, not a modal.
+// Add skills from a repository or a folder: read it, tick the skills, install. Inline, not a modal.
 Item {
     id: root
     property var chosen: ({})
+    property bool live: false
     readonly property int chosenCount: Object.keys(chosen).length
+    readonly property string origin: app.candidateType === "local" ? "this machine" : app.candidateHost
     function toggle(name) {
         var c = Object.assign({}, chosen)
         if (c[name]) delete c[name]; else c[name] = true
         chosen = c
     }
-    function reset() { chosen = ({}) }
+    function reset() { chosen = ({}); live = false }
     Connections { target: app; function onCandidatesChanged() { root.reset() } }
     onVisibleChanged: if (visible) repo.forceActiveFocus()
+
+    Loader {   // native dialogs when the module exists, otherwise a typed path
+        id: dialogs
+        source: "FileDialogs.qml"
+        onLoaded: item.folderChosen.connect(function (p) { repo.text = p; app.discover(p) })
+    }
 
     Column {
         id: head
@@ -25,20 +33,21 @@ Item {
         Text {
             width: parent.width
             wrapMode: Text.Wrap
-            text: "Name a GitHub repository. Skill Hub lists every SKILL.md in it; you choose which ones to install into the shared folder."
+            text: "Name a repository or a folder. Skill Hub lists every SKILL.md in it; you choose which ones to install into the shared folder."
             color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsBody; lineHeight: 1.2
         }
         Field {
             id: repo
             width: parent.width
             iconName: "branch"
-            placeholderText: "owner/repo or https://github.com/owner/repo"
+            placeholderText: "owner/repo, a GitLab or git URL, or a local folder"
             enabled: !app.busy
             onAccepted: if (text.trim() !== "") app.discover(text)
         }
         Row {
             spacing: 8
-            Btn { kind: "primary"; iconName: "search"; text: "Read repository"; enabled: repo.text.trim() !== "" && !app.busy; onClicked: app.discover(repo.text) }
+            Btn { kind: "primary"; iconName: "search"; text: "Read source"; enabled: repo.text.trim() !== "" && !app.busy; onClicked: app.discover(repo.text) }
+            Btn { visible: dialogs.status === Loader.Ready; kind: "secondary"; iconName: "folder"; text: "Choose folder"; enabled: !app.busy; onClicked: dialogs.item.openFolder() }
             Btn { kind: "ghost"; text: "Close"; onClicked: app.closeAdd() }
         }
         Text {
@@ -82,10 +91,22 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
 
-        SectionLabel { id: lbl; x: 24; width: parent.width - 48; text: "Skills in " + app.candidateRepo; trailing: app.candidates.length }
+        SectionLabel { id: lbl; x: 24; width: parent.width - 48; text: "Skills in " + app.candidateRepo + (root.origin !== "" ? " · " + root.origin : ""); trailing: app.candidates.length }
+        Toggle {
+            id: liveToggle
+            visible: app.candidateType === "local"
+            anchors.top: lbl.bottom
+            anchors.topMargin: 8
+            x: 24
+            width: parent.width - 48
+            text: "Live link"
+            hint: "Edits in the folder reach every agent at once. Off: a copy, updated when you choose"
+            checked: root.live
+            onToggled: root.live = checked
+        }
         ListView {
             id: list
-            anchors.top: lbl.bottom
+            anchors.top: liveToggle.visible ? liveToggle.bottom : lbl.bottom
             anchors.topMargin: 6
             anchors.bottom: foot.top
             anchors.left: parent.left
@@ -148,7 +169,7 @@ Item {
                     iconName: "download"
                     text: root.chosenCount > 0 ? "Install " + root.chosenCount + (root.chosenCount === 1 ? " skill" : " skills") : "Install"
                     enabled: root.chosenCount > 0 && !app.busy
-                    onClicked: app.installChosen(Object.keys(root.chosen))
+                    onClicked: app.installChosen(Object.keys(root.chosen), root.live)
                 }
                 Btn {
                     kind: "ghost"

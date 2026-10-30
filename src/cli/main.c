@@ -99,12 +99,12 @@ static void usage(void) {
         "  skillhub adopt [--notify]       move stray skills from agent dirs into ~/.agents/skills\n"
         "  skillhub check                  fetch upstream, show available updates (exit 10 if any)\n"
         "  skillhub update [--all|NAME...] [--auto] [--notify]\n"
-        "  skillhub add OWNER/REPO... [--skill a,b | --all]\n"
+        "  skillhub add SOURCE... [--skill a,b | --all] [--link]   owner/repo, a GitLab or git URL, or a folder (--link: live)\n"
         "  skillhub remove NAME\n"
-        "  skillhub track NAME OWNER/REPO [PATH]   set the upstream of a local skill\n"
+        "  skillhub track NAME SOURCE [PATH]       set the upstream of a local skill\n"
         "  skillhub autoupdate on|off|status       daily update timer (Linux: systemd user timer)\n"
         "  skillhub watch on|off|status            auto-adopt strays (Linux: systemd path unit)\n"
-        "  skillhub export [FILE] [--no-local]    write every skill to one file (GitHub sources; local skills embedded)\n"
+        "  skillhub export [FILE] [--no-local]    write every skill to one file (https sources; local skills embedded)\n"
         "  skillhub import FILE [--yes] [--no-local] [--only a,b]   install the skills of such a file on this machine\n"
         "  skillhub providers [--all] [--json]     coding agents found on this machine and how each sees skills\n"
         "  skillhub providers enable|disable ID    manage (or stop managing) an agent\n"
@@ -574,7 +574,7 @@ static size_t chosen(sh_store *st, const sh_discovery *found, size_t n, bool all
     return kept;
 }
 
-// skillhub add OWNER/REPO... [--skill a,b | --all]: one repository behaves exactly as in 1.x; several are read, then
+// skillhub add SOURCE... [--skill a,b | --all] [--link]: one source behaves exactly as in 1.x; several are read, then
 // installed, all at once
 static int cmd_add(sh_store *st, const args_t *a) {
     sh_strv repos = SH_STRV_INIT;
@@ -620,7 +620,7 @@ static int cmd_add(sh_store *st, const args_t *a) {
         const sh_candidate **pick = sh_xcalloc(n_cands + 1, sizeof *pick);
         const size_t n_pick = chosen(st, found, repos.len, all, &want, pick);
         bool *done = sh_xcalloc(n_pick + 1, sizeof *done);
-        ok = n_pick ? sh_engine_install(engine, pick, n_pick, done) : 0;
+        ok = n_pick ? sh_engine_install(engine, pick, n_pick, has(a, "--link"), done) : 0;
         free(done);
         free(pick);
     }

@@ -148,6 +148,8 @@ def norm_text(text, home, upstream):
 
 def norm_json(value, home, upstream):
     if isinstance(value, dict):
+        if value.get("format") == "skillhub-export":  # format version 2 adds sourceType and ref per skill; 2.0 reads both
+            value = dict(value, version=1, skills=[{k: v for k, v in s.items() if k != "sourceType"} for s in value["skills"]])
         out = {}
         for k, v in value.items():
             if k in ("installedAt", "updatedAt", "createdAt", "createdBy"):

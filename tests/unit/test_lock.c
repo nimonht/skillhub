@@ -127,7 +127,7 @@ static void both_files(void) {
     CHECK(sh_lock_split(&st, &only) && only == 1);
 
     // a change goes to the file that holds the entry; a new entry goes to npx's file
-    sh_source src = {sh_strdup("x/y"), sh_strdup(""), sh_strdup("SKILL.md"), sh_strdup(""), sh_strdup("t"), sh_strdup("t")};
+    sh_source src = {sh_strdup("github"), sh_strdup(""), sh_strdup("x/y"), sh_strdup(""), sh_strdup("SKILL.md"), sh_strdup(""), sh_strdup("t"), sh_strdup("t")};
     CHECK(sh_lock_put(&st, "old", &src));
     CHECK(has_entry(LEGACY, "old") && !has_entry(NPX, "old"));
     CHECK(sh_lock_put(&st, "brand-new", &src));
@@ -167,7 +167,7 @@ static void broken_file(void) {
     char *err = NULL;
     CHECK(sh_lock_load(&st, &err) == NULL && err != NULL);
     free(err);
-    sh_source src = {sh_strdup("x/y"), sh_strdup(""), sh_strdup("SKILL.md"), sh_strdup(""), sh_strdup("t"), sh_strdup("t")};
+    sh_source src = {sh_strdup("github"), sh_strdup(""), sh_strdup("x/y"), sh_strdup(""), sh_strdup("SKILL.md"), sh_strdup(""), sh_strdup("t"), sh_strdup("t")};
     CHECK(!sh_lock_put(&st, "b", &src));  // a file that does not parse is never overwritten
     sh_buf b = SH_BUF_INIT;
     sh_read_file(st.lock_path, 0, &b);

@@ -41,6 +41,8 @@ jobs:
         run: python3 tests/portable_smoke.py build/skillhub
       - name: Backend protocol (skillhub serve --stdio)
         run: python3 tests/rpc_smoke.py build/skillhub
+      - name: Every kind of source (GitLab, git, local copies and links, hostile imports)
+        run: python3 tests/sources_smoke.py build/skillhub
       - name: Install / uninstall round trip (must not remove shared directories)
         run: CMAKE_PREFIX_PATH="$QT_ROOT_DIR" sh tests/install-roundtrip.sh
       - name: GUI renders headless (both themes, three sizes) with no QML errors
@@ -82,6 +84,8 @@ jobs:
         run: python3 tests/portable_smoke.py build/skillhub
       - name: Backend protocol
         run: python3 tests/rpc_smoke.py build/skillhub
+      - name: Sources
+        run: python3 tests/sources_smoke.py build/skillhub
       - name: GUI renders headless on Qt 6.4
         run: sh tests/gui-smoke.sh build/skillhub "$RUNNER_TEMP/screens-qt64"
 
@@ -104,6 +108,7 @@ jobs:
           sh tests/smoke.sh build-asan/skillhub
           python3 tests/portable_smoke.py build-asan/skillhub
           python3 tests/rpc_smoke.py build-asan/skillhub
+          python3 tests/sources_smoke.py build-asan/skillhub
       - name: The parallel engine under ThreadSanitizer
         run: |
           sudo sysctl vm.mmap_rnd_bits=28  # TSan cannot map its shadow memory with the runner's default ASLR entropy
@@ -114,6 +119,7 @@ jobs:
           ctest --test-dir build-tsan --output-on-failure
           python3 tests/portable_smoke.py build-tsan/skillhub
           python3 tests/rpc_smoke.py build-tsan/skillhub
+          python3 tests/sources_smoke.py build-tsan/skillhub
           python3 bench/bench.py build-tsan/skillhub --repos 30 --skills 5 --install-mode all
       - name: Fuzz every parser of untrusted input for a minute
         run: |
@@ -147,6 +153,8 @@ jobs:
         run: python3 tests/portable_smoke.py build/skillhub-gui.app/Contents/MacOS/skillhub
       - name: Backend protocol
         run: python3 tests/rpc_smoke.py build/skillhub-gui.app/Contents/MacOS/skillhub
+      - name: Sources
+        run: python3 tests/sources_smoke.py build/skillhub-gui.app/Contents/MacOS/skillhub
       - name: GUI renders headless
         run: python3 tests/gui_launch.py build/skillhub-gui.app/Contents/MacOS/skillhub "$RUNNER_TEMP/screens"
       - uses: actions/upload-artifact@v4
@@ -191,6 +199,9 @@ jobs:
       - name: Backend protocol, through the program without a console that the window starts
         shell: bash
         run: python3 tests/rpc_smoke.py build/skillhubw.exe
+      - name: Sources
+        shell: bash
+        run: python3 tests/sources_smoke.py build/skillhub-cli.exe
       - name: GUI renders headless
         shell: bash
         run: python3 tests/gui_launch.py build/skillhub-cli.exe "$RUNNER_TEMP/screens"
