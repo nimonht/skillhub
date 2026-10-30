@@ -51,6 +51,24 @@ static char *project_key(const char *root) {
     return sh_strndup(hex, 8);
 }
 
+// A repository may have committed links: a path that looks inside the project can lead anywhere. true when the nearest part of
+// `path` that exists is inside `root` (canonical) once links are followed.
+static bool stays_inside(const char *root, const char *path) {
+    char *p = sh_strdup(path);
+    while (!sh_lexists(p) && strcmp(p, root) != 0) {
+        char *up = sh_path_parent(p);
+        free(p);
+        p = up;
+    }
+    char *real = sh_canonical(p);
+    char *inside = sh_strfmt("%s/", root);
+    const bool ok = real && (strcmp(real, root) == 0 || sh_path_within(real, inside));
+    free(inside);
+    free(real);
+    free(p);
+    return ok;
+}
+
 // the managed agents at their folders in the project; those that read `.agents/skills` read the project's shared folder
 static void add_project_agents(sh_store *st) {
     st->project_agents = sh_xcalloc(st->n_agents + 1, sizeof *st->project_agents);
@@ -59,11 +77,16 @@ static void add_project_agents(sh_store *st) {
         const sh_agent *a = st->agents[k];
         if (!*a->project_dir) continue;
         const bool shared = strcmp(a->project_dir, ".agents/skills") == 0;
+        char *dir = shared ? sh_strdup(st->central) : sh_path_join(st->project, a->project_dir);
+        if (!stays_inside(st->project, dir)) {  // linking through it would write into a folder outside the repository
+            free(dir);
+            continue;
+        }
         sh_agent *p = &st->project_agents[n];
         *p = *a;
         p->mode = (char *)(shared ? "native" : "link");
         p->linked = !shared;
-        p->dir = shared ? sh_strdup(st->central) : sh_path_join(st->project, a->project_dir);
+        p->dir = dir;
         memset(&p->extra_dirs, 0, sizeof p->extra_dirs);
         st->agents[n++] = p;
     }
@@ -74,6 +97,16 @@ bool sh_store_init_project(sh_store *st, const char *root, sh_log_fn log, void *
     char *clean = sh_canonical(root);
     if (!clean || !sh_is_dir(clean)) {
         if (err) *err = sh_strfmt("%s is not a folder", root);
+        free(clean);
+        memset(st, 0, sizeof *st);
+        return false;
+    }
+    char *shared = sh_path_join(clean, ".agents/skills"), *lock = sh_path_join(clean, "skills-lock.json");
+    const char *out = !stays_inside(clean, shared) ? ".agents/skills" : !stays_inside(clean, lock) ? "skills-lock.json" : NULL;
+    free(shared);
+    free(lock);
+    if (out) {
+        if (err) *err = sh_strfmt("%s in %s leads outside the project", out, clean);
         free(clean);
         memset(st, 0, sizeof *st);
         return false;

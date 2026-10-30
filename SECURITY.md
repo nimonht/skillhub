@@ -11,7 +11,7 @@ An export file can come from anywhere, so `skillhub import` validates it before 
 
 ## Project lock files are untrusted
 
-A `skills-lock.json` comes with a repository you may have just cloned. Skill Hub never runs git inside a project, whose config could name hooks or an fsmonitor. A `local` source that leads outside the project is not read, and a link in the project's shared folder does not count as a skill. Other sources in the file are used when you run `update`, as with `npx skills`, so read a lock file before updating from it; `check` and `diff` change nothing.
+A `skills-lock.json` comes with a repository you may have just cloned. Skill Hub never runs git inside a project, whose config could name hooks or an fsmonitor. What an entry declares proves nothing, so Skill Hub looks at where it leads once links are followed: a source that resolves to a folder must be inside the project, whatever its `sourceType` says, and a `github` entry must name that repository. A link in the project's shared folder is no skill, and a project whose `.agents/skills` or `skills-lock.json` leads outside it is refused. Remote sources in the file are used when you run `update`, as with `npx skills`, so read a lock file before updating from it; `check` and `diff` change nothing in the project.
 
 ## Reviewing updates
 
