@@ -13,6 +13,7 @@
 
 #include "sh_engine.h"
 #include "sh_exe.h"
+#include "sh_fetch.h"
 #include "sh_fs.h"
 #include "sh_history.h"
 #include "sh_json.h"
@@ -111,6 +112,8 @@ static void usage(void) {
         "  skillhub projects list [--json] | add PATH | remove PATH | auto PATH on|off   the projects known here; auto: the daily update\n"
         "  skillhub copy NAME PATH                 copy a skill of yours into a project, with its source\n"
         "  skillhub palette --seed #RRGGBB[,...] [--mode dark|light]   the accent roles derived from a colour, as JSON\n"
+        "  skillhub fetch [--json | --field NAME] [--logo builtin|none|PATH] [--icons unicode|nerd|none] [--no-color]\n"
+        "                                          this machine and its skills at a glance\n"
         "  skillhub remove NAME\n"
         "  skillhub restore NAME                   bring back a removed skill\n"
         "  skillhub diff NAME [--stat]             what an update would change, against the files on disk\n"
@@ -1042,6 +1045,53 @@ static int cmd_palette(const args_t *a) {
     return rc;
 }
 
+static bool stdout_is_terminal(void) {
+#ifdef _WIN32
+    DWORD mode;
+    return GetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE), &mode) != 0;
+#else
+    return isatty(1) != 0;
+#endif
+}
+
+// the terminals that show images through the kitty graphics protocol
+static bool terminal_shows_images(void) {
+    static const char *const signs[] = {"KITTY_WINDOW_ID", "GHOSTTY_RESOURCES_DIR", "WEZTERM_PANE"};
+    for (size_t i = 0; i < sizeof signs / sizeof signs[0]; ++i)
+        if (sh_env_is_set(signs[i])) return true;
+    return false;
+}
+
+static int cmd_fetch(sh_store *st, const args_t *a) {
+    if (has(a, "--json")) {
+        char *json = sh_fetch_json(st);
+        outf("%s\n", json);
+        free(json);
+        return 0;
+    }
+    const char *field = after(a, "--field");
+    if (field) {
+        char *value = sh_fetch_field(st, field);
+        if (!value) {
+            errf("no field named %s\n", field);
+            return 2;
+        }
+        outf("%s\n", value);
+        free(value);
+        return 0;
+    }
+    const char *icons = after(a, "--icons"), *logo = after(a, "--logo");
+    const bool tty = stdout_is_terminal();
+    const bool colour = !has(a, "--no-color") && tty && !sh_env_is_set("NO_COLOR");
+    const sh_fetch_opts o = {colour ? SH_COLOR_TRUE : SH_COLOR_NONE,
+                             icons && strcmp(icons, "nerd") == 0 ? SH_ICONS_NERD : icons && strcmp(icons, "none") == 0 ? SH_ICONS_NONE : SH_ICONS_UNICODE,
+                             logo ? logo : "builtin", tty && terminal_shows_images(), 0};
+    char *text = sh_fetch_render(st, &o);
+    out(text);
+    free(text);
+    return 0;
+}
+
 static int cmd_uninstall(sh_store *st, const args_t *a) {
     const bool dry = has(a, "--dry-run");
     if (!dry && !has(a, "--yes")) {
@@ -1220,6 +1270,7 @@ static int run_cli(int argc, char **argv) {
     else if (strcmp(cmd, "hold") == 0 || strcmp(cmd, "release") == 0) rc = cmd_hold(&st, cmd, &a);
     else if (strcmp(cmd, "disable") == 0 || strcmp(cmd, "enable") == 0) rc = cmd_switch(&st, &a, strcmp(cmd, "enable") == 0);
     else if (strcmp(cmd, "copy") == 0) rc = cmd_copy(&st, &a);
+    else if (strcmp(cmd, "fetch") == 0) rc = cmd_fetch(&st, &a);
     else if (strcmp(cmd, "remove") == 0) {
         if (a.n == 0) {
             usage();

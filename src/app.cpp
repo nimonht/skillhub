@@ -1,5 +1,6 @@
 #include "app.h"
 
+#include "gui/terminal/term_look.h"
 #include "gui/window_effects.h"
 #include "sh_palette.h"
 
@@ -22,6 +23,7 @@
 #include <QLocale>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QProcess>
 #include <QPalette>
 #include <QSettings>
 #include <QStandardPaths>
@@ -298,6 +300,11 @@ void AppController::onReady(bool restarted) {
     loadProjects();
     loadSettings();
     watchPortalAccent();
+    core_.call(QStringLiteral("system.info"), {}, [this](const CoreReply &r) {
+        if (!r.ok()) return;
+        shells_ = r.result.toObject().value(QStringLiteral("shells")).toArray().toVariantList();
+        emit countsChanged();
+    });
     refreshAutomation();
     loadSnapshot();
     emit countsChanged();  // centralPath is known now
@@ -356,6 +363,120 @@ void AppController::setProjectAuto(const QString &path, bool on) {
         if (!r.ok()) emit toast(QStringLiteral("error"), r.message());
         loadProjects();
     });
+}
+
+// ---- terminal ----
+
+QString AppController::terminalShell() const {
+    const QString chosen = setting(QStringLiteral("terminal"), QStringLiteral("shell"), QString()).toString();
+    if (!chosen.isEmpty() && QFile::exists(chosen)) return chosen;
+#ifdef Q_OS_WIN
+    for (const QString &name : {QStringLiteral("pwsh"), QStringLiteral("powershell"), QStringLiteral("cmd")}) {
+        const QString found = QStandardPaths::findExecutable(name);
+        if (!found.isEmpty()) return found;
+    }
+    return qEnvironmentVariable("ComSpec");
+#else
+    const QString shell = qEnvironmentVariable("SHELL");
+    return !shell.isEmpty() && QFile::exists(shell) ? shell : QStringLiteral("/bin/sh");
+#endif
+}
+
+QStringList AppController::terminalArguments() const {
+#ifdef Q_OS_WIN
+    return {};
+#else
+    const QString name = terminalShell().section(QLatin1Char('/'), -1);
+    return name == QLatin1String("sh") || name == QLatin1String("dash") ? QStringList{} : QStringList{QStringLiteral("-l")};
+#endif
+}
+
+QString AppController::terminalFolder() const {
+    if (!scope_.isEmpty()) return scope_;
+    return core_.init().value(QStringLiteral("paths")).toObject().value(QStringLiteral("home")).toString();
+}
+
+QVariantMap AppController::terminalLook() const { return importTerminalLook(setting(QStringLiteral("terminal"), QStringLiteral("importLook"), QString()).toString()); }
+
+void AppController::requestBanner() {
+    const QJsonObject params{{QStringLiteral("colors"), QStringLiteral("truecolor")},
+                             {QStringLiteral("icons"), setting(QStringLiteral("terminal"), QStringLiteral("icons"), QStringLiteral("unicode")).toString()},
+                             {QStringLiteral("logo"), setting(QStringLiteral("terminal"), QStringLiteral("logo"), QStringLiteral("builtin")).toString()}};
+    core_.call(QStringLiteral("fetch.render"), params, [this](const CoreReply &r) {
+        QString text = r.ok() ? r.result.toObject().value(QStringLiteral("ansi")).toString() : QString();
+        emit bannerReady(text.replace(QLatin1Char('\n'), QLatin1String("\r\n")));
+    });
+}
+
+static const struct { const char *id, *label, *program; } kTerminals[] = {
+    {"kitty", "kitty", "kitty"}, {"ghostty", "Ghostty", "ghostty"}, {"alacritty", "Alacritty", "alacritty"}, {"wezterm", "WezTerm", "wezterm"},
+    {"foot", "foot", "foot"}, {"konsole", "Konsole", "konsole"}, {"gnome-terminal", "GNOME Terminal", "gnome-terminal"}, {"xterm", "xterm", "xterm"},
+    {"wt", "Windows Terminal", "wt"},
+};
+
+QVariantList AppController::externalTerminals() const {
+    QVariantList out;
+    for (const auto &t : kTerminals)
+        if (!QStandardPaths::findExecutable(QString::fromLatin1(t.program)).isEmpty()) out << QVariantMap{{QStringLiteral("id"), QString::fromLatin1(t.id)}, {QStringLiteral("label"), QString::fromLatin1(t.label)}};
+#ifdef Q_OS_MACOS
+    out << QVariantMap{{QStringLiteral("id"), QStringLiteral("terminal-app")}, {QStringLiteral("label"), QStringLiteral("Terminal")}};
+#endif
+    return out;
+}
+
+// what a shell runs to show the banner and stay open
+static QStringList bannerArguments(const QString &shell) {
+    const QString name = shell.section(QLatin1Char('/'), -1).section(QLatin1Char('\\'), -1).toLower();
+    const QString fetch = QStringLiteral("skillhub fetch");
+    if (name.startsWith(QLatin1String("fish"))) return {QStringLiteral("-C"), fetch};
+    if (name.startsWith(QLatin1String("nu"))) return {QStringLiteral("-e"), fetch};
+    if (name.startsWith(QLatin1String("pwsh")) || name.startsWith(QLatin1String("powershell"))) return {QStringLiteral("-NoExit"), QStringLiteral("-Command"), fetch};
+    if (name.startsWith(QLatin1String("cmd"))) return {QStringLiteral("/K"), fetch};
+    return {QStringLiteral("-c"), fetch + QStringLiteral("; exec ") + shell + QStringLiteral(" -l")};
+}
+
+void AppController::openExternalTerminal(const QString &id) {
+    const QString shell = terminalShell(), dir = terminalFolder();
+    const QStringList run = QStringList{shell} + bannerArguments(shell);
+    const QString custom = setting(QStringLiteral("terminal"), QStringLiteral("externalTemplate"), QString()).toString();
+    QString program;
+    QStringList args;
+    if (!custom.isEmpty()) {
+        args = QProcess::splitCommand(custom);
+        for (QString &a : args) a.replace(QLatin1String("{dir}"), dir).replace(QLatin1String("{shell}"), shell);
+        if (!args.isEmpty()) program = args.takeFirst();
+    } else if (id == QLatin1String("kitty")) {
+        program = id;
+        args = QStringList{QStringLiteral("--directory"), dir} + run;
+    } else if (id == QLatin1String("ghostty")) {
+        program = id;
+        args = QStringList{QStringLiteral("--working-directory=") + dir, QStringLiteral("-e")} + run;
+    } else if (id == QLatin1String("alacritty")) {
+        program = id;
+        args = QStringList{QStringLiteral("--working-directory"), dir, QStringLiteral("-e")} + run;
+    } else if (id == QLatin1String("wezterm")) {
+        program = id;
+        args = QStringList{QStringLiteral("start"), QStringLiteral("--cwd"), dir, QStringLiteral("--")} + run;
+    } else if (id == QLatin1String("foot")) {
+        program = id;
+        args = QStringList{QStringLiteral("-D"), dir} + run;
+    } else if (id == QLatin1String("konsole")) {
+        program = id;
+        args = QStringList{QStringLiteral("--workdir"), dir, QStringLiteral("-e")} + run;
+    } else if (id == QLatin1String("gnome-terminal")) {
+        program = id;
+        args = QStringList{QStringLiteral("--working-directory=") + dir, QStringLiteral("--")} + run;
+    } else if (id == QLatin1String("xterm")) {
+        program = id;
+        args = QStringList{QStringLiteral("-e")} + run;
+    } else if (id == QLatin1String("wt")) {
+        program = id;
+        args = QStringList{QStringLiteral("-d"), dir} + run;
+    } else if (id == QLatin1String("terminal-app")) {
+        program = QStringLiteral("open");
+        args = QStringList{QStringLiteral("-a"), QStringLiteral("Terminal"), dir};
+    }
+    if (program.isEmpty() || !QProcess::startDetached(program, args, dir)) emit toast(QStringLiteral("error"), tr("Could not start %1").arg(id));
 }
 
 void AppController::measurePaths() { startJob(QStringLiteral("paths.sizes"), {}, tr("Measuring folders"), QStringLiteral("sizes"), false); }

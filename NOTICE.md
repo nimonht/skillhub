@@ -9,6 +9,8 @@ Skill Hub itself is MIT licensed ([LICENSE](LICENSE)). It includes the following
 | Brand marks (`data/provider-icons.json`), mostly | [lobehub/lobe-icons](https://github.com/lobehub/lobe-icons), Copyright (c) 2023 LobeHub | MIT, [data/LICENSE-lobe-icons](data/LICENSE-lobe-icons) |
 | Brand marks (`data/provider-icons.json`): Zed, Warp, Replit, OpenCode | [simple-icons](https://github.com/simple-icons/simple-icons) | CC0 1.0, [data/LICENSE-simple-icons](data/LICENSE-simple-icons) |
 | JSON reader and writer (`third_party/yyjson`), compiled in | [ibireme/yyjson](https://github.com/ibireme/yyjson), Copyright (c) 2020 YaoYuan | MIT, [third_party/yyjson/LICENSE](third_party/yyjson/LICENSE) |
+| Terminal emulator of the window (`third_party/libvterm`, 0.3.3), compiled in | [libvterm](https://www.leonerd.org.uk/code/libvterm/), Copyright (c) 2008 Paul Evans | MIT, [third_party/libvterm/LICENSE](third_party/libvterm/LICENSE) |
+| Image reader of `skillhub fetch` (`third_party/stb/stb_image.h`, 2.30), compiled in | [nothings/stb](https://github.com/nothings/stb), Sean Barrett | MIT or public domain, at the end of the file |
 | Event loop of `skillhub serve` (libuv 1.51.0): the system library on Linux, compiled in on macOS and Windows | [libuv/libuv](https://github.com/libuv/libuv), Copyright (c) 2015-present libuv project contributors | MIT, with notices for some of its files, [third_party/libuv/LICENSE](third_party/libuv/LICENSE) and [third_party/libuv/LICENSE-extra](third_party/libuv/LICENSE-extra) |
 
 ## Trademarks

@@ -40,7 +40,9 @@
         <file alias="Scroll.qml">qml/Scroll.qml</file>
         <file alias="PaneHandle.qml">qml/PaneHandle.qml</file>
         <file alias="ReviewPage.qml">qml/ReviewPage.qml</file>
+        <file alias="DockPanel.qml">qml/DockPanel.qml</file>
         <file alias="Glass.qml">qml/Glass.qml</file>
+        <file alias="TerminalSession.qml">qml/TerminalSession.qml</file>
         <file alias="GlassEffect.qml">qml/GlassEffect.qml</file>
         <file alias="Range.qml">qml/Range.qml</file>
         <file alias="ScopeMenu.qml">qml/ScopeMenu.qml</file>

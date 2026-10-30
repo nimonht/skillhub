@@ -168,7 +168,7 @@ ApplicationWindow {
                     }
                 }
 
-                ConsoleFeed {
+                DockPanel {
                     id: activity
                     visible: win.consoleOpen
                     SplitView.preferredHeight: 164
@@ -222,6 +222,10 @@ ApplicationWindow {
 
     readonly property string look: Theme.material + (Theme.dark ? "/dark" : "/light")
     onLookChanged: app.applyMaterial(win, Theme.dark)
+
+    // for the test of the terminal
+    function typeInTerminal(text) { const s = activity.sessionItem(); if (s) s.typeText(text) }
+    function terminalScreen() { const s = activity.sessionItem(); return s ? s.screenText() : "" }
 
     function saveLayout() {
         app.saveLayout("outer", outer.saveState())
@@ -301,6 +305,7 @@ ApplicationWindow {
     Connections {
         target: app
         function onShowSettings(section) { win.settingsOpen = true }
+        function onShowTerminal() { win.consoleOpen = true; activity.showTerminal() }
         function onSettingsChanged() {   // once, when the settings first arrive
             if (win.dockChecked) return
             win.dockChecked = true
@@ -318,7 +323,8 @@ ApplicationWindow {
     Shortcut { sequence: "Ctrl+U"; onActivated: if (!app.busy) app.checkUpdates() }
     Shortcut { sequence: "Ctrl+Shift+U"; onActivated: if (!app.busy && app.updateCount > 0) app.reviewAll() }
     Shortcut { sequences: ["F5", "Ctrl+R"]; onActivated: app.refresh() }
-    Shortcut { sequence: "Ctrl+J"; onActivated: win.consoleOpen = !win.consoleOpen }
+    Shortcut { sequence: "Ctrl+J"; onActivated: { if (win.consoleOpen && activity.tab !== "activity") activity.tab = "activity"; else win.consoleOpen = !win.consoleOpen } }
+    Shortcut { sequences: ["Ctrl+`"]; onActivated: { if (win.consoleOpen && activity.tab !== "activity") win.consoleOpen = false; else { win.consoleOpen = true; activity.showTerminal() } } }
     Shortcut { sequence: "Ctrl+Q"; onActivated: Qt.quit() }
     Shortcut { sequence: "Ctrl+,"; onActivated: win.settingsOpen = !win.settingsOpen }
     Shortcut { sequence: "Ctrl+Alt+Left"; onActivated: win.nudgeSide(-24) }

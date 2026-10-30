@@ -1,4 +1,5 @@
 // skillhub: GUI when started without a command, CLI otherwise (used by the systemd units).
+#include <QFile>
 #include <QSettings>
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
@@ -16,6 +17,7 @@
 #include <memory>
 
 #include "app.h"
+#include "gui/terminal/vterm_item.h"
 #include "gui/window_effects.h"
 
 #ifndef SKILLHUB_VERSION
@@ -79,6 +81,7 @@ int main(int argc, char **argv) {
         app.setWindowIcon(icon);
         QQuickStyle::setStyle(QStringLiteral("Basic"));
 
+        qmlRegisterType<VTermItem>("SkillHub.Terminal", 1, 0, "VTermItem");
         window_effects::prepare();
         AppController controller;
         if (!args.contains(QStringLiteral("--bench")))
@@ -157,7 +160,8 @@ int main(int argc, char **argv) {
             auto *tick = new QTimer(&app);
             auto ticks = std::make_shared<int>(0);
             auto armed = std::make_shared<int>(-1);
-            QObject::connect(tick, &QTimer::timeout, &app, [&, tick, ticks, armed, shotFile, opt] {
+            auto typed = std::make_shared<bool>(false);
+            QObject::connect(tick, &QTimer::timeout, &app, [&, tick, ticks, armed, typed, shotFile, opt] {
                 ++*ticks;
                 const bool busyShot = !opt("--action").isEmpty() && args.contains(QStringLiteral("--busy"));
                 if (*armed >= 0 && busyShot) {  // capture while the action is running
@@ -183,6 +187,7 @@ int main(int argc, char **argv) {
                     if (!opt("--scope").isEmpty()) controller.setScope(opt("--scope"));
                     if (opt("--action") == QLatin1String("scopes")) emit controller.showScopeMenu();
                     if (opt("--mode") == QLatin1String("review")) controller.reviewAll();
+                    if (opt("--mode") == QLatin1String("terminal")) emit controller.showTerminal();
                     if (opt("--mode") == QLatin1String("settings")) emit controller.showSettings(opt("--section").isEmpty() ? QStringLiteral("appearance") : opt("--section"));
                     if (opt("--action") == QLatin1String("update-all")) controller.updateAll();
                     if (opt("--action") == QLatin1String("check")) controller.checkUpdates();
@@ -191,6 +196,18 @@ int main(int argc, char **argv) {
                     return;
                 }
                 if (*ticks - *armed < (opt("--settle").isEmpty() ? 4 : opt("--settle").toInt())) return;  // let layout, transitions and toasts settle
+                if (opt("--mode") == QLatin1String("terminal") && !*typed) {   // a real round trip through the shell, then a look at the screen
+                    *typed = true;
+                    QMetaObject::invokeMethod(window, "typeInTerminal", Q_ARG(QVariant, opt("--terminal-run") + QStringLiteral("\n")));
+                    *armed = *ticks;
+                    return;
+                }
+                if (!opt("--terminal-dump").isEmpty()) {
+                    QVariant text;
+                    QMetaObject::invokeMethod(window, "terminalScreen", Q_RETURN_ARG(QVariant, text));
+                    QFile dump(opt("--terminal-dump"));
+                    if (dump.open(QIODevice::WriteOnly)) dump.write(text.toString().toUtf8());
+                }
                 window->grabWindow().save(shotFile);
                 tick->stop();
                 app.quit();

@@ -220,6 +220,7 @@ Written exactly like `npx skills` `src/local-lock.ts`, because it is committed a
 | `stage/<label>-<pid>-<n>/` | staging folders: the skill name (`import-<name>` for embedded skills), the process id and a counter, so no two threads or processes share one (1.x named them after the skill, so two processes could delete each other's) |
 | `stage/review-<name>-<pid>-<n>/` | a reviewed update: `new/` (upstream's folder) and `review.json` (`name`, `tree`, `skillPath`, and `hash`, the SHA-256 folder hash of `new/`, checked again before it is applied, so what is applied is what was shown). Kept for a day; other stages count as leftovers after ten minutes |
 | `sources.json` | derived update data, safe to delete |
+| `fetch-sizes.json` | folder sizes for `skillhub fetch`, remembered for an hour or until the folder changes |
 
 - Normalized URL: lowercase scheme and host, no trailing `/` or `.git`; `git@host:path` becomes `ssh://git@host/path`.
 - Clones made by 1.x are full working trees, sometimes with a local path as `origin` (the tests seed one). They are used as

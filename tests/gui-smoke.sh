@@ -83,6 +83,13 @@ for theme in dark light; do
   done
   shot "$theme-scopes" --theme "$theme" --size 1280x800 --action scopes
 done
+# the terminal: the banner on screen, then a command through a real shell on a real pty
+SHELL=/bin/sh shot "dark-terminal" --theme dark --size 1280x800 --layout dock=340 --mode terminal --terminal-run 'echo pty-$((6*7))' --terminal-dump "$OUT/terminal.txt" --settle 10
+grep -q 'Skills' "$OUT/terminal.txt" || fail "no banner in the terminal"
+grep -q 'pty-42' "$OUT/terminal.txt" || fail "the shell did not answer through the terminal"
+SHELL=/bin/sh shot "light-terminal" --theme light --size 1000x640 --mode terminal --terminal-run 'printf "\\033[1;31mred\\033[0m\\n"' --settle 10
+for theme in dark light; do shot "$theme-settings-terminal" --theme "$theme" --size 1280x800 --mode settings --section terminal; done
+
 # a custom accent, end to end: settings.json, the derived roles, every token that follows them
 mkdir -p "$H/.config/skillhub"
 printf '{"version":1,"appearance":{"accent":{"source":"custom","color":"#8B6CF6"}}}\n' > "$H/.config/skillhub/settings.json"

@@ -639,10 +639,16 @@ int sh_engine_check(sh_engine *e, sh_skills *skills, const sh_strv *only) {
     }
     run_job(&j);
     groups_free(&j.g);
+    const bool whole = !only || only->len == 0;
     int available = 0;
     for (size_t i = 0; i < skills->len; ++i)
         if (skills->items[i].update == SH_UPDATE_AVAILABLE && (!only || only->len == 0 || sh_strv_contains(only, skills->items[i].name)))
             ++available;
+    if (whole) {
+        int errors = 0;
+        for (size_t i = 0; i < skills->len; ++i) errors += skills->items[i].update == SH_UPDATE_ERROR;
+        sh_last_check_put(e->st, available, errors);
+    }
     return available;
 }
 

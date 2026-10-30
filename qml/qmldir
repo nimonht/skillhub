@@ -2,6 +2,8 @@ singleton Theme 1.0 Theme.qml
 AddSheet 1.0 AddSheet.qml
 AgentTile 1.0 AgentTile.qml
 Btn 1.0 Btn.qml
+DockPanel 1.0 DockPanel.qml
+TerminalSession 1.0 TerminalSession.qml
 Glass 1.0 Glass.qml
 GlassEffect 1.0 GlassEffect.qml
 Range 1.0 Range.qml
