@@ -58,13 +58,13 @@ try:
         print("ok  " + name)
     # the terminal on every system: a real shell on a real pty (ConPTY on Windows) answers through the emulator
     shell_env = dict(env, SHELL="/bin/sh")
-    shells = [("terminal", None)]
+    shells = [("terminal", None, None)]
     if os.name == "nt":   # on Windows the shell prints the banner itself, so each default shell gets its turn
         cmd = os.environ.get("ComSpec", "C:\\Windows\\System32\\cmd.exe")
-        shells = [("terminal", {"shell": cmd, "banner": False}), ("terminal-banner", {"shell": cmd, "banner": True})]
+        shells = [("terminal", {"shell": cmd, "banner": False}, None), ("terminal-banner", {"shell": cmd, "banner": True}, "cmd")]
         if shutil.which("pwsh"):
-            shells.append(("terminal-pwsh", {"shell": shutil.which("pwsh"), "banner": True}))
-    for name, settings in shells:
+            shells.append(("terminal-pwsh", {"shell": shutil.which("pwsh"), "banner": True}, "PowerShell"))
+    for name, settings, shell in shells:
         dump = os.path.join(OUT, name + ".txt")
         if settings:
             config = env.get("SKILLHUB_CONFIG") or os.path.join(home, "AppData", "Roaming", "skillhub")
@@ -80,8 +80,8 @@ try:
             screen = f.read()
         if screen.count("pty-check") < 2:   # the command as typed, and its answer
             fail("%s: the shell did not answer through the terminal:\n%s\n--- stdout\n%s\n--- stderr\n%s" % (name, screen, p.stdout, p.stderr))
-        if settings and settings["banner"] and "Folder" not in screen:
-            fail("%s: no banner in the terminal:\n%s\n--- stdout\n%s\n--- stderr\n%s" % (name, screen, p.stdout, p.stderr))
+        if shell and not re.search(r"Shell\s+%s\s" % shell, screen):   # the banner, naming the shell it runs in
+            fail("%s: no banner naming %s in the terminal:\n%s\n--- stdout\n%s\n--- stderr\n%s" % (name, shell, screen, p.stdout, p.stderr))
         print("ok  " + name)
     print("gui launch test passed (screenshots in %s)" % OUT)
 finally:

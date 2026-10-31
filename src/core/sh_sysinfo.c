@@ -16,6 +16,7 @@
 
 #ifdef _WIN32
 #include <windows.h>
+#include <tlhelp32.h>
 #else
 #include <pwd.h>
 #include <sys/utsname.h>
@@ -55,6 +56,32 @@ static char *terminal_name(void) {
     free(program);
     return env_or("TERM", "");
 }
+
+#ifdef _WIN32
+// PSModulePath is set for the whole machine and says nothing, so the answer is whoever started this program
+static const char *parent_shell(void) {
+    static const struct { const wchar_t *exe; const char *name; } shells[] = {
+        {L"cmd.exe", "cmd"}, {L"pwsh.exe", "PowerShell"}, {L"powershell.exe", "PowerShell"}, {L"bash.exe", "bash"},
+        {L"zsh.exe", "zsh"}, {L"fish.exe", "fish"}, {L"nu.exe", "nu"},
+    };
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snap == INVALID_HANDLE_VALUE) return "";
+    PROCESSENTRY32W e;
+    e.dwSize = sizeof e;
+    DWORD parent = 0;
+    for (BOOL more = Process32FirstW(snap, &e); more && !parent; more = Process32NextW(snap, &e))
+        if (e.th32ProcessID == GetCurrentProcessId()) parent = e.th32ParentProcessID;
+    const char *name = "";
+    for (BOOL more = Process32FirstW(snap, &e); more; more = Process32NextW(snap, &e)) {
+        if (e.th32ProcessID != parent) continue;
+        for (size_t i = 0; i < sizeof shells / sizeof shells[0]; ++i)
+            if (_wcsicmp(e.szExeFile, shells[i].exe) == 0) name = shells[i].name;
+        break;
+    }
+    CloseHandle(snap);
+    return name;
+}
+#endif
 
 #ifndef _WIN32
 static char *os_name(const char *machine) {
@@ -106,7 +133,7 @@ void sh_sysinfo_read(sh_sysinfo *s) {
     s->os = sh_strfmt("%s %s", product, arch);
     s->kernel = sh_strfmt("NT build %s", build);
     s->uptime = shown_uptime((long long)(GetTickCount64() / 1000));
-    s->shell = env_or("SKILLHUB_SHELL", sh_env_is_set("PSModulePath") ? "PowerShell" : "cmd");
+    s->shell = env_or("SKILLHUB_SHELL", parent_shell());
 #else
     struct utsname u;
     const bool have = uname(&u) == 0;
