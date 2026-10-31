@@ -116,7 +116,7 @@ static yyjson_mut_doc *load_file(const char *path, long long fresh_version, char
     }
     yyjson_mut_doc *m;
     yyjson_val *skills = doc ? yyjson_obj_get(yyjson_doc_get_root(doc), "skills") : NULL;
-    if (skills && !yyjson_is_obj(skills)) {  // "skills" that is not an object: not a lock file we can safely rewrite
+    if (doc && (!yyjson_is_obj(yyjson_doc_get_root(doc)) || (skills && !yyjson_is_obj(skills)))) {  // not a lock file we can safely rewrite
         if (err) *err = sh_strfmt("%s cannot be read; it is left as it is until it is fixed", path);
         yyjson_doc_free(doc);
         return NULL;
@@ -398,7 +398,8 @@ bool sh_lock_migrate(sh_store *st, char **err) {
             char *folder = sh_path_join(st->central, name);
             const bool installed = sh_is_dir(folder);
             free(folder);
-            if (installed && !yyjson_mut_obj_get(skills_of(primary), name)) {
+            yyjson_mut_val *have = yyjson_mut_obj_get(skills_of(primary), name);
+            if (installed && (!have || strcmp(updated_at(val), updated_at(have)) > 0)) {  // the entry the view showed
                 sh_json_set_val(primary, skills_of(primary), name, yyjson_mut_val_mut_copy(primary, val));
                 ++moved;
             }

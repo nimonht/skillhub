@@ -215,6 +215,25 @@ static char *known_folder(REFKNOWNFOLDERID id) {
 }
 #endif
 
+bool sh_path_windows_unsafe(const char *segment) {
+    static const char *const devices[] = {"CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7",
+                                           "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"};
+    const size_t len = strlen(segment);
+    if (len == 0 || strchr(segment, ':') || segment[len - 1] == '.' || segment[len - 1] == ' ') return true;
+    const char *dot = strchr(segment, '.');
+    const size_t base = dot ? (size_t)(dot - segment) : len;
+    for (size_t i = 0; i < sizeof devices / sizeof devices[0]; ++i) {
+        if (strlen(devices[i]) != base) continue;
+        bool same = true;
+        for (size_t k = 0; k < base && same; ++k) {
+            const char c = segment[k];
+            same = (c >= 'a' && c <= 'z' ? (char)(c - 'a' + 'A') : c) == devices[i][k];
+        }
+        if (same) return true;
+    }
+    return false;
+}
+
 #ifndef _WIN32
 // getpwuid answers from a static buffer, and every job thread opens a store of its own
 static char *passwd_home(void) {

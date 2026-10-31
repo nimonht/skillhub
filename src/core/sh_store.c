@@ -775,10 +775,16 @@ static int recover_swaps(sh_store *st) {
                 continue;
             }
             const char *dest = sh_json_str(root, "dest"), *backup = sh_json_str(root, "backup"), *stage = sh_json_str(root, "stage");
-            if ((inside(dest, st->central) || (st->parked && inside(dest, st->parked))) && inside(backup, st->backup) && !sh_lexists(dest) && sh_is_dir(backup) &&
-                sh_move_dir(backup, dest)) {
-                sh_store_log(st, "recovered %s: put back the version an interrupted update had moved aside", sh_json_str(root, "name"));
-                ++put_back;
+            if ((inside(dest, st->central) || (st->parked && inside(dest, st->parked))) && inside(backup, st->backup) && !sh_lexists(dest) && sh_is_dir(backup)) {
+                if (sh_move_dir(backup, dest)) {
+                    sh_store_log(st, "recovered %s: put back the version an interrupted update had moved aside", sh_json_str(root, "name"));
+                    ++put_back;
+                } else {  // the journal stays: the next run tries again
+                    sh_store_log(st, "cannot put %s back yet: it is still in %s", sh_json_str(root, "name"), backup);
+                    yyjson_doc_free(doc);
+                    free(path);
+                    continue;
+                }
             }
             if (inside(stage, stage_root)) sh_remove_tree(stage);
         }
@@ -846,7 +852,21 @@ static void remove_git_locks(const sh_store *st) {
     free(repos);
 }
 
+// what a crash left of a copy from another volume; the mutation lock is ours, so nothing is copying now
+static void remove_partial_copies(const sh_store *st) {
+    sh_strv names = SH_STRV_INIT;
+    sh_list_dir(st->central, SH_LIST_ALL, &names);
+    for (size_t i = 0; i < names.len; ++i) {
+        if (!sh_starts_with(names.items[i], SH_PARTIAL_PREFIX)) continue;
+        char *p = sh_path_join(st->central, names.items[i]);
+        sh_remove_tree(p);
+        free(p);
+    }
+    sh_strv_free(&names);
+}
+
 int sh_store_recover(sh_store *st, bool git_locks) {
+    remove_partial_copies(st);
     const int put_back = recover_swaps(st);
     char *stage_root = sh_path_join(st->cache, "stage");  // the mutation lock is ours: an old stage belongs to nobody
     sh_strv stages = SH_STRV_INIT;

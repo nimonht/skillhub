@@ -27,6 +27,9 @@ char *sh_trimmed(const char *s, size_t n);
 char *sh_simplified(const char *s, size_t n);
 bool sh_is_blank(const char *s);  // only spaces, or empty
 
+// removes in place what a terminal would act on: C0 controls except tab, DEL, and C1 controls. `s` is valid UTF-8.
+void sh_strip_controls(char *s);
+
 // Slugify for agent ids: lowercase, letters and digits kept, every other run becomes one '-', no '-' at the ends.
 // Like Qt, which looked at UTF-16 units, a character outside the Basic Multilingual Plane counts as a separator.
 char *sh_slugify(const char *s);

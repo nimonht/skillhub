@@ -26,6 +26,7 @@
 #define MAX_FILE (2LL * 1024 * 1024)      // one embedded file
 #define MAX_SKILL (12LL * 1024 * 1024)    // one local skill
 #define MAX_EXPORT (48LL * 1024 * 1024)   // the whole export file
+#define EXPORT_ROOM (1024 * 1024)         // kept free for the names and paths around the embedded files
 #define MAX_SKILLS 600
 #define MAX_FILES 800
 
@@ -69,7 +70,7 @@ static const char *remote_problem(const char *source, const char *type, sh_origi
 
 static bool valid_name(const char *n) {
     const size_t len = strlen(n);
-    if (len == 0 || len > 100 || strstr(n, "..")) return false;
+    if (len == 0 || len > 100 || strstr(n, "..") || sh_path_windows_unsafe(n)) return false;
     for (size_t i = 0; i < len; ++i) {
         const char c = n[i];
         const bool alnum = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9');
@@ -78,23 +79,9 @@ static bool valid_name(const char *n) {
     return true;
 }
 
-static bool reserved_on_windows(const char *seg) {
-    static const char *const names[] = {"CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7",
-                                        "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"};
-    const char *dot = strchr(seg, '.');
-    const size_t base = dot ? (size_t)(dot - seg) : strlen(seg);
-    for (size_t i = 0; i < sizeof names / sizeof names[0]; ++i) {
-        if (strlen(names[i]) != base) continue;
-        bool same = true;
-        for (size_t k = 0; k < base && same; ++k) same = (seg[k] & ~0x20) == names[i][k];
-        if (same) return true;
-    }
-    return false;
-}
-
 // a relative path made of plain segments that is safe on every system (docs/formats.md, section 9)
 static bool valid_rel(const char *p) {
-    if (!*p || sh_utf16_len(p) > 300 || p[0] == '/' || strchr(p, '\\') || strchr(p, ':')) return false;
+    if (!*p || sh_utf16_len(p) > 300 || p[0] == '/' || strchr(p, '\\')) return false;
     sh_strv seg = SH_STRV_INIT;
     sh_split(p, strlen(p), '/', false, &seg);
     bool ok = true;
@@ -102,7 +89,7 @@ static bool valid_rel(const char *p) {
         const char *s = seg.items[i];
         const size_t n = strlen(s);
         if (n == 0 || strcmp(s, ".") == 0 || strcmp(s, "..") == 0 || name_cmp(s, ".git") == 0) ok = false;
-        else if (s[n - 1] == '.' || s[n - 1] == ' ' || reserved_on_windows(s)) ok = false;
+        else if (sh_path_windows_unsafe(s)) ok = false;
     }
     sh_strv_free(&seg);
     return ok;
@@ -137,6 +124,7 @@ static int cmp_str(const char *a, const char *b) { return strcmp(a, b); }
 bool sh_store_write_export(sh_store *st, const char *path, bool include_local, int *tracked, int *local, sh_strv *skipped,
                            char **err) {
     int n_tracked = 0, n_local = 0;
+    long long embedded = 0;  // an export must stay small enough to import again
     yyjson_mut_doc *d = yyjson_mut_doc_new(NULL);
     yyjson_mut_val *root = yyjson_mut_obj(d);
     yyjson_mut_doc_set_root(d, root);
@@ -145,6 +133,10 @@ bool sh_store_write_export(sh_store *st, const char *path, bool include_local, i
     sh_store_scan(st, &skills);
     for (size_t i = 0; i < skills.len; ++i) {
         const sh_skill *s = &skills.items[i];
+        if ((travels(&s->src) || include_local) && n_tracked + n_local >= MAX_SKILLS) {
+            if (skipped) sh_strv_take(skipped, sh_strfmt("%s (one file holds %d skills at most)", s->name, MAX_SKILLS));
+            continue;
+        }
         yyjson_mut_val *o = yyjson_mut_obj(d);
         sh_json_set_str(d, o, "name", s->name);
         sh_json_set_str(d, o, "description", s->description);
@@ -208,10 +200,13 @@ bool sh_store_write_export(sh_store *st, const char *path, bool include_local, i
                 free(full);
             }
             sh_strv_free(&c.files);
+            const long long encoded = total / 3 * 4 + 4 + count * 256;  // base64, and the lines around each file
+            if (embedded + encoded > MAX_EXPORT - EXPORT_ROOM) too_big = true;
             if (too_big) {
                 if (skipped) sh_strv_take(skipped, sh_strfmt("%s (too large to embed)", s->name));
                 continue;
             }
+            embedded += encoded;
             sh_json_set_bool(d, o, "local", true);
             sh_json_set_val(d, o, "files", files);
             ++n_local;
@@ -323,6 +318,7 @@ void sh_store_read_export_data(const sh_store *st, const char *data, size_t n, s
         memset(it, 0, sizeof *it);
         it->name = sh_strdup(sh_json_str(o, "name"));
         it->description = sh_left_utf16(sh_json_str(o, "description"), 600);
+        sh_strip_controls(it->description);
         it->local = sh_json_bool(o, "local");
         it->source = sh_strdup("");
         it->url = sh_strdup("");
@@ -355,7 +351,7 @@ void sh_store_read_export_data(const sh_store *st, const char *data, size_t n, s
             long long total = 0;
             bool has_skill_md = false;
             if (nf == 0 || nf > MAX_FILES) set(&it->problem, sh_strdup("no files, or too many"));
-            it->files = sh_xcalloc(nf + 1, sizeof *it->files);
+            it->files = sh_xcalloc((nf > MAX_FILES ? 0 : nf) + 1, sizeof *it->files);
             size_t fi, fmax;
             yyjson_val *fv;
             yyjson_arr_foreach(files, fi, fmax, fv) {
@@ -363,6 +359,7 @@ void sh_store_read_export_data(const sh_store *st, const char *data, size_t n, s
                 const char *fpath = sh_json_str(fv, "path");
                 if (!valid_rel(fpath)) {
                     char *shown = sh_left_utf16(fpath, 60);
+                    sh_strip_controls(shown);
                     set(&it->problem, sh_strfmt("unsafe file path \"%s\"", shown));
                     free(shown);
                     break;
@@ -370,6 +367,7 @@ void sh_store_read_export_data(const sh_store *st, const char *data, size_t n, s
                 for (size_t k = 0; k < it->n_files; ++k) {  // two names that one case-insensitive disk would merge
                     if (name_cmp(it->files[k].path, fpath) == 0) {
                         char *shown = sh_left_utf16(fpath, 60);
+                        sh_strip_controls(shown);
                         set(&it->problem, sh_strfmt("unsafe file path \"%s\"", shown));
                         free(shown);
                     }

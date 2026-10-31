@@ -476,11 +476,15 @@ bool sh_move_dir(const char *from, const char *to) {
     if (sh_rename(from, to)) return true;
     // another volume: copy, then remove. Never through a link, which would delete what it points to.
     if (!cross_device() || sh_is_link(from)) return false;
-    if (!sh_copy_tree(from, to)) {
-        sh_remove_tree(to);
-        return false;
-    }
-    return sh_remove_tree(from);
+    // beside the target first and then renamed, so a crash never leaves half a folder under the real name
+    char *dir = sh_path_parent(to);
+    char *partial = sh_strfmt("%s/" SH_PARTIAL_PREFIX "%s", dir, sh_path_name(to));
+    free(dir);
+    sh_remove_tree(partial);
+    const bool copied = sh_copy_tree(from, partial) && sh_rename(partial, to);
+    if (!copied) sh_remove_tree(partial);
+    free(partial);
+    return copied && sh_remove_tree(from);
 }
 
 bool sh_copy_file(const char *from, const char *to) {

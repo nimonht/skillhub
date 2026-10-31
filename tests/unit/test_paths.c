@@ -26,6 +26,20 @@ static void clean(void) {
 }
 
 static void relative(void) {
+    // names Windows cannot keep, digits included
+    CHECK(sh_path_windows_unsafe("CON"));
+    CHECK(sh_path_windows_unsafe("con.txt"));
+    CHECK(sh_path_windows_unsafe("COM1"));
+    CHECK(sh_path_windows_unsafe("lpt9.md"));
+    CHECK(sh_path_windows_unsafe("a:b"));
+    CHECK(sh_path_windows_unsafe("name."));
+    CHECK(sh_path_windows_unsafe("name "));
+    CHECK(sh_path_windows_unsafe(".. "));
+    CHECK(!sh_path_windows_unsafe("COM"));
+    CHECK(!sh_path_windows_unsafe("COM10"));
+    CHECK(!sh_path_windows_unsafe("console"));
+    CHECK(!sh_path_windows_unsafe("SKILL.md"));
+    CHECK(!sh_path_windows_unsafe(".hidden"));
     // the link made for Claude Code: tests/smoke.sh checks exactly this text
     CHECK_STR(sh_path_relative("/home/u/.claude/skills", "/home/u/.agents/skills/alpha"), "../../.agents/skills/alpha");
     CHECK_STR(sh_path_relative("/a/b", "/a/b/c/d"), "c/d");

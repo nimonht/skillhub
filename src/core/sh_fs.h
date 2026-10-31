@@ -50,6 +50,7 @@ bool sh_rename(const char *from, const char *to);  // fails when `to` exists
 // Rename; across volumes, copy then remove. Never moves through a link.
 bool sh_move_dir(const char *from, const char *to);
 bool sh_copy_file(const char *from, const char *to);  // keeps the permission bits
+#define SH_PARTIAL_PREFIX ".partial-"  // a folder still being copied from another volume: never a skill
 bool sh_copy_tree(const char *from, const char *to);  // links are skipped
 bool sh_set_executable(const char *path, bool exec);  // rw-r--r-- or rwxr-xr-x
 int64_t sh_tree_bytes(const char *dir);               // the size of everything below it; links are not followed
