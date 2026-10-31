@@ -76,7 +76,7 @@ def main():
     commit(hub)
     p = run(env, "diff", "beta", "--stat")
     check("update available" in p.stdout and "local edits will be replaced" in p.stdout, "edits before an update:\n" + p.stdout)
-    os.remove(home + "/cache/skillhub/sources.json")  # as after 1.x, which kept no record of what it placed
+    os.remove(home + "/cache/skillhub/sources.json")  # as after an older version, which kept no record of what it placed
     p = run(env, "diff", "beta", "--stat")
     check("update available" in p.stdout and "local edits" not in p.stdout, "with no record nothing is claimed:\n" + p.stdout)
     run(env, "update", "beta")
@@ -132,11 +132,11 @@ def main():
     check(os.path.exists(home + "/.agents/skills/beta/late.md"), "released")
     run(env, "hold", "nosuch", expect=1)
 
-    # ---- a backup from 1.x has no description: the files come back, and the next check offers the update ----
+    # ---- an older backup has no description: the files come back, and the next check offers the update ----
     old = home + "/.agents/.backup/beta/20200101-000000"
-    skill(old, "beta", "from 1.x")
+    skill(old, "beta", "older")
     run(env, "rollback", "beta", "20200101-000000")
-    check("from 1.x" in text(home, "beta") and lock(home)["beta"]["skillFolderHash"] == "", "a 1.x backup: %s" % lock(home)["beta"])
+    check("older" in text(home, "beta") and lock(home)["beta"]["skillFolderHash"] == "", "an older backup: %s" % lock(home)["beta"])
     run(env, "check", expect=10)
     run(env, "update", "beta")
 

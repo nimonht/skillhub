@@ -1,8 +1,8 @@
 # Skill Hub data formats (2.0)
 
 This is the contract between the C core, the command line, the window and other tools that share the same files
-(`npx skills` above all). It is frozen before the 2.0 core is written; a change needs a note here first. Where a rule
-exists for compatibility with 1.x or with `npx skills`, the reason is given.
+(`npx skills` above all). A change needs a note here first. Where a rule exists for compatibility with older
+versions or with `npx skills`, the reason is given.
 
 Paths are written with `/` on every system. Inside the core every path uses `/`; Windows APIs get native separators and the
 `\\?\` long-path prefix only at the boundary.
@@ -19,8 +19,8 @@ Paths are written with `/` on every system. Inside the core every path uses `/`;
 | cache | `${XDG_CACHE_HOME:-$HOME/.cache}/skillhub` | `~/Library/Caches/skillhub` | `%LOCALAPPDATA%/cache/skillhub` | `SKILLHUB_CACHE` is the cache folder itself (set counts, even when empty) |
 | state | `${XDG_STATE_HOME:-$HOME/.local/state}/skillhub` | `~/Library/Application Support/skillhub` | `%LOCALAPPDATA%/skillhub/state` | `SKILLHUB_STATE` |
 
-The config and cache rows are exactly what Qt's `QStandardPaths` `GenericConfigLocation` / `GenericCacheLocation` return
-in 1.x, so 2.0 finds the files 1.x wrote. On Linux they follow `$HOME`, not `SKILLHUB_HOME`, as in 1.x; on macOS they
+The config and cache rows are exactly what Qt's `QStandardPaths` `GenericConfigLocation` / `GenericCacheLocation` return,
+so the files of older versions are found. On Linux they follow `$HOME`, not `SKILLHUB_HOME`; on macOS they
 follow the account's home, as `NSHomeDirectory` does. `XDG_*` values that are not absolute paths are ignored, as the XDG
 specification says.
 
@@ -30,13 +30,13 @@ specification says.
 
 Let `npxPath` be `$XDG_STATE_HOME/skills/.skill-lock.json` when `XDG_STATE_HOME` is set and absolute, otherwise
 `<home>/.agents/.skill-lock.json` (this is what `npx skills` uses). Let `legacyPath` be `<home>/.agents/.skill-lock.json`
-(what Skill Hub 1.x always used).
+(what older versions of Skill Hub always used).
 
 1. With `SKILLHUB_HOME` set: `legacyPath` only (tests and portable setups).
 2. `npxPath == legacyPath`: that file.
 3. Only `legacyPath` exists: it is used. Nothing is switched silently.
 4. Only `npxPath` exists, or neither: `npxPath` (created on the first write).
-5. Both exist. This happens: npx wrote its file while Skill Hub 1.x kept using the other one (the author's machine had
+5. Both exist. This happens: npx wrote its file while an older Skill Hub kept using the other one (one real machine had
    1 entry in one and 128 in the other). Both are read:
    - An entry in both files counts with the newer `updatedAt`.
    - A change to an entry goes to the file or files that already hold it; a new entry goes to `npxPath`; a removed skill
@@ -96,8 +96,8 @@ These follow `npx skills` `src/add.ts`, so both tools understand each other's en
 
 Entries of a type Skill Hub does not run are listed as "managed by npx": never fetched, never updated, never rewritten.
 
-An entry may also hold `ref`, the branch or tag it follows, absent for the default branch. An entry written by 1.x, or by
-npx before it wrote `sourceType`, has none and counts as `github`.
+An entry may also hold `ref`, the branch or tag it follows, absent for the default branch. An entry from an older version, or
+from npx before it wrote `sourceType`, has none and counts as `github`.
 
 **Live links.** A `local` entry whose folder in the shared folder is a link to the source folder, not a copy, is a live
 link: edits reach every agent at once. The scan accepts a link there only for an entry of type `local`, so a stray link
@@ -107,15 +107,15 @@ target is never moved, changed or backed up. Everything else that walks the shar
 ### Reading and writing
 
 - Read the whole file. If it does not parse, read it once more after 200 ms (npx writes without locking). If it still fails,
-  or `version` is greater than 3, report the problem and **do not write the file** until it is fixed. 1.x turned a broken
-  file into `{}` and wrote that back; 2.0 never overwrites a file it could not parse. The same rule covers
+  or `version` is greater than 3, report the problem and **do not write the file** until it is fixed. A file that could not be parsed
+  is never overwritten. The same rule covers
   `providers.json` and Antigravity's `skills.json`.
 - Writes merge per entry: re-read the current file, apply only our changes (added, changed and removed names), and write
   atomically: a temporary file in the same folder, `fsync`, then rename over the target. A symlinked lock file is
   resolved first, so the link survives.
-- A failed write is reported to the caller (1.x ignored it).
+- A failed write is reported to the caller.
 - Jobs over many skills commit their entries in groups: every 200 entries or 5 seconds, whichever comes first, and at
-  the end of the job. Each group reads and writes each file once (1.x rewrote the file after every skill). If the process
+  the end of the job. Each group reads and writes each file once. If the process
   is killed between two commits, the folders swapped since the last one have no lock entry yet and show as local skills
   until they are tracked again. The swap journal (section 8) closes that gap.
 
@@ -178,7 +178,7 @@ Written exactly like `npx skills` `src/local-lock.ts`, because it is committed a
 | `_conflicts/<agent>-<name>-<stamp>/` | adopt (a different copy in an agent folder) |
 | `.parked-replaced/<name>-<stamp>/` | unpark when the shared folder already holds a skill of that name |
 
-- `<stamp>` is `yyyyMMdd-HHmmss` in local time, as in 1.x, so old and new backups sort together. A second backup in the
+- `<stamp>` is `yyyyMMdd-HHmmss` in local time, the format older versions used, so all backups sort together. A second backup in the
   same second gets `-2`, `-3`, ...
 - Replacing or removing a live link leaves no backup: the folder it led to is still where it was.
 - Each backup folder may have a sidecar with the same name plus `.json`:
@@ -197,13 +197,13 @@ Written exactly like `npx skills` `src/local-lock.ts`, because it is committed a
 ```
 
   `reason` is one of `update`, `rollback`, `remove`, `duplicate`, `conflict`, `unpark`. `scope` is `user` or
-  `project:<absolute path>`. `lockEntry` is `null` for local skills. Backups from 1.x have no sidecar: restoring one
+  `project:<absolute path>`. `lockEntry` is `null` for local skills. Backups from older versions have no sidecar: restoring one
   restores the files only, with an empty `skillFolderHash`, so the next check offers the update again.
 - Retention: the newest N `<stamp>` folders per skill are kept (setting `updates.backupsKept`, default 3, 1–20). Pruning
   removes each folder together with its sidecar.
 
 - `reason` is `update`, `install`, `rollback` or `remove`. A swap writes the sidecar after the new version is in place, so a
-  crash at that moment leaves a backup without one, which then counts as a backup from 1.x.
+  crash at that moment leaves a backup without one, which then counts as a backup from an older version.
 - Rollback backs up the current version (reason `rollback`), moves the chosen backup into place, restores its lock entry
   and tree record, and sets a hold. A backup without a sidecar brings back the files only: the lock entry stays and its hash
   is cleared, so the next check offers the update.
@@ -214,22 +214,22 @@ Written exactly like `npx skills` `src/local-lock.ts`, because it is committed a
 
 | Path | What |
 |---|---|
-| `repos/owner__repo/` | github.com repositories without a ref (the 1.x key, kept so existing clones are reused) |
+| `repos/owner__repo/` | github.com repositories without a ref (the key older versions used, kept so existing clones are reused) |
 | `repos/<host>/<path>-<h8>/` | every other repository; `<path>` has `/` replaced by `__` and characters outside `[A-Za-z0-9._-]` by `_`; `<h8>` is the first 8 hex digits of SHA-1 over `<normalized url>#<ref>` |
 | `repos/<key>.lock` | per-repository lock (section 8) |
-| `stage/<label>-<pid>-<n>/` | staging folders: the skill name (`import-<name>` for embedded skills), the process id and a counter, so no two threads or processes share one (1.x named them after the skill, so two processes could delete each other's) |
+| `stage/<label>-<pid>-<n>/` | staging folders: the skill name (`import-<name>` for embedded skills), the process id and a counter, so no two threads or processes share one |
 | `stage/review-<name>-<pid>-<n>/` | a reviewed update: `new/` (upstream's folder) and `review.json` (`name`, `tree`, `skillPath`, and `hash`, the SHA-256 folder hash of `new/`, checked again before it is applied, so what is applied is what was shown). Kept for a day; other stages count as leftovers after ten minutes |
 | `sources.json` | derived update data, safe to delete |
 | `fetch-sizes.json` | folder sizes for `skillhub fetch`, remembered for an hour or until the folder changes |
 
 - Normalized URL: lowercase scheme and host, no trailing `/` or `.git`; `git@host:path` becomes `ssh://git@host/path`.
-- Clones made by 1.x are full working trees, sometimes with a local path as `origin` (the tests seed one). They are used as
+- Clones made by older versions are full working trees, sometimes with a local path as `origin` (the tests seed one). They are used as
   they are. New clones are made with `--depth 1 --no-checkout`: everything is read from the object store (`ls-tree`,
   `cat-file --batch`), never from a working tree.
 - Bringing a clone up to date: `git ls-remote origin <ref>` (`HEAD` without a ref; `<ref>` and `<ref>^{}`, so a tag is
   followed to its commit, with a tag winning over a branch of the same name) is compared with the clone's own `HEAD`.
   When they match, nothing is downloaded. Otherwise `git fetch --depth 1 origin <ref>` runs and `HEAD` is moved to
-  `FETCH_HEAD^{commit}` with `git update-ref --no-deref` (a 1.x clone's working tree is left as it was). The clone's `HEAD` is the only record of
+  `FETCH_HEAD^{commit}` with `git update-ref --no-deref` (the working tree of an older clone is left as it was). The clone's `HEAD` is the only record of
   what the cache holds; `sources.json` never decides whether to fetch, because a separate record could run ahead of the
   clone after a crash.
 - Every git command runs with `-c core.longpaths=true -c gc.auto=0 -c maintenance.auto=false -c core.fsmonitor=false
@@ -254,8 +254,8 @@ Written exactly like `npx skills` `src/local-lock.ts`, because it is committed a
 
 `trees` is keyed by scope (`user` or `project:<path>`). `contentHash` is the SHA-256 folder hash of what Skill Hub placed,
 for every source: when the folder no longer has that hash, it holds local edits. A skill with no record (installed by
-1.x or npx) has no such claim made about it. `repos`, `lastCheck` and `commit` are reserved; 2.0 so far writes `treeSha`
-and `contentHash`.
+an older version or npx) has no such claim made about it. `repos`, `lastCheck` and `commit` are reserved; only `treeSha`
+and `contentHash` are written so far.
 
 `treeSha` is what makes GitLab and git checks cheap: their lock entries hold a hash of the files, and comparing that with
 upstream would mean downloading them. So `check` compares the git tree id of the folder upstream with the id on record.
@@ -264,7 +264,7 @@ GitHub entries need no record because their hash in the lock is the tree id. A `
 
 ## 6. Config (`<config>`)
 
-All files are JSON with a `version` field, written atomically. `providers.json` keeps its 1.x shape.
+All files are JSON with a `version` field, written atomically. `providers.json` keeps the shape older versions wrote.
 
 ### `settings.json`
 
@@ -316,11 +316,10 @@ Everything that both the command line and the window need. Missing keys mean the
 - `appearance.theme`: `system`, `dark` or `light`. `accent.source`: `default` (mint), `system`, `preset` or `custom`;
   `color` is the chosen `#RRGGBB`. `material`: `solid`, `blur` or `glass`. `density`: `comfortable` or `compact`.
 - `updates.parallel` and `updates.parallelPerHost` limit git fetches (each can use tens of MB);
-  `updates.parallelChecksPerHost` limits the lightweight `ls-remote` checks, which are bound by network round trips
-  (`docs/spikes.md`, spike 2).
+  `updates.parallelChecksPerHost` limits the lightweight `ls-remote` checks, which are bound by network round trips.
 - `terminal.shell` and `terminal.external` are empty for "detect". `importLook` is `kitty`, `ghostty`, `alacritty` or
   empty. `logo` is `builtin`, `none` or a file path. `icons` is `unicode`, `nerd` or `none`.
-- 1.x kept the theme and reduce-motion choice in `QSettings`; the window moves them here on its first 2.0 start.
+- Older versions kept the theme and reduce-motion choice in `QSettings`; the window moves them here on its first start.
 
 ### `toggles.json`
 
@@ -377,7 +376,7 @@ A skill switched off for every agent that reads the shared folder (`@shared`, on
 gets a skill of the same name meanwhile (installed by npx, say), the shared folder wins and the parked copy is moved to
 `.backup/.parked-replaced/`.
 
-Skill Hub 1.x knows nothing about parked skills: run `skillhub enable --all-parked` before downgrading.
+`skillhub enable --all-parked` brings every parked skill back.
 
 ## 8. Locks and crash safety (`<state>`)
 
@@ -400,7 +399,7 @@ Skill Hub 1.x knows nothing about parked skills: run `skillhub enable --all-park
   start of each of its changing jobs. For each journal entry whose `dest` is missing and whose `backup` exists, the
   backup is moved back; the entry's stage folder is removed. Paths outside the shared, backup and stage folders are never
   touched. Staging folders and git `*.lock` files in cache clones whose `<key>.lock` is free are removed once they are
-  more than ten minutes old: a Skill Hub 1.x still installed takes neither lock, and a younger one may be its.
+  more than ten minutes old: an older Skill Hub still installed takes neither lock, and a younger one may be its.
 
 ## 9. Export file (`skillhub-export`)
 
@@ -421,12 +420,11 @@ Version 2 is written; versions 1 and 2 are read.
 ```
 
 - Limits, the same on export and import: 600 skills, 48 MB file, 12 MB per local skill, 2 MB per embedded file, 800 files
-  per skill. 1.x checked them only on import, so a large library could export a file it could not import again. A skill
-  over a limit is left out of the export and listed.
+  per skill. A skill over a limit is left out of the export and listed, so every export file can be imported again.
 - Remote entries must use `https`. Local paths, `file:`, `ssh:` and `git@` sources are rejected on import, so a hostile
   file cannot make Skill Hub copy a folder from this machine or use its SSH keys. So are URLs with a user name or token
   in them, a `#ref` or a folder inside `source`, and a `ref` that is not a plain branch or tag. The URL in the file is rebuilt from the
-  validated source, as in 1.x. An entry without `sourceType` is GitHub-only, as version 1 files are.
+  validated source. An entry without `sourceType` is GitHub-only, as version 1 files are.
 - A skill whose source cannot be imported elsewhere travels as files instead (`"local": true`): local folders, live links,
   ssh sources and types managed by npx. Its source stays behind, so the file names no path of this machine.
 - Names: `^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$` without `..`. File paths: relative, `/`-separated, at most 300 characters, no
@@ -447,13 +445,13 @@ folder natively.
                    "extraDirs": [], "ignore": ["synced"] } ] }
 ```
 
-The user's `providers.json` in the config folder (`overrides`, `custom`) keeps its 1.x shape.
+The user's `providers.json` in the config folder (`overrides`, `custom`) keeps the shape older versions wrote.
 
 ## 11. Command line output that scripts and tests rely on
 
-- `list --json`: an array of `{ "name", "source", "hash", "agents": { "<agent id>": "<state>" } }` as in 1.x, plus
+- `list --json`: an array of `{ "name", "source", "hash", "agents": { "<agent id>": "<state>" } }`, plus
   `"scope"`, `"sourceType"`, `"lock"` (`"current"` or `"legacy"`) and `"parked"`. Link states: `link`, `shared`, `MISSING`,
-  `COPY` and `OTHER` as in 1.x, plus `off` (switched off for that agent; healthy) and `synced` (a project copy kept
+  `COPY`, `OTHER`, `off` (switched off for that agent; healthy) and `synced` (a project copy kept
   identical where links cannot be made; healthy).
 - Messages that tests match stay word for word, for example `0 change(s)`, `healthy`, `problems: N`,
   `nothing to install`, `aborted`, `N update(s) available`.
@@ -469,14 +467,14 @@ Exit codes:
 | 75 | another Skill Hub operation holds the lock |
 | 127 | the window (`skillhub-gui`) or the backend could not be started |
 
-`check NAME` checks every tracked skill and its exit code counts all of them, as in 1.x. Kept on purpose: scripts may rely
+`check NAME` checks every tracked skill and its exit code counts all of them. Kept on purpose: scripts may rely
 on it.
 
 Commands that work on many repositories (`add`, `check`, `update`, `import`) handle them in parallel:
 
 - Progress lines (`cloning …`, `git failed for …`, `installed …`, `updated …`, `linked …`, `FAILED to import …`) come in
   the order the work finishes, which is not fixed. The status lines of `check` and `update` and the closing summary line
-  keep their 1.x order and place.
+  keep a fixed order and place.
 - A repository that cannot be reached is reported once (`git failed for owner/repo: …`), not once per skill; each of its
   skills still shows the error in its own status line.
 - `add` with several repositories reads all of them first, then installs. When two of them offer a skill of the same
@@ -496,4 +494,4 @@ Commands that work on many repositories (`add`, `check`, `update`, `import`) han
 | `SKILLHUB_NO_SYMLINKS` | Any value: behave like an account that may not create symlinks. On Windows junctions are used for the user's own skills. Everywhere, projects get synced copies |
 | `SKILLHUB_GUI_BIN` | the window program `skillhub` starts, instead of the one next to it |
 | `SKILLHUB_BACKEND` | the backend program the window starts, instead of the one next to it |
-| `SKILLHUB_THEME`, `SKILLHUB_REDUCE_MOTION`, `SKILLHUB_NO_HOVER` | window test switches, as in 1.x |
+| `SKILLHUB_THEME`, `SKILLHUB_REDUCE_MOTION`, `SKILLHUB_NO_HOVER` | window test switches |

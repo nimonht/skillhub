@@ -288,7 +288,7 @@ static char *normalized_url(const char *url) {
 
 char *sh_origin_cache_dir(const sh_origin *o, const char *cache) {
     if (o->type == SH_ORIGIN_GITHUB && !*o->ref && strstr(o->url, "https://github.com/") == o->url) {
-        sh_buf k = SH_BUF_INIT;  // the 1.x key: owner__repo
+        sh_buf k = SH_BUF_INIT;  // the key older versions used: owner__repo
         for (const char *c = o->source; *c; ++c) {
             if (*c == '/') sh_buf_puts(&k, "__");
             else sh_buf_putc(&k, *c);

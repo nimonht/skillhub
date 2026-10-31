@@ -53,7 +53,7 @@ public:
     Q_INVOKABLE void feed(const QString &text);    // shown as if the shell had said it; the banner comes this way
     Q_INVOKABLE void type(const QString &text);    // as if typed
     Q_INVOKABLE void copy();
-    Q_INVOKABLE void paste();
+    void paste();
     Q_INVOKABLE QString screenText() const;        // what is on screen, for tests
 
     QString fontFamily() const { return font_.family(); }

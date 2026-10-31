@@ -91,6 +91,12 @@ that into one directory plus a few symlinks, and tells you the moment something 
     <td align="center"><sub>Light theme, one agent inspected: what it can't see, and a one-click repair.</sub></td>
     <td align="center"><sub>Add from anywhere: read a source, tick the skills you want.</sub></td>
   </tr>
+  <tr>
+    <td colspan="2" align="center"><img src="docs/screenshot-settings.png" width="72%" alt="Settings: theme, accent colour with a live preview, and the window's material"></td>
+  </tr>
+  <tr>
+    <td colspan="2" align="center"><sub>Settings: theme, any accent colour, blur or Liquid Glass, density and scale.</sub></td>
+  </tr>
 </table>
 
 <sub>The screenshots show demo data, made by <code>tools/demo-screenshots.sh</code>.</sub>

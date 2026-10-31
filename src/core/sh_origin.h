@@ -28,7 +28,7 @@ void sh_origin_free(sh_origin *o);
 const char *sh_origin_type_name(sh_origin_type t);  // "github", "gitlab", "git", "local"
 bool sh_origin_type_from_name(const char *name, sh_origin_type *t);
 // The cache clone's folder (docs/formats.md, section 5): <cache>/repos/owner__repo for GitHub without a ref (the key
-// 1.x used), else <cache>/repos/<host>/<path>-<8 hex of SHA-1 over normalized URL#ref>.
+// older versions used), else <cache>/repos/<host>/<path>-<8 hex of SHA-1 over normalized URL#ref>.
 char *sh_origin_cache_dir(const sh_origin *o, const char *cache);
 
 #ifdef __cplusplus

@@ -26,7 +26,7 @@ static void clean(void) {
 }
 
 static void relative(void) {
-    // the link 1.x makes for Claude Code: tests/smoke.sh checks exactly this text
+    // the link made for Claude Code: tests/smoke.sh checks exactly this text
     CHECK_STR(sh_path_relative("/home/u/.claude/skills", "/home/u/.agents/skills/alpha"), "../../.agents/skills/alpha");
     CHECK_STR(sh_path_relative("/a/b", "/a/b/c/d"), "c/d");
     CHECK_STR(sh_path_relative("/a/b/c", "/a"), "../..");
@@ -137,7 +137,7 @@ static void origins(void) {
         CHECK(!sh_origin_parse(bad[i], &o, &err) && err);
         free(err);
     }
-    // cache folders: the 1.x key for plain GitHub, a host folder and a hash for the rest
+    // cache folders: the older key for plain GitHub, a host folder and a hash for the rest
     sh_origin o;
     CHECK(sh_origin_parse("https://git.Example.com:8443/group/proj/-/tree/dev/sub", &o, NULL));
     CHECK_EQ_STR(o.url, "https://git.Example.com:8443/group/proj.git");  // the port stays, and it is no part of the host

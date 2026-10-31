@@ -37,7 +37,7 @@ void sh_sha256_final(sh_sha256 *c, unsigned char out[32]);
 void sh_hex(const unsigned char *bytes, size_t n, char *out);
 
 void sh_base64_encode(const void *data, size_t n, sh_buf *out);
-// Decodes like Qt's QByteArray::fromBase64 without AbortOnBase64DecodingErrors, which 1.x used for export files: every
+// Decodes like Qt's QByteArray::fromBase64 without AbortOnBase64DecodingErrors, as export files from older versions expect: every
 // character outside the alphabet (padding, line breaks, junk) is skipped and decoding goes on.
 void sh_base64_decode_lenient(const char *s, size_t n, sh_buf *out);
 

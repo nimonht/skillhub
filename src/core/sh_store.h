@@ -1,6 +1,5 @@
 // The skills store: one shared folder (~/.agents/skills) used by every coding agent, the agent catalog, the lock file
-// shared with `npx skills`, updates from git, export and import, automation and uninstall. This is the C port of 1.x's
-// hub::Store (src/store.cpp, src/providers.cpp, src/transfer.cpp); messages and decisions are kept word for word.
+// shared with `npx skills`, updates from git, export and import, automation and uninstall.
 #pragma once
 
 #include <stdbool.h>
@@ -35,7 +34,7 @@ typedef struct sh_agent {
 typedef enum { SH_LINK_NATIVE, SH_LINK_LINKED, SH_LINK_MISSING, SH_LINK_COPY, SH_LINK_FOREIGN, SH_LINK_OFF, SH_LINK_SYNCED } sh_link_state;
 
 typedef struct sh_source {
-    char *type;         // sourceType: "github" (also when empty: 1.x wrote none), "gitlab", "git", "local", or one npx runs
+    char *type;         // sourceType: "github" (also when empty: older versions wrote none), "gitlab", "git", "local", or one npx runs
     char *ref;          // branch or tag the skill follows ("" = the default branch)
     char *source;       // "owner/repo", the repository URL, or the local folder
     char *url;          // clone URL

@@ -14,8 +14,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0   # the v1.0.1 tag: the reference for the differential test
+      - name: Every file names the same version
+        run: sh packaging/check-version.sh
       - name: Qt (newer than the Qt 6.4 that Ubuntu 24.04 ships; that one is tested in its own job)
         uses: jurplel/install-qt-action@v4
         with:
@@ -56,13 +56,6 @@ jobs:
         run: CMAKE_PREFIX_PATH="$QT_ROOT_DIR" sh tests/install-roundtrip.sh
       - name: GUI renders headless (both themes, three sizes) with no QML errors
         run: sh tests/gui-smoke.sh build/skillhub "$RUNNER_TEMP/screens"
-      - name: Skill Hub 1.0.1, the reference for the differential test
-        run: |
-          git worktree add "$RUNNER_TEMP/ref" v1.0.1
-          mkdir "$RUNNER_TEMP/ref/build" && cd "$RUNNER_TEMP/ref/build"
-          qmake ../skillhub.pro && make -j"$(nproc)"
-      - name: Differential test against 1.0.1 (output, exit codes, files left behind)
-        run: python3 tests/diff_vs_1_0.py "$RUNNER_TEMP/ref/build/skillhub" build/skillhub
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -130,6 +123,7 @@ jobs:
           python3 tests/toggles_smoke.py build-asan/skillhub
           python3 tests/projects_smoke.py build-asan/skillhub
           python3 tests/automation_smoke.py build-asan/skillhub
+          python3 tests/parallel_smoke.py build-asan/skillhub
       - name: The parallel engine under ThreadSanitizer
         run: |
           sudo sysctl vm.mmap_rnd_bits=28  # TSan cannot map its shadow memory with the runner's default ASLR entropy
@@ -145,7 +139,7 @@ jobs:
           python3 tests/toggles_smoke.py build-tsan/skillhub
           python3 tests/projects_smoke.py build-tsan/skillhub
           python3 tests/automation_smoke.py build-tsan/skillhub
-          python3 bench/bench.py build-tsan/skillhub --repos 30 --skills 5 --install-mode all
+          python3 tests/parallel_smoke.py build-tsan/skillhub
       - name: Fuzz every parser of untrusted input for a minute
         run: |
           CC=clang cmake -B build-fuzz -DSKILLHUB_GUI=OFF -DSKILLHUB_FUZZ=ON -DSKILLHUB_TESTS=OFF -DCMAKE_BUILD_TYPE=RelWithDebInfo

@@ -24,7 +24,7 @@ void sh_toggles_forget(const char *name);  // the skill is gone
 // Switches skills for `agent`: an agent id, SH_AGENTS_SHARED or SH_AGENTS_ALL. All skills at once: one write of each file, one
 // relink. An agent that reads the shared folder stands for all of them, and `err` says so.
 bool sh_skills_set_enabled(sh_store *st, const char *const *names, size_t n, const char *agent, bool on, char **err);
-int sh_unpark_all(sh_store *st);  // before going back to 1.x, which knows nothing of parked skills
+int sh_unpark_all(sh_store *st);  // every parked skill back in the shared folder
 
 bool sh_store_is_parked(const sh_store *st, const char *name);
 bool sh_parked_entry(const sh_store *st, const char *name, sh_source *out);

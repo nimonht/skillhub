@@ -1,4 +1,4 @@
-// Automation: the daily update and the stray watcher. systemd user units on Linux (written exactly as 1.x wrote them),
+// Automation: the daily update and the stray watcher. systemd user units on Linux,
 // LaunchAgents on macOS, Task Scheduler on Windows. Every backend builds everywhere, and SKILLHUB_AUTOMATION_DRYRUN (systemd,
 // launchd or schtasks; any other value: this system's own) writes the files and logs the commands instead of running them,
 // so all three can be tested on any machine.

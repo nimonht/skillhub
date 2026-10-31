@@ -13,8 +13,8 @@ extern "C" {
 
 typedef struct {
     char *stamp;       // the backup's folder name: when it was made, and its id for rollback
-    char *reason;      // update, install, rollback; "" for a backup made by 1.x
-    char *created_at;  // ISO UTC; "" for a backup made by 1.x
+    char *reason;      // update, install, rollback; "" for a backup from an older version
+    char *created_at;  // ISO UTC; "" for a backup from an older version
     char *tree;        // the upstream tree id of that version; "" when unknown
     bool has_entry;    // its lock entry was kept, so a rollback restores the source too
 } sh_version;

@@ -2,11 +2,11 @@
 
 ## 2.0.0 - unreleased
 
-The core is now C, and the window talks to it over a pipe. A command-line run takes 5 MB instead of 65, and 10,000 skills install in
-6 s, check in under 2 s and update in 3 s, with the window staying responsive throughout.
+The core is now C, and the window talks to it over a pipe. `skillhub list` peaks under 4 MB instead of 35, and 10,000 skills install in
+5 s, check in under 2 s and update in under 3 s, with the window staying responsive throughout.
 
 Going back to 1.x: run `skillhub enable --all-parked` first, because 1.x knows nothing of parked skills. Everything else 2.0 adds
-(sidecars, toggles.json, state.json) is ignored by 1.x and does no harm.
+(sidecars, toggles.json, state.json) is ignored by 1.x and does no harm. The 1.x code stays on the `archive/v1` branch.
 
 - **Skills from anywhere.** `skillhub add` and the Add sheet take GitLab projects (nested groups, self-hosted `/-/tree/`
   links), any git URL (https, ssh, `git@host:path`), a branch or tag (`#ref`), a folder inside a repository, and local

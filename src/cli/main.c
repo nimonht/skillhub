@@ -1,5 +1,5 @@
 // skillhub: the command line, written in C. With no command, or `gui`, it starts the window (skillhub-gui, skillhub.exe on
-// Windows), which sits next to it. Every other command runs here; output and exit codes are those of 1.x, word for word,
+// Windows), which sits next to it. Every other command runs here; output and exit codes stay the same, word for word,
 // because scripts and tests rely on them (docs/formats.md, section 11).
 #if !defined(_WIN32) && !defined(__APPLE__)
 #define _DEFAULT_SOURCE
@@ -122,7 +122,7 @@ static void usage(void) {
         "  skillhub rollback NAME [STAMP]          back to an earlier version; automatic updates then wait\n"
         "  skillhub hold NAME | release NAME       keep automatic updates away from a skill, or let them back\n"
         "  skillhub disable|enable NAME... [--agent ID]... [--shared] [--all]   per-agent switches (no option: --all)\n"
-        "  skillhub enable --all-parked            bring every parked skill back (do this before going back to 1.x)\n"
+        "  skillhub enable --all-parked            bring every parked skill back\n"
         "  skillhub track NAME SOURCE [PATH]       set the upstream of a local skill\n"
         "  skillhub autoupdate on|off|status       daily update (systemd timer, launchd agent or scheduled task)\n"
         "  skillhub watch on|off|status            auto-adopt strays (systemd path unit, launchd agent or a logon task)\n"
@@ -871,7 +871,7 @@ static size_t chosen(sh_store *st, const sh_discovery *found, size_t n, bool all
     return kept;
 }
 
-// skillhub add SOURCE... [--skill a,b | --all] [--link]: one source behaves exactly as in 1.x; several are read, then
+// skillhub add SOURCE... [--skill a,b | --all] [--link]: several sources are read, then
 // installed, all at once
 static int cmd_add(sh_store *st, const args_t *a) {
     if (st->project && has(a, "--link")) {
@@ -1412,7 +1412,7 @@ static int start_gui(int argc, char **argv) {
     const char *override = getenv("SKILLHUB_GUI_BIN");
     if (override && *override) {
         if (strlen(override) >= sizeof gui) return 127;
-        strcpy(gui, override);
+        snprintf(gui, sizeof gui, "%s", override);
     } else {
         // the real location: a link such as /usr/local/bin/skillhub -> the macOS bundle must not decide where to look
         const size_t n = sh_exe_dir(gui, sizeof gui);

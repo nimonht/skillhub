@@ -1,5 +1,5 @@
 // The user lock file shared with `npx skills` (docs/formats.md, section 2). npx keeps it in $XDG_STATE_HOME/skills when that
-// variable is set, Skill Hub 1.x always kept it in ~/.agents; a machine can have both. Both are then read, a change goes to
+// variable is set, older versions always kept it in ~/.agents; a machine can have both. Both are then read, a change goes to
 // the file (or files) that already hold that entry, and nothing is ever copied from one file to the other except by the
 // one-time migration that `skillhub doctor --fix` runs. Files that cannot be parsed are never overwritten.
 #include <stdlib.h>
@@ -29,7 +29,7 @@ void sh_lock_paths_for(const char *home, char **primary, char **other) {
     free(clean);
     free(state);
     const bool have_legacy = sh_lexists(legacy), have_xdg = sh_lexists(xdg);
-    if (have_legacy && !have_xdg) {  // only the file 1.x wrote: keep using it, never switch silently
+    if (have_legacy && !have_xdg) {  // only the file an older version wrote: keep using it, never switch silently
         free(xdg);
         *primary = legacy;
         return;

@@ -1,5 +1,5 @@
 // The shared folder: scanning skills and strays, adopting strays, linking agents, and updating or installing skills from
-// git. Ported from 1.x src/store.cpp; log messages are the same, word for word, because tests and users read them.
+// git. Log messages stay the same, word for word, because tests and users read them.
 #include "sh_store.h"
 
 #include <stdarg.h>
@@ -792,7 +792,7 @@ static int recover_swaps(sh_store *st) {
     return put_back;
 }
 
-#define STALE_MS (10 * 60 * 1000)  // older leftovers are stale; younger ones may belong to a running 1.x, which takes no lock
+#define STALE_MS (10 * 60 * 1000)  // older leftovers are stale; younger ones may belong to a running older version, which takes no lock
 
 #define REVIEW_MS (24 * 60 * 60 * 1000)  // a reviewed update waits for the user to finish reading
 

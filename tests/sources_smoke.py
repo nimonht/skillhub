@@ -4,7 +4,7 @@ repository, a local folder as a copy and as a live link, and import files that t
 
 usage: python3 tests/sources_smoke.py PATH/TO/skillhub[-cli.exe]
 
-Remote hosts are local bare repositories behind url.insteadOf in a throw-away git config, the way the benches work.
+Remote hosts are local bare repositories behind url.insteadOf in a throw-away git config.
 """
 import json
 import os
@@ -169,7 +169,7 @@ def hostile_import(home, env):
     path = home + "/hostile.json"
     write(path, json.dumps({"format": "skillhub-export", "version": 2, "skills": skills}))
     before = set(listed(env))
-    p = run(env, "import", path, "--yes")  # as in 1.x: every skill refused is "nothing to install", not an error
+    p = run(env, "import", path, "--yes")  # every skill refused is "nothing to install", not an error
     check("nothing to install" in p.stdout, "a hostile import:\n" + p.stdout)
     check(set(listed(env)) == before, "a hostile import installed something")
     text = p.stdout + p.stderr

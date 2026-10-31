@@ -1,5 +1,5 @@
 // What the window shows, built from a scan: one <Skill> row per skill, the agent columns, the providers and the counts
-// (docs/protocol.md). Ported from 1.x AppController::rebuildDerived and SkillModel; the window only presents it.
+// (docs/protocol.md). The window only presents it.
 #include <stdlib.h>
 #include <string.h>
 
@@ -549,7 +549,7 @@ yyjson_mut_val *scan_page(yyjson_mut_doc *d, const scan_result *r, long rev, siz
 
 // ---- log lines ----
 
-// as 1.x colored them: failures are errors, conflicts and refusals are warnings
+// failures are errors, conflicts and refusals are warnings
 static const char *level_of(const char *text) {
     char *low = sh_strdup(text);
     for (char *c = low; *c; ++c)
@@ -564,7 +564,7 @@ static const char *level_of(const char *text) {
 char *log_line_json(const char *text) {
     yyjson_mut_doc *d = yyjson_mut_doc_new(NULL);
     yyjson_mut_val *o = yyjson_mut_obj(d);
-    char *time = sh_local_hms(), *shown = sh_tilde(text);  // as 1.x: a line that starts with the home folder
+    char *time = sh_local_hms(), *shown = sh_tilde(text);  // a line that starts with the home folder
     yyjson_mut_obj_add_strcpy(d, o, "time", time);
     yyjson_mut_obj_add_str(d, o, "level", level_of(text));
     yyjson_mut_obj_add_strcpy(d, o, "text", shown);
