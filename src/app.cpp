@@ -17,7 +17,6 @@
 #include <QDateTime>
 #include <QDesktopServices>
 #include <QDir>
-#include <QCoreApplication>
 #include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
@@ -431,7 +430,7 @@ QVariantList AppController::externalTerminals() const {
 static QStringList bannerArguments(const QString &shell) {
     const QString name = shell.section(QLatin1Char('/'), -1).section(QLatin1Char('\\'), -1).toLower();
 #ifdef Q_OS_WIN
-    const QString fetch = QLatin1Char('"') + QDir::toNativeSeparators(QCoreApplication::applicationDirPath() + QStringLiteral("/skillhub-cli.exe")) + QStringLiteral("\" fetch");
+    const QString fetch = QStringLiteral("skillhub-cli fetch");  // on PATH, see main(): no shell agrees on how to quote a path
 #else
     const QString fetch = QStringLiteral("skillhub fetch");
 #endif

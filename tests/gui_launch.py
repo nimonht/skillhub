@@ -57,23 +57,32 @@ try:
             fail("%s: screenshot missing or nearly empty" % name)
         print("ok  " + name)
     # the terminal on every system: a real shell on a real pty (ConPTY on Windows) answers through the emulator
-    dump = os.path.join(OUT, "terminal.txt")
     shell_env = dict(env, SHELL="/bin/sh")
-    if os.name == "nt":   # cmd.exe starts at once; PowerShell can take longer than the test waits
-        config = env.get("SKILLHUB_CONFIG") or os.path.join(home, "AppData", "Roaming", "skillhub")
-        os.makedirs(config, exist_ok=True)
-        with open(os.path.join(config, "settings.json"), "w") as f:
-            json.dump({"version": 1, "terminal": {"shell": os.environ.get("ComSpec", "C:\\Windows\\System32\\cmd.exe"), "banner": False}}, f)
-    p = subprocess.run([BIN, "gui", "--shot", os.path.join(OUT, "terminal.png"), "--theme", "dark", "--size", "1280x800", "--layout", "dock=340", "--mode", "terminal",
-                        "--terminal-run", "echo pty-check", "--terminal-dump", dump, "--settle", "60" if os.name == "nt" else "20"],
-                       env=shell_env, capture_output=True, text=True, timeout=240)
-    if p.returncode != 0:
-        fail("terminal: exit %d\n%s" % (p.returncode, p.stderr))
-    with open(dump, encoding="utf-8") as f:
-        screen = f.read()
-    if screen.count("pty-check") < 2:   # the command as typed, and its answer
-        fail("the shell did not answer through the terminal:\n" + screen)
-    print("ok  terminal")
+    shells = [("terminal", None)]
+    if os.name == "nt":   # on Windows the shell prints the banner itself, so each default shell gets its turn
+        cmd = os.environ.get("ComSpec", "C:\\Windows\\System32\\cmd.exe")
+        shells = [("terminal", {"shell": cmd, "banner": False}), ("terminal-banner", {"shell": cmd, "banner": True})]
+        if shutil.which("pwsh"):
+            shells.append(("terminal-pwsh", {"shell": shutil.which("pwsh"), "banner": True}))
+    for name, settings in shells:
+        dump = os.path.join(OUT, name + ".txt")
+        if settings:
+            config = env.get("SKILLHUB_CONFIG") or os.path.join(home, "AppData", "Roaming", "skillhub")
+            os.makedirs(config, exist_ok=True)
+            with open(os.path.join(config, "settings.json"), "w") as f:
+                json.dump({"version": 1, "terminal": settings}, f)
+        p = subprocess.run([BIN, "gui", "--shot", os.path.join(OUT, name + ".png"), "--theme", "dark", "--size", "1280x800", "--layout", "dock=340", "--mode", "terminal",
+                            "--terminal-run", "echo pty-check", "--terminal-dump", dump, "--settle", "60" if os.name == "nt" else "20"],
+                           env=shell_env, capture_output=True, text=True, timeout=240)
+        if p.returncode != 0:
+            fail("%s: exit %d\n%s" % (name, p.returncode, p.stderr))
+        with open(dump, encoding="utf-8") as f:
+            screen = f.read()
+        if screen.count("pty-check") < 2:   # the command as typed, and its answer
+            fail("%s: the shell did not answer through the terminal:\n%s\n--- stdout\n%s\n--- stderr\n%s" % (name, screen, p.stdout, p.stderr))
+        if settings and settings["banner"] and "Folder" not in screen:
+            fail("%s: no banner in the terminal:\n%s\n--- stdout\n%s\n--- stderr\n%s" % (name, screen, p.stdout, p.stderr))
+        print("ok  " + name)
     print("gui launch test passed (screenshots in %s)" % OUT)
 finally:
     shutil.rmtree(home, ignore_errors=True)
