@@ -1,5 +1,5 @@
-// UTF-8 and the few Unicode rules where Skill Hub 1.x relied on Qt's QString: what counts as a space, trimming, slugs,
-// lengths counted in UTF-16 units, and case-insensitive comparison. Behaviour matches 1.x so names and ids stay the same.
+// UTF-8 and a few Unicode rules, matching Qt's QString: what counts as a space, trimming, slugs, lengths counted in UTF-16
+// units, and case-insensitive comparison, so names and ids from older versions stay the same.
 #pragma once
 
 #include <stdbool.h>
@@ -27,7 +27,7 @@ char *sh_trimmed(const char *s, size_t n);
 char *sh_simplified(const char *s, size_t n);
 bool sh_is_blank(const char *s);  // only spaces, or empty
 
-// 1.x slugify for agent ids: lowercase, letters and digits kept, every other run becomes one '-', no '-' at the ends.
+// Slugify for agent ids: lowercase, letters and digits kept, every other run becomes one '-', no '-' at the ends.
 // Like Qt, which looked at UTF-16 units, a character outside the Basic Multilingual Plane counts as a separator.
 char *sh_slugify(const char *s);
 

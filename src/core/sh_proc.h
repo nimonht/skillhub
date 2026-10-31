@@ -45,7 +45,7 @@ bool sh_proc_detach(const char *const *argv);
 char *sh_find_executable(const char *name, const sh_strv *dirs);
 void sh_path_dirs(sh_strv *out);  // the folders listed in PATH
 
-// "git", or its full path where the desktop PATH is too short to find it (1.x platform::gitProgram).
+// "git", or its full path where the desktop PATH is too short to find it.
 const char *sh_git_program(void);
 
 long sh_process_id(void);  // this process

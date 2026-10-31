@@ -646,13 +646,13 @@ void AppController::onNotification(const QString &method, const QJsonObject &par
 
 // ---- settings ---------------------------------------------------------------------------------------------------------
 
-// From the backend's settings.json. The first 2.0 start takes the theme and motion settings over from 1.x's QSettings.
+// From the backend's settings.json. The first start takes the theme and motion settings over from an older version's QSettings.
 void AppController::loadSettings() {
     core_.call(QStringLiteral("settings.get"), {}, [this](const CoreReply &r) {
         if (!r.ok()) return;
         QJsonObject s = r.result.toObject();
         QJsonObject look = s.value(QStringLiteral("appearance")).toObject();
-        // first start of 2.0: from 1.x's QSettings. A 2.0 test build kept these two at the top level, so those count too.
+        // first start: from an older version's QSettings, or the top level, where test builds kept these two
         QSettings old;
         bool moved = false;
         for (const QString &key : {QStringLiteral("theme"), QStringLiteral("reduceMotion")}) {
@@ -824,7 +824,7 @@ void AppController::select(const QString &name) {
     if (changed) loadVersions();
 }
 
-// "2026-10-25T09:20:41.715Z", or a 1.x backup's 20261025-092041: the moment in local time
+// "2026-10-25T09:20:41.715Z", or an older backup's 20261025-092041: the moment in local time
 static QString whenOf(const QString &iso, const QString &stamp) {
     QDateTime t = QDateTime::fromString(iso, Qt::ISODateWithMs);
     if (!t.isValid()) t = QDateTime::fromString(stamp.left(15), QStringLiteral("yyyyMMdd-HHmmss"));
@@ -1012,7 +1012,7 @@ void AppController::startJob(const QString &method, const QJsonObject &params, c
     });
 }
 
-// The toast for a finished job, as 1.x composed it from its own results.
+// The toast for a finished job.
 void AppController::jobDone(const QJsonObject &done) {
     const QString kind = std::exchange(jobKind_, {}), name = std::exchange(jobName_, {});
     job_.clear();
@@ -1106,7 +1106,7 @@ void AppController::jobDone(const QJsonObject &done) {
         if (!done.value(QStringLiteral("ok")).toBool()) {
             msg = error;
             level = QStringLiteral("error");
-        } else {  // look up the new source right away, as 1.x did
+        } else {  // look up the new source right away
             startJob(QStringLiteral("skills.check"), {{QStringLiteral("names"), QJsonArray{name}}}, tr("Checking %1").arg(name), QStringLiteral("check-quiet"), false);
             return;
         }

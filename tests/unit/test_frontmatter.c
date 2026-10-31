@@ -1,4 +1,4 @@
-// The SKILL.md front matter parser must read files exactly as 1.x did (tests/diff_vs_1_0.py checks the same cases end to end).
+// The SKILL.md front matter parser, odd files included.
 #include "test.h"
 
 #include "sh_frontmatter.h"

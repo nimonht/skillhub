@@ -1,4 +1,4 @@
-// skillhub: GUI when started without a command, CLI otherwise (used by the systemd units).
+// skillhub-gui: the window. The command line is src/cli, and the window's backend is src/serve.
 #include <QDir>
 #include <QFile>
 #include <QSettings>
@@ -8,7 +8,6 @@
 #include <QQmlFileSelector>
 #include <QQuickStyle>
 #include <QQuickWindow>
-#include <QElapsedTimer>
 #include <QIcon>
 #include <QSurfaceFormat>
 #include <QTextStream>
@@ -88,8 +87,7 @@ int main(int argc, char **argv) {
         qmlRegisterType<VTermItem>("SkillHub.Terminal", 1, 0, "VTermItem");
         window_effects::prepare();
         AppController controller;
-        if (!args.contains(QStringLiteral("--bench")))
-            QTimer::singleShot(500, &controller, &AppController::checkUpdatesQuietly);  // verdicts without a click
+        QTimer::singleShot(500, &controller, &AppController::checkUpdatesQuietly);  // verdicts without a click
         QQmlApplicationEngine engine;
         engine.rootContext()->setContextProperty(QStringLiteral("app"), &controller);
         if (!shotFile.isEmpty()) {
@@ -103,62 +101,7 @@ int main(int argc, char **argv) {
         engine.load(QUrl(QStringLiteral("qrc:/qml/Main.qml")));
         if (engine.rootObjects().isEmpty()) return 1;
         auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
-        if (shotFile.isEmpty() && !args.contains(QStringLiteral("--bench")) && controller.tourNeeded()) QTimer::singleShot(400, &controller, [&controller] { emit controller.startTour(0, 0); });
-
-        // skillhub gui --bench: the longest the interface thread goes without running its event loop, first while the
-        // first check's delta changes every row, then while everything available is updated (bench/bench_gui.py)
-        if (args.contains(QStringLiteral("--bench"))) {
-            auto *probe = new QTimer(&app);
-            auto clock = std::make_shared<QElapsedTimer>();
-            auto worst = std::make_shared<qint64>(0);
-            auto phase = std::make_shared<int>(0);
-            auto results = std::make_shared<QStringList>();
-            auto quiet = std::make_shared<QElapsedTimer>();  // idle since: the delta after a job arrives a moment after it ends
-            // Headless, Qt Quick lays out and draws on this same thread. The gaps include that; the longest layout pass
-            // (after animating, before synchronizing) and the longest draw are reported on their own as well.
-            auto frame = std::make_shared<QElapsedTimer>();
-            auto worstPolish = std::make_shared<qint64>(0), worstDraw = std::make_shared<qint64>(0);
-            QObject::connect(window, &QQuickWindow::afterAnimating, &app, [=] { frame->start(); }, Qt::DirectConnection);
-            QObject::connect(window, &QQuickWindow::beforeSynchronizing, &app, [=] {
-                if (frame->isValid()) *worstPolish = qMax(*worstPolish, frame->restart());
-            }, Qt::DirectConnection);
-            QObject::connect(window, &QQuickWindow::afterRendering, &app, [=] {
-                if (frame->isValid()) *worstDraw = qMax(*worstDraw, frame->elapsed());
-                frame->invalidate();
-            }, Qt::DirectConnection);
-            probe->setTimerType(Qt::PreciseTimer);
-            auto worstBusy = std::make_shared<qint64>(0);  // gaps while the backend's job runs: the CPU is shared with it
-            QObject::connect(probe, &QTimer::timeout, &app, [=, &controller, &app] {
-                const qint64 gap = clock->restart();
-                if (controller.busy()) *worstBusy = qMax(*worstBusy, gap);
-                else *worst = qMax(*worst, gap);
-                if (!controller.idle()) {
-                    quiet->invalidate();
-                    return;
-                }
-                if (!quiet->isValid()) quiet->start();
-                if (*phase > 0 && quiet->elapsed() < 1500) return;
-                quiet->invalidate();
-                if (*phase == 1 || *phase == 2)
-                    *results << QStringLiteral("%1 %2 ms (while the job ran %5 ms; layout up to %3 ms, drawing up to %4 ms)")
-                                    .arg(*phase == 1 ? QStringLiteral("check") : QStringLiteral("update")).arg(*worst).arg(*worstPolish).arg(*worstDraw).arg(*worstBusy);
-                *worstPolish = *worstDraw = *worstBusy = 0;
-                if (*phase == 0) controller.checkUpdates();
-                else if (*phase == 1) controller.updateAll();
-                else {
-                    out() << "max UI stall: " << results->join(QStringLiteral(", ")) << '\n';
-                    out().flush();
-                    app.quit();
-                    return;
-                }
-                ++*phase;
-                *worst = 0;
-            });
-            QTimer::singleShot(0, &app, [=] {
-                clock->start();
-                probe->start(2);
-            });
-        }
+        if (shotFile.isEmpty() && controller.tourNeeded()) QTimer::singleShot(400, &controller, [&controller] { emit controller.startTour(0, 0); });
 
         if (!shotFile.isEmpty() && window) {
             if (args.contains(QStringLiteral("--console"))) window->setProperty("consoleOpen", true);

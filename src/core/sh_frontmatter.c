@@ -42,7 +42,7 @@ void sh_fm_parse(const char *raw, size_t n, sh_frontmatter *fm) {
         n -= 3;
     }
     char *clean = sh_utf8_clean(raw, n);
-    // "\r\n" becomes "\n" first, as in 1.x; a lone "\r" stays part of the line
+    // "\r\n" becomes "\n" first; a lone "\r" stays part of the line
     sh_buf text = SH_BUF_INIT;
     for (const char *p = clean; *p; ++p) {
         if (p[0] == '\r' && p[1] == '\n') continue;

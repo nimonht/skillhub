@@ -482,7 +482,7 @@ static void body_relink(job *j, sh_store *st) {
     j->rescan = true;
 }
 
-// switching an agent on links the skills into it; switching it off leaves what is there untouched (as 1.x)
+// switching an agent on links the skills into it; switching it off leaves what is there untouched
 static void body_set_managed(job *j, sh_store *st) {
     const char *id = param_str(j->params, "id");
     const bool on = param_bool(j->params, "on", false);

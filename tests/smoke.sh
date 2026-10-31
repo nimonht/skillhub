@@ -150,7 +150,7 @@ rm -rf "$H2"
 IB="$H/.local/bin/skillhub"; HC="$H/.local/share/icons/hicolor"
 mkdir -p "$H/.local/bin" "$H/.local/share/applications" "$HC/48x48/apps" "$HC/scalable/apps" "$H/.config/systemd/user" "$XDG_CACHE_HOME/skillhub/repos/x"
 cp "$BIN" "$IB"
-# until the C core lands, the command line hands 1.x commands to the window's program next to it
+# the window's program sits next to the command line, and uninstall removes both
 GUI="$(dirname "$BIN")/skillhub-gui"
 [ -x "$GUI" ] && cp "$GUI" "$H/.local/bin/skillhub-gui"
 touch "$H/.local/share/applications/skillhub.desktop" "$H/.local/share/applications/other.desktop" \

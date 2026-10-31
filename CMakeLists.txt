@@ -76,7 +76,7 @@ endfunction()
 add_library(skillhub_yyjson STATIC third_party/yyjson/yyjson.c third_party/yyjson/yyjson.h)
 target_include_directories(skillhub_yyjson PUBLIC third_party/yyjson)
 
-# the agent catalog is compiled into the program (1.x read it from a Qt resource)
+# the agent catalog is compiled into the program
 add_custom_command(
     OUTPUT ${CMAKE_BINARY_DIR}/providers_json.c
     COMMAND ${CMAKE_COMMAND} -DINPUT=${CMAKE_SOURCE_DIR}/data/providers.json -DOUTPUT=${CMAKE_BINARY_DIR}/providers_json.c

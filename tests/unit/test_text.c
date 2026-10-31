@@ -1,4 +1,4 @@
-// Strings, UTF-8 rules that must match Qt in 1.x, hashes and base64.
+// Strings, UTF-8 rules that must match Qt, hashes and base64.
 #include "test.h"
 
 #include "sh_hash.h"

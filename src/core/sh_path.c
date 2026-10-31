@@ -215,6 +215,16 @@ static char *known_folder(REFKNOWNFOLDERID id) {
 }
 #endif
 
+#ifndef _WIN32
+// getpwuid answers from a static buffer, and every job thread opens a store of its own
+static char *passwd_home(void) {
+    char text[4096];
+    struct passwd pw, *found = NULL;
+    const bool known = getpwuid_r(getuid(), &pw, text, sizeof text, &found) == 0 && found && pw.pw_dir;
+    return sh_path_clean(known ? pw.pw_dir : "/");
+}
+#endif
+
 static char *system_home(void) {
 #ifdef _WIN32
     return known_folder(&FOLDERID_Profile);  // like Qt: the profile folder, not the USERPROFILE variable
@@ -226,8 +236,7 @@ static char *system_home(void) {
         return clean;
     }
     free(h);
-    const struct passwd *pw = getpwuid(getuid());
-    return sh_path_clean(pw && pw->pw_dir ? pw->pw_dir : "/");
+    return passwd_home();
 #endif
 }
 
@@ -261,15 +270,14 @@ static char *xdg(const char *var, const char *fallback) {
 
 #ifdef __APPLE__
 static char *account_home(void) {  // NSHomeDirectory: the account's home, whatever $HOME says
-    const struct passwd *pw = getpwuid(getuid());
-    return sh_path_clean(pw && pw->pw_dir ? pw->pw_dir : "/");
+    return passwd_home();
 }
 #endif
 
 static char *overridden(const char *var) {
     if (!sh_env_is_set(var)) return NULL;
     char *v = sh_getenv(var);
-    char *clean = sh_path_clean(v);  // set but empty stays "" (1.x behaviour, documented)
+    char *clean = sh_path_clean(v);  // set but empty stays "" (documented)
     free(v);
     return clean;
 }

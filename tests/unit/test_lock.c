@@ -77,7 +77,7 @@ static void which_file(void) {
     CHECK_EQ_STR(p, want);
     CHECK(o == NULL);
     free(p); free(o); free(want);
-    // only the 1.x file: keep using it
+    // only the older file: keep using it
     write_text(LEGACY, "{\"version\":3,\"skills\":{}}");
     sh_lock_paths_for(root, &p, &o);
     want = at(LEGACY);

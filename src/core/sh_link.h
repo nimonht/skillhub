@@ -1,5 +1,5 @@
 // Directory links: symlinks everywhere. On Windows a symlink needs Developer Mode or an administrator, so a junction
-// (absolute target, no privilege needed) is made when a symlink is refused. Ported from 1.x src/platform.cpp.
+// (absolute target, no privilege needed) is made when a symlink is refused.
 #pragma once
 
 #include <stdbool.h>

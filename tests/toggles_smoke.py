@@ -124,7 +124,7 @@ def main():
     run(env, "restore", "beta")
     check(os.path.islink(link_of(home, "beta")), "a switch does not outlive the skill")
 
-    # ---- before going back to 1.x ----
+    # ---- every parked skill back ----
     run(env, "disable", "alpha", "beta", "--shared")
     check("2 skill" in run(env, "enable", "--all-parked").stdout, "--all-parked")
     check({"alpha", "beta"} <= set(lock(home)), "everything is back in the lock")

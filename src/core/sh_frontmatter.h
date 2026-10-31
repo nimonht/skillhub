@@ -1,5 +1,5 @@
 // The YAML front matter of a SKILL.md: only top-level `key: value` pairs, enough for `name` and `description`.
-// Behaves exactly like 1.x's parser (src/store.cpp parseFrontmatter), including its tolerance for odd files.
+// Tolerant of odd files on purpose: what installs today must keep reading the same.
 #pragma once
 
 #include <stdbool.h>

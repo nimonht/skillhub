@@ -21,7 +21,7 @@
 #define FETCHES_PER_HOST 8  // clones and fetches from one host at a time
 #define COMMIT_EVERY 200    // lock entries per group commit ...
 #define COMMIT_MS 5000      // ... or after this long, whichever comes first
-#define DISCOVER_BUDGET 400 // SKILL.md files looked at per repository when listing what it offers, as in 1.x
+#define DISCOVER_BUDGET 400 // SKILL.md files looked at per repository when listing what it offers
 #define FRONTMATTER_MAX (64 * 1024)
 #define WALK_MAX 200000     // files searched for skills in a local folder: more than this is no folder of skills
 
@@ -38,7 +38,7 @@ typedef struct {
     sh_origin o;
     char *key;          // what makes it this repository: the cache folder, or the local folder
     bool tried, ok;
-    char *err;          // why it could not be brought up to date, cut like 1.x cut it
+    char *err;          // why it could not be brought up to date, cut short
     sh_repo repo;       // git
     sh_strv local;      // local folder: every SKILL.md below it
     bool scanned;       // `skills` read
@@ -398,7 +398,7 @@ static void scan_skills(repo_slot *s) {
     } else {
         fm_reader fr = {s->skills, SH_BUF_INIT};
         const sh_blob_reader rd = {fm_begin, fm_data, fm_end, &fr};
-        sh_repo_read(&s->repo, ids, n, &rd, NULL);  // a file that could not be read has no front matter, as in 1.x
+        sh_repo_read(&s->repo, ids, n, &rd, NULL);  // a file that could not be read has no front matter
         sh_buf_free(&fr.text);
     }
     for (size_t i = 0; i < n; ++i) {  // ... and whatever was not reached at all

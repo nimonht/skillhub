@@ -222,7 +222,7 @@ bool sh_store_write_export(sh_store *st, const char *path, bool include_local, i
     }
     sh_skills_free(&skills);
     char *created = sh_now_iso();
-    created[19] = 'Z';  // seconds precision, as 1.x wrote it
+    created[19] = 'Z';  // seconds precision
     created[20] = '\0';
     sh_json_set_str(d, root, "format", "skillhub-export");
     sh_json_set_int(d, root, "version", 2);

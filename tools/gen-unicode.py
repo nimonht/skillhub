@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate src/core/sh_unicode_tables.h: the few Unicode properties the C core needs to behave like Qt's QChar in 1.x.
+"""Generate src/core/sh_unicode_tables.h: the few Unicode properties the C core needs to behave like Qt's QChar.
 
 usage: python3 tools/gen-unicode.py > src/core/sh_unicode_tables.h
 

@@ -86,7 +86,7 @@ first scan has finished is answered when it has.
 
 `sourceType` is `github`, `gitlab`, `git`, `local` or whatever npx wrote for a type Skill Hub does not run (the window
 shows those as managed by npx), and empty without a source. `live` is true for a live link to a local folder.
-`status` is `local`, `tracked`, `current`, `available`, `updated` or `error`, as 1.x shows them. A check result stays
+`status` is `local`, `tracked`, `current`, `available`, `updated` or `error`. A check result stays
 attached to the lock entry it was made for: when the entry later holds the hash upstream had (another process updated
 the skill), the status becomes `current`; when it changes to anything else, the result is dropped and the status is
 `tracked` again. `links` has one link state per entry of `agents`, in that order (the overflow agents follow, in the
@@ -135,7 +135,7 @@ Then come notifications:
 
 - Progress is sent at most every 50 ms per job; log lines are batched. When the write queue fills, waiting progress and
   log events are merged (the newest progress, the log lines concatenated). They are never dropped.
-- The window composes toasts from `event.jobDone`, as 1.x composed them from its own job results.
+- The window composes toasts from `event.jobDone`.
 - `jobs.cancel {"job":"j7"}` stops a job at its next safe point: between skills, never inside a swap. Finished items stay
   done and are committed; staging folders of unfinished ones are removed. The job then ends with `"ok":false,
   "cancelled":true`.
@@ -193,16 +193,15 @@ Parameters marked `?` are optional. `names` is a list of skill names; an empty o
 | `cache.clear` | none | job; removes the cached clones, which can always be made again |
 | `lock.merge` | none | job; the one-time merge of the two user lock files (`docs/formats.md` section 2), with backups of both |
 | `fetch.render` | `colors?` (`truecolor` or `256`), `icons?`, `logo?` | `{ "ansi": "<the banner as terminal text>" }` |
-| `palette.derive` | `seed` (`#RRGGBB`), `mode` (`dark` or `light`) | `{ "roles":{"action","actionInk","mark","markText","markLow","focus","selected","inkOk"}, "clash":"" }` |
 | `jobs.cancel` | `job` | `{}` |
 
 `<Project>`: `{ "path", "name", "skills":N, "autoUpdate":false }`.
 
-What 2.0's backend answers today (milestone M1c): `initialize`, `shutdown`, `state.snapshot`, `skills.read`,
+The backend answers: `initialize`, `shutdown`, `state.snapshot`, `skills.read`,
 `skills.check`, `skills.update`, `skills.install`, `skills.remove`, `skills.track`, `skills.diff`, `skills.history`,
 `skills.rollback`, `skills.restore`, `skills.hold`, `skills.setAgentEnabled`, `skills.copyToProject`, `sources.discover`,
 `adopt`, `relink`, `scope.set`, `projects.list`, `projects.add`, `projects.remove`, `projects.setAuto`, `paths.sizes`,
-`cache.clear`, `lock.merge`, `palette.derive`, `fetch.render`, `system.info`,
+`cache.clear`, `lock.merge`, `fetch.render`, `system.info`,
 `providers.list`, `providers.setManaged`, `providers.addCustom`, `providers.removeCustom`, `providers.rescan`,
 `transfer.export`, `transfer.preview`, `transfer.import`, `automation.status`, `automation.set`, `settings.get`,
 `settings.set`, `jobs.cancel`, and `doctor`, which only the command line has so far (`-32601`).
