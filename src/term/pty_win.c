@@ -21,9 +21,15 @@ struct sh_pty {
     resize_fn resize;
 };
 
+// out of memory ends the program, as sh_xmalloc does in the core, which is not linked here
+static void *need(void *p) {
+    if (!p) abort();
+    return p;
+}
+
 static wchar_t *wide(const char *s) {
     const int n = MultiByteToWideChar(CP_UTF8, 0, s, -1, NULL, 0);
-    wchar_t *w = calloc((size_t)n + 1, sizeof *w);
+    wchar_t *w = need(calloc((size_t)n + 1, sizeof *w));
     MultiByteToWideChar(CP_UTF8, 0, s, -1, w, n);
     return w;
 }
@@ -62,15 +68,21 @@ sh_pty *sh_pty_spawn(const char *program, const char *const *argv, const char *c
         if (err) *err = _strdup("the built-in terminal needs Windows 10 1809 or newer");
         return NULL;
     }
-    HANDLE in_read, in_write, out_read, out_write;
+    HANDLE in_read = NULL, in_write = NULL, out_read = NULL, out_write = NULL;
     if (!CreatePipe(&in_read, &in_write, NULL, 0) || !CreatePipe(&out_read, &out_write, NULL, 0)) {
         if (err) *err = message("cannot make pipes");
+        if (in_read) CloseHandle(in_read);
+        if (in_write) CloseHandle(in_write);
         return NULL;
     }
     const COORD size = {(SHORT)cols, (SHORT)rows};
     void *console = NULL;
     if (FAILED(create(size, in_read, out_write, 0, &console))) {
         if (err) *err = message("cannot open a console");
+        CloseHandle(in_read);
+        CloseHandle(in_write);
+        CloseHandle(out_read);
+        CloseHandle(out_write);
         return NULL;
     }
     CloseHandle(in_read);
@@ -82,13 +94,13 @@ sh_pty *sh_pty_spawn(const char *program, const char *const *argv, const char *c
     si.StartupInfo.dwFlags = STARTF_USESTDHANDLES;  // with none given: otherwise a redirected parent hands the shell its own stdio, and the console stays empty
     SIZE_T bytes = 0;
     InitializeProcThreadAttributeList(NULL, 1, 0, &bytes);
-    si.lpAttributeList = malloc(bytes);
+    si.lpAttributeList = need(malloc(bytes));
     InitializeProcThreadAttributeList(si.lpAttributeList, 1, 0, &bytes);
     UpdateProcThreadAttribute(si.lpAttributeList, 0, PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE, console, sizeof console, NULL, NULL);
 
     size_t room = 16;
     for (size_t i = 0; argv[i]; ++i) room += 3 * strlen(argv[i]) + 4;
-    wchar_t *line = calloc(room, sizeof *line);
+    wchar_t *line = need(calloc(room, sizeof *line));
     size_t at = 0;
     for (size_t i = 0; argv[i]; ++i) {
         wchar_t *w = wide(argv[i]);
@@ -99,7 +111,7 @@ sh_pty *sh_pty_spawn(const char *program, const char *const *argv, const char *c
     for (size_t i = 0; env && env[i]; ++i) {
         const char *eq = strchr(env[i], '=');
         if (!eq) continue;
-        char *name = _strdup(env[i]);
+        char *name = need(_strdup(env[i]));
         name[eq - env[i]] = 0;
         wchar_t *wn = wide(name), *wv = wide(eq + 1);
         SetEnvironmentVariableW(wn, wv);  // inherited by the child; this process has no use for the difference
@@ -123,7 +135,7 @@ sh_pty *sh_pty_spawn(const char *program, const char *const *argv, const char *c
         return NULL;
     }
     CloseHandle(pi.hThread);
-    sh_pty *p = calloc(1, sizeof *p);
+    sh_pty *p = need(calloc(1, sizeof *p));
     p->console = console;
     p->in = in_write;
     p->out = out_read;

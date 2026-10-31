@@ -23,6 +23,12 @@ struct sh_pty {
     pid_t pid;
 };
 
+// out of memory ends the program, as sh_xmalloc does in the core, which is not linked here
+static void *need(void *p) {
+    if (!p) abort();
+    return p;
+}
+
 static char *message(const char *what) {
     char *m = malloc(256);
     if (m) snprintf(m, 256, "%s: %s", what, strerror(errno));
@@ -49,7 +55,7 @@ sh_pty *sh_pty_spawn(const char *program, const char *const *argv, const char *c
     size_t n_old = 0, n_new = 0;
     while (environ[n_old]) ++n_old;
     while (env && env[n_new]) ++n_new;
-    char **envp = calloc(n_old + n_new + 1, sizeof *envp);
+    char **envp = need(calloc(n_old + n_new + 1, sizeof *envp));
     size_t k = 0;
     for (size_t i = 0; i < n_old; ++i) {
         const char *eq = strchr(environ[i], '=');
@@ -85,7 +91,7 @@ sh_pty *sh_pty_spawn(const char *program, const char *const *argv, const char *c
         _exit(127);
     }
     free(envp);
-    sh_pty *p = calloc(1, sizeof *p);
+    sh_pty *p = need(calloc(1, sizeof *p));
     p->fd = fd;
     p->pid = pid;
     return p;

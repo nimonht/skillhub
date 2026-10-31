@@ -193,6 +193,8 @@ jobs:
           path: artifacts
           pattern: "{deb-*,rpm-*,macos-dmg,windows}"
           merge-multiple: true
+      - name: The tag and every file name the same version, with no suffix
+        run: sh packaging/check-version.sh "${GITHUB_REF_NAME#v}"
       - name: Checksums and release notes
         run: |
           cd artifacts && sha256sum * > SHA256SUMS && cat SHA256SUMS && cd ..
