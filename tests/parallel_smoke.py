@@ -115,6 +115,17 @@ def main():
     run(env, "check")
     check(len(json.loads(run(env, "list", "--json"))) == total, "an update lost a skill")
     run(env, "doctor")
+
+    # an export stays small enough to import again, however large the library
+    for i in range(601 - total):
+        folder = pathlib.Path(central, "extra%04d" % i)
+        folder.mkdir()
+        folder.joinpath("SKILL.md").write_text("---\nname: extra%04d\ndescription: x\n---\n" % i)
+    out = os.path.join(ROOT, "export.json")
+    report = run(env, "export", out)
+    with open(out) as f:
+        check(len(json.load(f)["skills"]) == 600, "an export went over 600 skills")
+    check("600 skills at most" in report, "the skill left out was not named:\n" + report[-800:])
     print("parallel test passed: %d repositories, %d skills" % (REPOS, total))
 
 

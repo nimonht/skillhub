@@ -151,7 +151,7 @@ static int match_rank(const char *name, const char *ref) {
 // the commit upstream's `ref` (HEAD when empty) points to, or NULL
 static char *remote_head(const sh_repo *r, const char *ref, char **err) {
     char *peeled = *ref ? sh_strfmt("%s^{}", ref) : NULL;
-    const char *args[] = {"ls-remote", "--quiet", "origin", *ref ? ref : "HEAD", peeled, NULL};
+    const char *args[] = {"ls-remote", "--quiet", "--", "origin", *ref ? ref : "HEAD", peeled, NULL};
     sh_git_result g = sh_git_run(args, r->dir, 0);
     free(peeled);
     char *head = NULL;
@@ -196,7 +196,7 @@ static bool update_clone(sh_repo *r, const char *url, const char *ref, sh_limite
         char *remote = remote_head(r, ref, err);
         ok = remote != NULL;
         if (ok && strcmp(remote, r->head) != 0) {  // upstream moved: download that commit and point the clone at it
-            const char *fetch[] = {"fetch", "--depth", "1", "--quiet", "origin", *ref ? ref : "HEAD", NULL};
+            const char *fetch[] = {"fetch", "--depth", "1", "--quiet", "--", "origin", *ref ? ref : "HEAD", NULL};
             sh_git_result g = network_git(fetch, r->dir, host, fetches);
             ok = !failed(&g, err);
             sh_git_result_free(&g);
@@ -413,7 +413,7 @@ static bool path_is_safe(const char *path) {
         const char *part = seg.items[i];
         if (!*part || strcmp(part, "..") == 0 || strcmp(part, ".") == 0) sane = false;
 #ifdef _WIN32
-        else if (_stricmp(part, ".git") == 0) sane = false;  // no folder named .git anywhere, in any letter case
+        else if (_stricmp(part, ".git") == 0 || sh_path_windows_unsafe(part)) sane = false;  // nor a name Windows tools could not remove
 #else
         else if (strcasecmp(part, ".git") == 0) sane = false;
 #endif

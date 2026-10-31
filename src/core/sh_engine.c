@@ -1094,6 +1094,17 @@ static bool below(const char *path, const char *subpath) {
     return strncmp(path, subpath, n) == 0 && path[n] == '/';
 }
 
+// skill names become folder names: nothing path-like, nothing a terminal would act on
+static bool usable_name(const char *name) {
+    if (!*name || name[0] == '.' || strstr(name, "..") || strpbrk(name, "/\\:")) return false;
+    for (const char *c = name; *c; ++c)
+        if ((unsigned char)*c < 0x20 || *c == 0x7F) return false;
+#ifdef _WIN32
+    if (sh_path_windows_unsafe(name)) return false;
+#endif
+    return true;
+}
+
 static void candidates_of(const repo_slot *s, const char *subpath, sh_discovery *d) {
     sh_strv seen = SH_STRV_INIT;
     d->cands.items = sh_xcalloc(s->n_skills + 1, sizeof *d->cands.items);
@@ -1104,8 +1115,7 @@ static void candidates_of(const repo_slot *s, const char *subpath, sh_discovery 
         ++looked;
         char *dir = sh_dir_of(f->path);
         const char *name = *f->name ? f->name : sh_path_name(dir);
-        // skill names become folder names: refuse anything path-like
-        if (!*name || sh_strv_contains(&seen, name) || strchr(name, '/') || name[0] == '.' || strstr(name, "..")) {
+        if (!usable_name(name) || sh_strv_contains(&seen, name)) {
             free(dir);
             continue;
         }
@@ -1373,9 +1383,10 @@ bool sh_store_track(sh_store *st, const char *name, const char *repo_input, cons
         src.hash = sh_strdup("");  // the content of the local copy is unknown: the first update syncs it
         src.installed_at = sh_now_iso();
         src.updated_at = sh_strdup(src.installed_at);
-        sh_lock_put(st, name, &src);
+        ok = sh_lock_put(st, name, &src);
         sh_source_free(&src);
-        sh_store_log(st, "tracking %s <- %s (%s)", name, o.source, skill_md);
+        if (ok) sh_store_log(st, "tracking %s <- %s (%s)", name, o.source, skill_md);
+        else if (err) *err = sh_strfmt("cannot record %s in the lock file", name);
     }
     free(skill_md);
     sh_engine_free(e);

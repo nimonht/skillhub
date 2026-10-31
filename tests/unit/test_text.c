@@ -41,6 +41,12 @@ static void hashes(void) {
     CHECK_STR(hex_sha1(block, 200), "e61cfffe0d9195a525fc6cf06ca2d77119c24a40");  // python3 hashlib
 }
 
+static void controls(void) {
+    char text[] = "a\x1b[2Jb\tc\x07\x7f\xc2\x9b" "31md\xc3\xa9";  // ESC, BEL, DEL, the 8-bit CSI; tab and letters stay
+    sh_strip_controls(text);
+    CHECK_EQ_STR(text, "a[2Jb\tc31md\xc3\xa9");
+}
+
 static void base64(void) {
     sh_buf b = SH_BUF_INIT;
     sh_base64_encode("ab", 2, &b);
@@ -113,6 +119,7 @@ static void strings(void) {
 }
 
 const sh_test_case sh_tests_text[] = {
+    {"text.controls", controls},
     {"text.hashes", hashes},   {"text.base64", base64}, {"text.trimming", trimming}, {"text.slugs", slugs},
     {"text.utf16", utf16},     {"text.compare", compare}, {"text.strings", strings},  {NULL, NULL},
 };
