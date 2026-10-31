@@ -34,8 +34,12 @@ static char *message(const char *what) {
     return m;
 }
 
-// quoted the way CommandLineToArgvW splits it again
+// quoted the way CommandLineToArgvW splits it again; plain words stay bare, because cmd.exe takes no quoted /K
 static void quote(wchar_t *out, size_t *at, const wchar_t *arg) {
+    if (*arg && !wcspbrk(arg, L" \t\"")) {
+        while (*arg) out[(*at)++] = *arg++;
+        return;
+    }
     out[(*at)++] = L'"';
     for (const wchar_t *c = arg;; ++c) {
         size_t slashes = 0;
@@ -75,6 +79,7 @@ sh_pty *sh_pty_spawn(const char *program, const char *const *argv, const char *c
     STARTUPINFOEXW si;
     memset(&si, 0, sizeof si);
     si.StartupInfo.cb = sizeof si;
+    si.StartupInfo.dwFlags = STARTF_USESTDHANDLES;  // with none given: otherwise a redirected parent hands the shell its own stdio, and the console stays empty
     SIZE_T bytes = 0;
     InitializeProcThreadAttributeList(NULL, 1, 0, &bytes);
     si.lpAttributeList = malloc(bytes);

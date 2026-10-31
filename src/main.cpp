@@ -1,4 +1,5 @@
 // skillhub: GUI when started without a command, CLI otherwise (used by the systemd units).
+#include <QDir>
 #include <QFile>
 #include <QSettings>
 #include <QGuiApplication>
@@ -73,6 +74,9 @@ int main(int argc, char **argv) {
             if (scale.isValid() && scale.toDouble() > 0 && !qEnvironmentVariableIsSet("QT_SCALE_FACTOR")) qputenv("QT_SCALE_FACTOR", scale.toByteArray());
         }
         QGuiApplication app(argc, argv);
+#ifdef Q_OS_WIN
+        qputenv("PATH", (QDir::toNativeSeparators(QCoreApplication::applicationDirPath()) + QLatin1Char(';') + qEnvironmentVariable("PATH")).toLocal8Bit());  // shells started from here find skillhub-cli
+#endif
         app.setApplicationName(QStringLiteral("skillhub"));
         app.setOrganizationName(QStringLiteral("skillhub"));
         app.setDesktopFileName(QStringLiteral("skillhub"));
