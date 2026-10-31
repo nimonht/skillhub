@@ -5,6 +5,7 @@
 #include <QFont>
 #include <QPointer>
 #include <QQuickPaintedItem>
+#include <QSemaphore>
 #include <QThread>
 #include <QVector>
 
@@ -18,6 +19,7 @@ class PtyReader : public QThread {
     Q_OBJECT
 public:
     explicit PtyReader(sh_pty *pty) : pty_(pty) {}
+    void consumed() { room_.release(); }  // one more buffer may be read: the window took the last one
 signals:
     void received(const QByteArray &data);
     void ended();
@@ -25,6 +27,7 @@ protected:
     void run() override;
 private:
     sh_pty *pty_;
+    QSemaphore room_{32};  // buffers on their way to the window: `yes` must not fill the memory faster than it draws
 };
 
 class VTermItem : public QQuickPaintedItem {

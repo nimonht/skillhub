@@ -1102,7 +1102,10 @@ static bool usable_name(const char *name) {
 #ifdef _WIN32
     if (sh_path_windows_unsafe(name)) return false;
 #endif
-    return true;
+    char *clean = sh_utf8_clean(name, strlen(name));  // a repository's folder name is bytes, not text
+    const bool text = strcmp(clean, name) == 0;
+    free(clean);
+    return text;
 }
 
 static void candidates_of(const repo_slot *s, const char *subpath, sh_discovery *d) {

@@ -12,9 +12,12 @@
 #include <QTimer>
 #include <QUrl>
 
+static constexpr int OSC_MAX = 4096;  // a title or a folder: whatever a program sends beyond this is noise
+
 void PtyReader::run() {
     char buf[65536];
     for (;;) {
+        room_.acquire();
         const long n = sh_pty_read(pty_, buf, sizeof buf);
         if (n <= 0) break;
         emit received(QByteArray(buf, int(n)));
@@ -51,6 +54,7 @@ VTermItem::~VTermItem() {
         sh_pty_hangup(pty_);
         if (reader_) {
             reader_->disconnect(this);
+            reader_->consumed();  // it may be waiting for room, not on the terminal
             if (!reader_->wait(1000)) reader_->terminate();
             reader_->wait();
             delete reader_;
@@ -164,6 +168,7 @@ void VTermItem::start() {
 void VTermItem::received(const QByteArray &data) {
     vterm_input_write(vt_, data.constData(), size_t(data.size()));
     vterm_screen_flush_damage(screen_);
+    if (reader_) reader_->consumed();
 }
 
 void VTermItem::ended() {
@@ -211,7 +216,7 @@ int VTermItem::onProp(VTermProp prop, VTermValue *val, void *user) {
     auto *self = static_cast<VTermItem *>(user);
     if (prop == VTERM_PROP_TITLE && val->string.initial) self->title_.clear();
     if (prop == VTERM_PROP_TITLE) {
-        self->title_ += QString::fromUtf8(val->string.str, int(val->string.len));
+        if (self->title_.size() < OSC_MAX) self->title_ += QString::fromUtf8(val->string.str, int(val->string.len));
         if (val->string.final) emit self->titleChanged();
     } else if (prop == VTERM_PROP_CURSORVISIBLE) {
         self->cursorVisible_ = val->boolean;
@@ -265,7 +270,7 @@ int VTermItem::onOsc(int command, VTermStringFragment frag, void *user) {
     auto *self = static_cast<VTermItem *>(user);
     if (command != 7) return 0;
     if (frag.initial) self->osc_.clear();
-    self->osc_.append(frag.str, int(frag.len));
+    if (self->osc_.size() < OSC_MAX) self->osc_.append(frag.str, int(frag.len));
     if (frag.final) {
         self->cwd_ = QUrl(QString::fromUtf8(self->osc_)).toLocalFile();
         emit self->titleChanged();
@@ -473,7 +478,8 @@ void VTermItem::copy() {
 }
 
 void VTermItem::paste() {
-    const QByteArray text = QGuiApplication::clipboard()->text().toUtf8();
+    QByteArray text = QGuiApplication::clipboard()->text().toUtf8();
+    text.replace("\x1b", "");  // copied text must not be able to end the paste early and run what follows
     vterm_keyboard_start_paste(vt_);
     send(text);
     vterm_keyboard_end_paste(vt_);
