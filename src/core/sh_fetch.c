@@ -309,7 +309,7 @@ char *sh_fetch_render(const sh_store *st, const sh_fetch_opts *o) {
         {"Kernel", sh_strdup(f.sys.kernel), "\xef\x80\x93 "},
         {"Shell", sh_strdup(f.sys.shell), "\xef\x84\xa0 "},
         {"Terminal", sh_strdup(f.sys.terminal), "\xef\x92\x89 "},
-        {"Skills", sh_strfmt("%d (%d tracked, %d local) · %d agents of %d known", f.skills, f.tracked, f.local, f.agents, f.known), "\xef\x83\xab "},
+        {"Skills", sh_strfmt("%d (%d tracked, %d local) · %d agent%s of %d known", f.skills, f.tracked, f.local, f.agents, f.agents == 1 ? "" : "s", f.known), "\xef\x83\xab "},
         {"Updates", updates_text(&f), "\xef\x80\x99 "},
         {"Folder", sh_strfmt("%s · %s · %.1f %% of %s", f.folder, shown_folder, share, shown_disk), "\xef\x81\xbb "},
         {"Backups", sh_strfmt("%s · Cache %s · %s", shown_backup, shown_cache, f.problems ? "links need repair" : "Links healthy"), "\xef\x87\x80 "},
