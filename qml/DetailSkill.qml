@@ -340,7 +340,7 @@ Flickable {
                     selectedTextColor: Theme.text
                     font.family: Theme.ui
                     font.pixelSize: Theme.fsBody
-                    onLinkActivated: (l) => Qt.openUrlExternally(l)
+                    onLinkActivated: (l) => { if (/^(https?|mailto):/i.test(l)) Qt.openUrlExternally(l) }  // a repository wrote this: no file:, smb: or other handlers
                     Accessible.role: Accessible.StaticText
                     Accessible.name: "SKILL.md of " + app.selected
                 }

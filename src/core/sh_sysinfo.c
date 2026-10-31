@@ -140,7 +140,9 @@ void sh_sysinfo_read(sh_sysinfo *s) {
     char host[256] = "";
     gethostname(host, sizeof host - 1);
     s->host = sh_strdup(host);
-    const struct passwd *pw = getpwuid(getuid());
+    char pw_text[4096];
+    struct passwd pw_entry, *pw = NULL;
+    getpwuid_r(getuid(), &pw_entry, pw_text, sizeof pw_text, &pw);
     s->user = env_or("USER", pw ? pw->pw_name : "");
     s->os = os_name(have ? u.machine : "");
     s->kernel = have ? sh_strfmt("%s %s", u.sysname, u.release) : sh_strdup("");

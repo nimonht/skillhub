@@ -1,4 +1,4 @@
-; Inno Setup script. Built by CI:  iscc /DAppVersion=1.0.0 /DSourceDir=dist\SkillHub packaging\windows\skillhub.iss
+; Inno Setup script. Built by CI:  iscc /DAppVersion=2.0.0 /DSourceDir=dist\SkillHub packaging\windows\skillhub.iss
 #ifndef AppVersion
   #define AppVersion "0.0.0"
 #endif
