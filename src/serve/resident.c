@@ -71,12 +71,12 @@ static void pass(uv_timer_t *t) {
     sh_flock *lock = *state ? sh_flock_take(lock_path, 0) : NULL;
     if (lock || !*state) {
         const int n = sh_store_adopt(&st);
+        sh_flock_release(lock);  // before the notice: on Windows it takes seconds, and other commands would wait
         if (n) {
             char *body = sh_strfmt("Tidied %d stray skill change(s) into ~/.agents/skills", n);
             sh_notify("Skill Hub", body);
             free(body);
         }
-        sh_flock_release(lock);
         arm(r, &st);
     } else {
         uv_timer_start(t, pass, DEBOUNCE_MS, 0);  // another Skill Hub is at work: look again when it may be done

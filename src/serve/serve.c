@@ -1118,6 +1118,7 @@ int sh_serve_stdio(void) {
     // first-call caches, filled before any other thread could race to fill them
     sh_git_program();
     sh_can_make_dir_links();
+    sh_can_make_symlinks();
     sh_flock *lock = NULL;
     if (mutation_lock_try(&lock) && lock) {  // nobody else is changing skills: tidy up after a process that died doing so
         sh_store st;

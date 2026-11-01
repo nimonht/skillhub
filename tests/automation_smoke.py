@@ -100,6 +100,28 @@ def systemd(home, env):
     run(env, "watch", "off")
     check(not os.path.exists(home + "/.config/systemd/user/skillhub-adopt.path"), "removed")
 
+    if os.name != "nt":  # a program or an agent folder with a space or a % in its path must reach the units as it is
+        odd = os.path.join(ROOT, "odd dir 100%")
+        os.makedirs(odd)
+        shutil.copy(BIN, odd + "/skillhub")
+        unit = dict(env, SKILLHUB_AUTOMATION_DRYRUN="systemd")
+        subprocess.run([odd + "/skillhub", "autoupdate", "on"], env=unit, check=True, capture_output=True, stdin=subprocess.DEVNULL, timeout=60)
+        service = read(home + "/.config/systemd/user/skillhub-update.service")
+        check('ExecStart="%s/skillhub" update --all --auto --notify' % odd.replace("%", "%%") in service, "the program, quoted and without a specifier:\n" + service)
+        run(env, "autoupdate", "off")
+        run(env, "providers", "add", "Odd", home + "/odd 50%/skills")
+        run(env, "watch", "on")
+        check("PathChanged=%s/odd 50%%%%/skills\n" % home in read(home + "/.config/systemd/user/skillhub-adopt.path"), "the folder, % doubled and not quoted")
+        run(env, "watch", "off")
+        run(env, "providers", "remove", "custom-odd")
+        # a line break in the program's path would start another setting: refused, and nothing is written
+        broken = os.path.join(ROOT, "line\nbreak")
+        os.makedirs(broken)
+        shutil.copy(BIN, broken + "/skillhub")
+        p = subprocess.run([broken + "/skillhub", "autoupdate", "on"], env=unit, capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=60)
+        check(p.returncode == 1 and "control character" in p.stderr, "a control character in the program's path: %d %s" % (p.returncode, p.stderr))
+        check(not os.path.exists(home + "/.config/systemd/user/skillhub-update.service"), "a unit was written for it anyway")
+
 
 def scheduled_env(home, env):
     """A scheduled run lacks the login environment: what was recorded when automation was switched on fills in."""

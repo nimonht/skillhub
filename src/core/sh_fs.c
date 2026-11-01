@@ -130,17 +130,20 @@ bool sh_mkpath(const char *path) {
     if (!parent_ok) return false;
 #ifdef _WIN32
     wchar_t *w = sh_wide_path(path);
-    const bool ok = CreateDirectoryW(w, NULL) || GetLastError() == ERROR_ALREADY_EXISTS;
+    const bool ok = CreateDirectoryW(w, NULL) || (GetLastError() == ERROR_ALREADY_EXISTS && sh_is_dir(path));
     free(w);
     return ok;
 #else
-    return mkdir(path, 0777) == 0 || errno == EEXIST;
+    return mkdir(path, 0777) == 0 || (errno == EEXIST && sh_is_dir(path));  // a file in the way is no folder
 #endif
 }
 
 bool sh_write_atomic(const char *path_in, const void *data, size_t n) {
     char *path = NULL;
-    if (sh_is_link(path_in)) path = sh_link_target(path_in);  // write through to the link's target
+    if (sh_is_link(path_in)) {  // write through to the link's target
+        path = sh_canonical(path_in);  // real folders on the way; a dangling link has none, so it is resolved by its text
+        if (!path) path = sh_link_target(path_in);
+    }
     if (!path || !*path) {
         free(path);
         path = sh_strdup(path_in);
@@ -177,7 +180,8 @@ bool sh_write_atomic(const char *path_in, const void *data, size_t n) {
     free(wt);
     free(wp);
 #else
-    const int fd = open(tmp, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
+    unlink(tmp);  // a link planted at this name is removed, never followed
+    const int fd = open(tmp, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0644);
     if (fd >= 0) {
         const char *p = data;
         size_t left = n;
@@ -392,7 +396,7 @@ static bool walk(const char *root, const char *rel, sh_walk_fn fn, void *user) {
                 if (sh_is_file(full)) go_on = fn(sub, full, true, user);  // a link to a file counts; a folder link is not entered
             } else if (sh_is_dir(full)) {
                 go_on = walk(root, sub, fn, user);
-            } else if (sh_lexists(full)) {
+            } else if (sh_is_file(full)) {  // not a FIFO or a socket: opening one can block for good
                 go_on = fn(sub, full, false, user);
             }
             free(full);

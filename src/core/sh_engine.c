@@ -66,6 +66,7 @@ struct sh_engine {
     int workers;      // repositories handled at once
     bool auto_mode;
     bool skip_scripts;
+    bool lock_failed;  // a group commit could not be written; set and read on the calling thread
     long cancelled;  // read and written through sh_atomic_*
     sh_engine_progress progress;
     void *progress_user;
@@ -73,6 +74,7 @@ struct sh_engine {
 
 void sh_engine_cancel(sh_engine *e) { sh_atomic_inc(&e->cancelled); }
 bool sh_engine_cancelled(sh_engine *e) { return sh_atomic_get(&e->cancelled) > 0; }
+bool sh_engine_lock_failed(const sh_engine *e) { return e->lock_failed; }
 
 static bool setting_skip_scripts(void) {
     char *config = sh_config_dir();
@@ -476,7 +478,7 @@ static void commit_pending(sh_engine *e) {
         trees[i] = batch[i].tree;
         contents[i] = batch[i].content;
     }
-    sh_lock_put_many(e->st, names, srcs, n);
+    if (!sh_lock_put_many(e->st, names, srcs, n)) e->lock_failed = true;
     sh_trees_put_many(e->st, names, trees, contents, n);
     for (size_t i = 0; i < n; ++i) {
         free(batch[i].name);

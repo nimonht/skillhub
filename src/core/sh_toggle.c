@@ -59,6 +59,8 @@ sh_toggles *sh_toggles_load(void) {
     return t;
 }
 
+bool sh_toggles_broken(const sh_toggles *t) { return t && !t->doc; }  // the file is there, and toggles_read gave up on it
+
 static bool list_has(yyjson_mut_val *list, const char *dir) {
     size_t i, n;
     yyjson_mut_val *v;
@@ -307,7 +309,7 @@ static bool entry_is_safe(sh_store *st, const char *name, yyjson_mut_val *row) {
 void sh_parked_reconcile(sh_store *st) {
     if (!st->parked || !sh_is_dir(st->parked)) return;
     sh_strv names = SH_STRV_INIT;
-    sh_list_dir(st->parked, SH_LIST_ALL, &names);
+    sh_list_dir(st->parked, SH_LIST_DIRS, &names);  // folders and links to folders: a .DS_Store is not a skill
     for (size_t i = 0; i < names.len; ++i) {
         char *central = sh_path_join(st->central, names.items[i]);
         const bool both = sh_lexists(central);

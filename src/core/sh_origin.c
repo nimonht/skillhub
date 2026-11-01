@@ -287,11 +287,12 @@ static char *normalized_url(const char *url) {
 }
 
 char *sh_origin_cache_dir(const sh_origin *o, const char *cache) {
-    if (o->type == SH_ORIGIN_GITHUB && !*o->ref && strstr(o->url, "https://github.com/") == o->url) {
+    // a source without a slash is no owner/repo; its key could be ".." and leave repos/
+    if (o->type == SH_ORIGIN_GITHUB && !*o->ref && strstr(o->url, "https://github.com/") == o->url && strchr(o->source, '/')) {
         sh_buf k = SH_BUF_INIT;  // the key older versions used: owner__repo
         for (const char *c = o->source; *c; ++c) {
             if (*c == '/') sh_buf_puts(&k, "__");
-            else sh_buf_putc(&k, *c);
+            else sh_buf_putc(&k, word_char(*c) ? *c : '_');
         }
         char *dir = sh_strfmt("%s/repos/%s", cache, sh_buf_str(&k));
         sh_buf_free(&k);

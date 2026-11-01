@@ -12,6 +12,11 @@
 #include <QTimer>
 #include <QUrl>
 
+static QString charOf(uint32_t c) {
+    const char32_t one = c;
+    return QString::fromUcs4(&one, 1);
+}
+
 static constexpr int OSC_MAX = 4096;  // a title or a folder: whatever a program sends beyond this is noise
 
 void PtyReader::run() {
@@ -331,7 +336,7 @@ void VTermItem::paint(QPainter *p) {
                 p->fillRect(cell.chars[0] == 0x2588 ? box : cell.chars[0] == 0x2580 ? QRectF(box.x(), y, box.width(), half) : QRectF(box.x(), y + half, box.width(), cellH_ - half), fg);
             } else if (cell.chars[0] && cell.chars[0] != ' ') {
                 QString text;
-                for (int i = 0; i < VTERM_MAX_CHARS_PER_CELL && cell.chars[i]; ++i) text += QString::fromUcs4(reinterpret_cast<const char32_t *>(&cell.chars[i]), 1);
+                for (int i = 0; i < VTERM_MAX_CHARS_PER_CELL && cell.chars[i]; ++i) text += charOf(cell.chars[i]);
                 QFont f = font_;
                 f.setBold(cell.attrs.bold);
                 f.setItalic(cell.attrs.italic);
@@ -418,7 +423,7 @@ void VTermItem::mousePressEvent(QMouseEvent *e) {
         QString line;
         for (int c = 0; c < cols_; ++c) {
             const VTermScreenCell cell = cellAt(selStart_.y(), c);
-            line += cell.chars[0] ? QString::fromUcs4(reinterpret_cast<const char32_t *>(&cell.chars[0]), 1) : QStringLiteral(" ");
+            line += cell.chars[0] ? charOf(cell.chars[0]) : QStringLiteral(" ");
         }
         static const QRegularExpression url(QStringLiteral(R"(https?://[^\s"'<>]+)"));
         for (auto it = url.globalMatch(line); it.hasNext();) {
@@ -468,7 +473,7 @@ void VTermItem::copy() {
         QString line;
         for (int col = row == a.y() ? a.x() : 0; col <= (row == b.y() ? b.x() : cols_ - 1); ++col) {
             const VTermScreenCell cell = cellAt(row, col);
-            line += cell.chars[0] ? QString::fromUcs4(reinterpret_cast<const char32_t *>(&cell.chars[0]), 1) : QStringLiteral(" ");
+            line += cell.chars[0] ? charOf(cell.chars[0]) : QStringLiteral(" ");
         }
         while (line.endsWith(QLatin1Char(' '))) line.chop(1);
         text += line;
@@ -491,7 +496,7 @@ QString VTermItem::screenText() const {
         QString line;
         for (int col = 0; col < cols_; ++col) {
             const VTermScreenCell cell = cellAt(row, col);
-            line += cell.chars[0] ? QString::fromUcs4(reinterpret_cast<const char32_t *>(&cell.chars[0]), 1) : QStringLiteral(" ");
+            line += cell.chars[0] ? charOf(cell.chars[0]) : QStringLiteral(" ");
         }
         while (line.endsWith(QLatin1Char(' '))) line.chop(1);
         out += line + QLatin1Char('\n');

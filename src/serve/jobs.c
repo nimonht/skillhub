@@ -72,6 +72,8 @@ static void fail(job *j, const char *why) {
     j->error = sh_strdup(why ? why : "");
 }
 
+#define LOCK_FAILED "a lock file could not be updated (see the activity log)"
+
 // ---- check and update ----
 
 static const char *status_word(sh_update u) {
@@ -173,8 +175,10 @@ static void apply_reviewed(job *j, sh_store *st, yyjson_val *stages) {
     }
     bool *done = sh_xcalloc(n + 1, sizeof *done);
     const int updated = n && !cancelled(j) ? sh_engine_apply(e, todo, paths, n, done) : 0;
+    const bool lock_failed = sh_engine_lock_failed(e);
     engine_done(j, e);
     report_updates(j, todo, done, n, updated);
+    if (lock_failed) fail(j, LOCK_FAILED);
     free(done);
     free(paths);
     free(todo);
@@ -200,8 +204,10 @@ static void body_update(job *j, sh_store *st) {
         if (wanted(&names, sk.items[i].name) && sk.items[i].update == SH_UPDATE_AVAILABLE) todo[n++] = &sk.items[i];
     bool *done = sh_xcalloc(n + 1, sizeof *done);
     const int updated = n && !cancelled(j) ? sh_engine_update(e, todo, n, done) : 0;
+    const bool lock_failed = sh_engine_lock_failed(e);
     engine_done(j, e);
     report_updates(j, todo, done, n, updated);
+    if (lock_failed) fail(j, LOCK_FAILED);
     free(done);
     free(todo);
     sh_skills_free(&sk);
@@ -442,6 +448,7 @@ static void body_install(job *j, sh_store *st) {
         sum(j, "installed", installed);
         sum(j, "failed", (long long)want.len - installed);
         if (installed < (int)want.len) j->ok = false;
+        if (sh_engine_lock_failed(e)) fail(j, LOCK_FAILED);
         free(done);
         free(pick);
     }

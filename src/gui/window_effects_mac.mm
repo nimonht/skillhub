@@ -36,4 +36,5 @@ void window_effects_apply_mac(QQuickWindow *window, int kind) {
     } @catch (NSException *) {
     }
     [frame addSubview:effect positioned:NSWindowBelow relativeTo:view];
+    [effect release];  // no ARC here, and the window holds it now
 }

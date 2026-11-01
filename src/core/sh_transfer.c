@@ -490,6 +490,7 @@ void sh_store_import_items(sh_store *st, const sh_import_item *const *items, siz
     char **errs = sh_xcalloc(n_remote + 1, sizeof *errs);
     sh_engine *e = sh_engine_new(st);
     *ok += sh_engine_import(e, remote, n_remote, done, why, errs);
+    if (sh_engine_lock_failed(e)) ++*failed;  // in place, but not on record; the log says which
     sh_engine_free(e);
     for (size_t i = 0; i < n_remote; ++i) {
         if (done[i]) continue;

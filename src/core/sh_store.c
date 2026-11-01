@@ -402,8 +402,8 @@ static char *unused_backup(char *base);
 // wait until nothing in `dir` changed for a few seconds (an installer may still be writing)
 static void wait_quiet(const char *dir) {
     for (int i = 0; i < 30; ++i) {
-        const int64_t newest = sh_newest_mtime_ms(dir);
-        if ((sh_now_ms() - newest) / 1000 >= 3) return;
+        const int64_t age = sh_now_ms() - sh_newest_mtime_ms(dir);
+        if (age < 0 || age / 1000 >= 3) return;  // a time in the future (clock skew) will not pass: count it as quiet
         sh_sleep_ms(2000);
     }
 }
@@ -532,9 +532,14 @@ static int sync_copy(sh_store *st, const sh_agent *a, const sh_skill *s, const c
 int sh_store_relink(sh_store *st) {
     int changes = 0;
     sh_parked_reconcile(st);
+    sh_toggles *toggles = st->project ? NULL : sh_toggles_load();
+    if (sh_toggles_broken(toggles)) {  // what the user switched off is unknown: linking now would bring it all back
+        sh_store_log(st, "toggles.json cannot be read, so no links are made until it is fixed");
+        sh_toggles_free(toggles);
+        return 0;
+    }
     sh_skills skills;
     sh_store_scan(st, &skills);
-    sh_toggles *toggles = st->project ? NULL : sh_toggles_load();
     char *central_slash = sh_strfmt("%s/", st->central), *parked_slash = st->parked ? sh_strfmt("%s/", st->parked) : NULL;
     for (size_t k = 0; k < st->n_agents; ++k) {
         const sh_agent *a = st->agents[k];

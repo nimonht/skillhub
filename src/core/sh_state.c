@@ -46,7 +46,10 @@ long long sh_setting_int(const char *section, const char *key, long long fallbac
     if (sh_json_read(path, 0, &doc) == SH_JSON_OK) {
         yyjson_val *part = yyjson_obj_get(yyjson_doc_get_root(doc), section);
         yyjson_val *v = part ? yyjson_obj_get(part, key) : NULL;
-        if (yyjson_is_num(v)) value = (long long)yyjson_get_num(v);
+        if (yyjson_is_num(v)) {
+            const double d = yyjson_get_num(v);
+            if (d >= -9223372036854775808.0 && d < 9223372036854775808.0) value = (long long)d;  // else (or NaN): the fallback
+        }
         yyjson_doc_free(doc);
     }
     free(path);

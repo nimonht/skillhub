@@ -253,6 +253,11 @@ static DWORD WINAPI reader(void *arg) {
     return 0;
 }
 
+// a grandchild (git-remote-https, say) can hold the pipe open after the child is gone; cancelling the blocked read ends it
+static void wait_reader(HANDLE t) {
+    while (WaitForSingleObject(t, 2000) == WAIT_TIMEOUT) CancelSynchronousIo(t);
+}
+
 bool sh_proc_run(const char *const *argv, const sh_proc_opts *opts, sh_proc_result *r) {
     static const sh_proc_opts none = {0};
     const sh_proc_opts *o = opts ? opts : &none;
@@ -266,14 +271,27 @@ bool sh_proc_run(const char *const *argv, const sh_proc_opts *opts, sh_proc_resu
 
     SECURITY_ATTRIBUTES sa = {sizeof sa, NULL, TRUE};
     HANDLE in_r = NULL, in_w = NULL, out_r = NULL, out_w = NULL, err_r = NULL, err_w = NULL;
-    if (!CreatePipe(&out_r, &out_w, &sa, 0) || !CreatePipe(&err_r, &err_w, &sa, 0)) {
+    if (!CreatePipe(&out_r, &out_w, &sa, 0)) {
+        free(program);
+        return false;
+    }
+    if (!CreatePipe(&err_r, &err_w, &sa, 0)) {
+        CloseHandle(out_r);
+        CloseHandle(out_w);
         free(program);
         return false;
     }
     SetHandleInformation(out_r, HANDLE_FLAG_INHERIT, 0);
     SetHandleInformation(err_r, HANDLE_FLAG_INHERIT, 0);
     if (o->input) {
-        CreatePipe(&in_r, &in_w, &sa, 0);
+        if (!CreatePipe(&in_r, &in_w, &sa, 0)) {
+            CloseHandle(out_r);
+            CloseHandle(out_w);
+            CloseHandle(err_r);
+            CloseHandle(err_w);
+            free(program);
+            return false;
+        }
         SetHandleInformation(in_w, HANDLE_FLAG_INHERIT, 0);
     } else {
         in_r = CreateFileW(L"NUL", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, &sa, OPEN_EXISTING, 0, NULL);
@@ -333,8 +351,8 @@ bool sh_proc_run(const char *const *argv, const sh_proc_opts *opts, sh_proc_resu
         WaitForSingleObject(wt, INFINITE);
         CloseHandle(wt);
     }
-    WaitForSingleObject(ot, INFINITE);
-    WaitForSingleObject(et, INFINITE);
+    wait_reader(ot);
+    wait_reader(et);
     CloseHandle(ot);
     CloseHandle(et);
     CloseHandle(out_r);

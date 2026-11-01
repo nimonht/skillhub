@@ -26,6 +26,8 @@ void sh_engine_set_auto(sh_engine *e);
 // swapped in already stay, and their lock entries are committed. Callable from any thread.
 void sh_engine_cancel(sh_engine *e);
 bool sh_engine_cancelled(sh_engine *e);
+// True when a lock file could not be written: skills may be in place whose lock entry is missing. The reason is in the log.
+bool sh_engine_lock_failed(const sh_engine *e);
 // Called from the worker threads each time a repository is done: `done` of `total` skills are through, `current` is the
 // repository that just finished.
 typedef void (*sh_engine_progress)(void *user, size_t done, size_t total, const char *current);

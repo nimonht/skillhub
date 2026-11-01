@@ -530,6 +530,7 @@ yyjson_mut_val *scan_delta(yyjson_mut_doc *d, const scan_result *before, const s
 
 yyjson_mut_val *scan_page(yyjson_mut_doc *d, const scan_result *r, long rev, size_t page, size_t page_size) {
     if (page_size == 0) page_size = 1000;
+    if (page_size > 100000) page_size = 100000;  // the sums below cannot wrap
     const size_t pages = r->n ? (r->n + page_size - 1) / page_size : 1;
     yyjson_mut_val *p = yyjson_mut_obj(d);
     yyjson_mut_obj_add_int(d, p, "rev", rev);
@@ -537,7 +538,8 @@ yyjson_mut_val *scan_page(yyjson_mut_doc *d, const scan_result *r, long rev, siz
     yyjson_mut_obj_add_uint(d, p, "page", page);
     yyjson_mut_obj_add_uint(d, p, "pages", pages);
     yyjson_mut_val *skills = yyjson_mut_arr(d);
-    for (size_t i = page * page_size; i < r->n && i < (page + 1) * page_size; ++i) yyjson_mut_arr_append(skills, raw(d, r->rows[i].json));
+    if (page < pages)
+        for (size_t i = page * page_size; i < r->n && i < (page + 1) * page_size; ++i) yyjson_mut_arr_append(skills, raw(d, r->rows[i].json));
     yyjson_mut_obj_add_val(d, p, "skills", skills);
     if (page == 0) {
         yyjson_mut_obj_add_val(d, p, "agents", raw(d, r->agents));

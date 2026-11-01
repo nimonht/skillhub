@@ -323,6 +323,20 @@ def main():
         if code != 0:
             fail("the backend exited with %d" % code)
 
+        if os.name != "nt":  # Windows keeps a watched folder until its watch closes
+            # a folder deleted and made again, as a git branch switch does, is a new folder: its watch has to be new too
+            w = Backend(env)
+            w.call("initialize", {"protocol": 1, "client": "rpc_smoke"})
+            w.call("state.snapshot", {"page": 0, "pageSize": 100})
+            time.sleep(1)
+            shutil.rmtree(central)
+            os.makedirs(central)
+            time.sleep(1.5)  # the rescan after the first event, and the sync of the watches that follows it
+            skill(os.path.join(central, "after"), "after")
+            w.note("state.delta", lambda p: any(u["name"] == "after" for u in p["upserts"]), why="a skill in a folder made again")
+            if w.close() != 0:
+                fail("the backend did not exit cleanly")
+
         # a backend whose window went away (standard input closed) exits by itself
         b2 = Backend(env)
         b2.call("initialize", {"protocol": 1})

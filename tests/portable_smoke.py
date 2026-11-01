@@ -13,6 +13,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 
 BIN = os.path.abspath(sys.argv[1])
 WIN = os.name == "nt"
@@ -95,12 +96,36 @@ try:
     if "healthy" not in run(env, "doctor").stdout:
         fail("doctor is not healthy after adopt")
 
+    # a flag without its value would quietly widen the command: it is refused, and nothing changes
+    loose = os.path.join(home, ".claude", "skills", "loose")
+    skill(loose, "loose", "stray")
+    for args in (("adopt", "--project"), ("adopt", "-C"), ("-C", "", "adopt"), ("--project", "", "list"), ("disable", "alpha", "--agent"),
+                 ("adopt", "--wait", "soon"), ("adopt", "--wait", "-1"), ("adopt", "--wait", "99999"), ("projects", "auto", home, "maybe")):
+        run(env, *args, expect=2)
+    if (not os.path.isdir(loose) or os.path.islink(loose) or os.path.exists(os.path.join(central, "loose")) or states(env)["alpha"].get("claude-code") != "link"
+            or os.path.exists(os.path.join(home, ".agents", ".parked")) or os.path.exists(env["SKILLHUB_CONFIG"] + "/toggles.json")):
+        fail("a command that was refused changed something")
+    shutil.rmtree(loose)
+    run(env, "adopt", "--wait", "0")
+
     # remove: skill and link disappear, a backup stays
     run(env, "remove", "beta")
     if os.path.exists(os.path.join(central, "beta")) or os.path.lexists(os.path.join(home, ".claude", "skills", "beta")):
         fail("remove left files behind")
     if not os.path.isdir(os.path.join(home, ".agents", ".backup", "_removed")):
         fail("remove kept no backup")
+
+    # a stray whose files carry a time in the future (clock skew, an archive) is not worth waiting for
+    tomorrow = os.path.join(home, ".claude", "skills", "tomorrow")
+    skill(tomorrow, "tomorrow")
+    future = time.time() + 86400
+    os.utime(os.path.join(tomorrow, "SKILL.md"), (future, future))
+    os.utime(tomorrow, (future, future))
+    started = time.time()
+    run(env, "adopt")
+    if time.time() - started > 10 or not os.path.isfile(os.path.join(central, "tomorrow", "SKILL.md")):
+        fail("a stray from the future was waited for (%.0f s) or not adopted" % (time.time() - started))
+    run(env, "remove", "tomorrow")
 
     # a dead link that points into the shared folder is cleaned up; links to anything else stay
     if not WIN:
@@ -112,6 +137,15 @@ try:
         if not os.path.lexists(os.path.join(home, ".claude", "skills", "foreign")):
             fail("a foreign link was removed")
         os.remove(os.path.join(home, ".claude", "skills", "foreign"))
+
+    if LINUX:  # a project whose folder name is not UTF-8 is listed, never as (null)
+        odd = os.fsdecode(os.path.join(os.fsencode(home), b"proj\xff"))
+        os.mkdir(odd)
+        run(env, "projects", "add", odd)
+        listing = json.loads(run(env, "projects", "list", "--json").stdout)
+        if len(listing) != 1 or not listing[0]["name"].startswith("proj"):
+            fail("projects list --json: %s" % listing)
+        run(env, "projects", "remove", odd)
 
     # your own agent
     mine = os.path.join(home, "my-agent-skills")
@@ -134,6 +168,10 @@ try:
 
     home2, env2 = make_home()
     os.makedirs(os.path.join(home2, ".claude"))
+    for only in (["--only", ""], ["--only", ","], ["--only"]):  # an empty list must not select everything
+        run(env2, "import", export, "--yes", *only, expect=2)
+    if os.path.exists(os.path.join(home2, ".agents", "skills", "gamma")):
+        fail("an empty --only installed something")
     run(env2, "import", export, "--yes")
     g = os.path.join(home2, ".agents", "skills", "gamma")
     if open(os.path.join(g, "ref", "data.bin"), "rb").read() != bytes(range(256)) * 4:
@@ -201,6 +239,13 @@ try:
         f.write("---\nname: one\ndescription: test skill one\n---\n\nversion 2\n")
     git(upstream, "commit", "-q", "-am", "second")
     run(env, "check", expect=10)                   # an update is available
+    if not WIN:  # a review that could not be made is no clean run, even when nothing was left to apply
+        broken = os.path.join(home, "failing-git")
+        os.makedirs(broken)
+        with open(os.path.join(broken, "git"), "w", newline="\n") as f:
+            f.write('#!/bin/sh\ncase "$*" in *"diff --no-index"*) echo partial; exit 128 ;; esac\nexec "%s" "$@"\n' % shutil.which("git"))
+        os.chmod(os.path.join(broken, "git"), 0o755)
+        run(dict(env, PATH=broken + os.pathsep + env["PATH"]), "update", "one", "--review", "--yes", expect=1)
     run(env, "update", "one")
     if "version 2" not in open(os.path.join(one, "SKILL.md"), encoding="utf-8").read():
         fail("update did not install the new version")

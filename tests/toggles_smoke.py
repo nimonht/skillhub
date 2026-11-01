@@ -45,6 +45,18 @@ def main():
     check("healthy" in run(env, "doctor").stdout, "off is healthy")
     run(env, "adopt")
     check(not os.path.lexists(link_of(home, "alpha")), "repair must not bring it back")
+    # a switch file that cannot be read says nothing about what is off: no link may be made on a guess, and the file stays
+    path = env["SKILLHUB_CONFIG"] + "/toggles.json"
+    good = read(path)
+    with open(path, "w") as f:
+        f.write("{ not json")
+    p = run(env, "adopt")
+    check(not os.path.lexists(link_of(home, "alpha")), "a switch file that cannot be read brought a link back")
+    check("toggles.json" in p.stdout and read(path) == "{ not json", "the file was changed, or nothing said why:\n" + p.stdout)
+    run(env, "enable", "alpha", "--agent", CLAUDE, expect=1)
+    check(read(path) == "{ not json" and not os.path.lexists(link_of(home, "alpha")), "a switch is never written over a file that cannot be read")
+    with open(path, "w") as f:
+        f.write(good)
     run(env, "enable", "alpha", "--agent", CLAUDE)
     check(os.path.islink(link_of(home, "alpha")) and agents_of(env, "alpha")[CLAUDE] == "link", "the link comes back")
 
@@ -112,6 +124,14 @@ def main():
     check("installed by npx" in read(home + "/.agents/skills/gamma/SKILL.md") and not os.path.exists(home + "/.agents/.parked/gamma"), "the shared folder wins")
     check(os.listdir(home + "/.agents/.backup/.parked-replaced"), "the parked copy is kept")
     check("gamma" not in state(env).get("parked", {}), "no entry left behind")
+    names = (home + "/.agents/skills/.DS_Store", home + "/.agents/.parked/.DS_Store")  # a file is not a skill, whatever its name
+    for name in names:
+        with open(name, "w") as f:
+            f.write("x")
+    run(env, "adopt")
+    check(os.path.isfile(names[1]) and not any(n.startswith(".DS_Store") for n in os.listdir(home + "/.agents/.backup/.parked-replaced")), "a file in the parked folder was moved")
+    for name in names:
+        os.remove(name)
 
     # ---- removing and restoring ----
     run(env, "disable", "beta", "--shared")

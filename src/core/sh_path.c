@@ -361,7 +361,7 @@ char *sh_state_dir(void) {
 char *sh_tilde(const char *path) {
     char *home = sh_home();
     char *out;
-    if (sh_path_within(path, home) && *home) out = sh_strfmt("~%s", path + strlen(home));
+    if (*home && !sh_path_is_root(home) && sh_path_within(path, home)) out = sh_strfmt("~%s", path + strlen(home));
     else out = sh_strdup(path);
     free(home);
     return out;

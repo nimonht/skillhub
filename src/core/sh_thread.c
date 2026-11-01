@@ -145,17 +145,23 @@ void sh_parallel_for(size_t n, int workers, void (*fn)(size_t, void *), void *ct
     if (workers < 1) workers = 1;
     if ((size_t)workers > n) workers = (int)n;
     loop_state s = {n, 0, 0, fn, ctx, sh_mutex_new(), sh_cond_new()};
+    int started = 0;
 #ifdef _WIN32
     HANDLE *threads = sh_xcalloc((size_t)workers, sizeof *threads);
-    for (int t = 0; t < workers; ++t) threads[t] = CreateThread(NULL, 0, worker, &s, 0, NULL);
+    for (int t = 0; t < workers; ++t) {
+        HANDLE h = CreateThread(NULL, 0, worker, &s, 0, NULL);
+        if (h) threads[started++] = h;
+    }
 #else
     pthread_t *threads = sh_xcalloc((size_t)workers, sizeof *threads);
     pthread_attr_t attr;
     pthread_attr_init(&attr);
     pthread_attr_setstacksize(&attr, 1024 * 1024);  // the tasks use little stack; keeps many workers cheap
-    for (int t = 0; t < workers; ++t) pthread_create(&threads[t], &attr, worker, &s);
+    for (int t = 0; t < workers; ++t)
+        if (pthread_create(&threads[started], &attr, worker, &s) == 0) ++started;
     pthread_attr_destroy(&attr);
 #endif
+    if (started == 0) (void)worker(&s);  // no thread could start: the caller does the work
     sh_mutex_lock(s.m);
     while (s.finished < s.n) {
         sh_cond_wait_ms(s.done, s.m, idle_ms > 0 ? idle_ms : 1000);
@@ -166,7 +172,7 @@ void sh_parallel_for(size_t n, int workers, void (*fn)(size_t, void *), void *ct
         }
     }
     sh_mutex_unlock(s.m);
-    for (int t = 0; t < workers; ++t) {
+    for (int t = 0; t < started; ++t) {
 #ifdef _WIN32
         WaitForSingleObject(threads[t], INFINITE);
         CloseHandle(threads[t]);

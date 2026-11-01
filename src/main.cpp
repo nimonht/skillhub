@@ -141,6 +141,10 @@ int main(int argc, char **argv) {
                     if (opt("--action") == QLatin1String("update-all")) controller.updateAll();
                     if (opt("--action") == QLatin1String("check")) controller.checkUpdates();
                     if (opt("--action") == QLatin1String("adopt")) controller.adopt();
+                    if (opt("--action") == QLatin1String("restart")) {  // twice: the second one is what a stuck stop would break
+                        controller.restartBackend();
+                        QTimer::singleShot(1500, &controller, &AppController::restartBackend);
+                    }
                     *armed = *ticks;
                     return;
                 }

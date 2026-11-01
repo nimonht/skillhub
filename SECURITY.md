@@ -17,6 +17,13 @@ A `skills-lock.json` comes with a repository you may have just cloned. Skill Hub
 
 Comparing a skill with upstream runs `git diff --no-index` with external diff drivers, text conversion and colour off, so your git configuration runs nothing on untrusted files. A reviewed update is applied exactly as shown: the staged folder's hash is checked again first, and upstream moving on in the meantime changes nothing. Automatic runs leave out updates that add or change scripts or executables until you review them, unless you set `updates.autoSkipScripts` to false. The check looks at what is different on disk, so it does not depend on what upstream claims changed. It is a brake, not a guarantee: a skill's `SKILL.md` alone can already tell an agent to do things.
 
+## Text from repositories
+
+A skill's name, description and files are written by whoever owns the repository, so they are treated as text. The window shows
+them as plain text and never fetches anything they name: no images, no style sheets, and links open only for `http`, `https` and
+`mailto`, after a click. The command line removes control characters from everything it prints, so a patch cannot hide a line
+from the review it appears in. Pasting into the built-in terminal removes escape characters too.
+
 ## Trust model
 
 Agent skills are text (and sometimes scripts) that your coding agents follow with **your** permissions. Updating a

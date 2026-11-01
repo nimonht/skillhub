@@ -1,4 +1,8 @@
 // Path handling ported from Qt (QDir::cleanPath, relativeFilePath) and the file-system helpers.
+#if !defined(_WIN32) && !defined(__APPLE__)
+#define _DEFAULT_SOURCE  // mkfifo, symlink
+#endif
+
 #include "test.h"
 
 #include "sh_fs.h"
@@ -6,6 +10,11 @@
 #include "sh_link.h"
 #include "sh_path.h"
 #include "sh_str.h"
+
+#ifndef _WIN32
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
 
 static void clean(void) {
     CHECK_STR(sh_path_clean(""), "");
@@ -113,6 +122,50 @@ static void files(void) {
     free(copied); free(moved); free(copy); free(keep); free(link); free(target); free(deeper); free(a); free(dir);
 }
 
+#ifndef _WIN32
+static bool collect(const char *rel, const char *full, bool is_link, void *user) {
+    (void)full;
+    (void)is_link;
+    sh_strv_push(user, rel);  // names only: opening a FIFO here would hang the test
+    return true;
+}
+#endif
+
+// a file in the way is no folder, a FIFO is no file, and a write through a link lands where the link really leads
+static void odd_entries(void) {
+    char *dir = scratch("odd");
+    char *file = sh_path_join(dir, "file.txt"), *below = sh_path_join(file, "sub");
+    CHECK(sh_mkpath(dir) && sh_mkpath(dir));
+    CHECK(sh_write_file(file, "x", 1));
+    CHECK(!sh_mkpath(file));
+    CHECK(!sh_mkpath(below));
+#ifndef _WIN32
+    char *fifo = sh_path_join(dir, "pipe");
+    if (mkfifo(fifo, 0600) == 0) {
+        sh_strv seen = SH_STRV_INIT;
+        CHECK(sh_walk_files(dir, collect, &seen));
+        CHECK(seen.len == 1 && strcmp(seen.items[0], "file.txt") == 0);
+        sh_strv_free(&seen);
+    }
+    // real/sub/l -> ../target.txt, reached through alias -> real/sub: the ".." is real/, not the folder holding alias
+    char *real = sh_path_join(dir, "real"), *sub = sh_path_join(dir, "real/sub"), *target = sh_path_join(dir, "real/target.txt");
+    char *alias = sh_path_join(dir, "alias"), *l = sh_path_join(dir, "real/sub/l"), *through = sh_path_join(dir, "alias/l");
+    char *wrong = sh_path_join(dir, "target.txt");
+    CHECK(sh_mkpath(sub) && sh_write_file(target, "old", 3));
+    if (symlink("../target.txt", l) == 0 && symlink("real/sub", alias) == 0) {
+        CHECK(sh_write_atomic(through, "new", 3));
+        sh_buf b = SH_BUF_INIT;
+        CHECK(sh_read_file(target, 0, &b) && strcmp(sh_buf_str(&b), "new") == 0);
+        sh_buf_free(&b);
+        CHECK(!sh_lexists(wrong) && sh_is_link(l));
+    }
+    free(wrong); free(through); free(l); free(alias); free(target); free(sub); free(real);
+    free(fifo);
+#endif
+    CHECK(sh_remove_tree(dir));
+    free(below); free(file); free(dir);
+}
+
 // where skills come from: the inputs npx skills accepts (src/source-parser.ts)
 static void origins(void) {
     static const struct { const char *in, *type, *source, *url, *ref, *subpath, *host; } cases[] = {
@@ -177,8 +230,20 @@ static void origins(void) {
     CHECK_EQ_STR(a, b);  // the same repository, typed two ways
     free(a);
     free(b);
+    // the older key never leaves repos/, whatever the source holds; legal names keep their key
+    char odd_source[] = "..\\..\\x/y", url[] = "https://github.com/x/y.git", empty[] = "", host[] = "github.com";
+    sh_origin odd = {SH_ORIGIN_GITHUB, odd_source, url, empty, empty, host};
+    CHECK_STR(sh_origin_cache_dir(&odd, "/c"), "/c/repos/.._.._x__y");
+    char dots[] = "..";
+    odd.source = dots;
+    char *d = sh_origin_cache_dir(&odd, "/c");
+    CHECK(sh_starts_with(d, "/c/repos/github.com/") && !strstr(d, "/../"));
+    free(d);
+    char plain[] = "owner/repo";
+    odd.source = plain;
+    CHECK_STR(sh_origin_cache_dir(&odd, "/c"), "/c/repos/owner__repo");
 }
 
 const sh_test_case sh_tests_paths[] = {
-    {"paths.clean", clean}, {"paths.relative", relative}, {"paths.parts", parts}, {"paths.files", files}, {"paths.origins", origins}, {NULL, NULL},
+    {"paths.clean", clean}, {"paths.relative", relative}, {"paths.parts", parts}, {"paths.files", files}, {"paths.odd_entries", odd_entries}, {"paths.origins", origins}, {NULL, NULL},
 };

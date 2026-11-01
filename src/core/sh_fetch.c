@@ -210,7 +210,10 @@ static void put_logo_line(sh_buf *b, const ink *c, int row) {
 // an image as half blocks: two pixels to a cell, each with its own colour
 static bool image_lines(const char *path, const ink *c, sh_strv *out) {
     sh_buf file = SH_BUF_INIT;
-    if (!sh_read_file(path, 32 * 1024 * 1024, &file)) return false;
+    if (!sh_read_file(path, 32 * 1024 * 1024, &file)) {
+        sh_buf_free(&file);
+        return false;
+    }
     int w = 0, h = 0, comp = 0;
     unsigned char *px = stbi_load_from_memory((const unsigned char *)file.data, (int)file.len, &w, &h, &comp, 4);
     sh_buf_free(&file);
@@ -251,7 +254,10 @@ static bool kitty_logo(sh_buf *out, const char *logo, const ink *c) {
     if (strcmp(logo, "builtin") != 0) {
         if (!sh_ends_with(logo, ".png")) return false;
         sh_buf file = SH_BUF_INIT;
-        if (!sh_read_file(logo, 32 * 1024 * 1024, &file)) return false;
+        if (!sh_read_file(logo, 32 * 1024 * 1024, &file)) {
+            sh_buf_free(&file);
+            return false;
+        }
         char *first = sh_strfmt("a=T,f=100,c=%d,r=%d,q=2", LOGO_W, LOGO_H);
         put_chunks(out, first, (const unsigned char *)file.data, file.len);
         free(first);

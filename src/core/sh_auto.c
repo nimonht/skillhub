@@ -138,11 +138,37 @@ static void pick_time(const sh_store *st, int *hour, int *minute) {
 
 static char *unit_dir(const sh_store *st) { return sh_path_join(st->home, ".config/systemd/user"); }
 
+static bool has_control(const char *s) {
+    for (; *s; ++s)
+        if ((unsigned char)*s < 0x20 || *s == 0x7f) return true;
+    return false;
+}
+
+// systemd reads % as a specifier in every setting, and ExecStart= also splits words, reads quotes and backslashes and
+// expands $. `command`: a path with none of those stays as it is, any other is quoted. A doubled % or $ stands for itself.
+static char *unit_path(const char *s, bool command) {
+    const bool quote = command && strpbrk(s, " \t\"'\\$%") != NULL;
+    sh_buf b = SH_BUF_INIT;
+    if (quote) sh_buf_putc(&b, '"');
+    for (; *s; ++s) {
+        if (*s == '%' || (quote && *s == '$')) sh_buf_putc(&b, *s);
+        else if (quote && (*s == '"' || *s == '\\')) sh_buf_putc(&b, '\\');
+        sh_buf_putc(&b, *s);
+    }
+    if (quote) sh_buf_putc(&b, '"');
+    return sh_buf_steal(&b);
+}
+
 static char *path_unit_text(const sh_store *st) {
     sh_strv dirs = SH_STRV_INIT;
     sh_store_watch_dirs(st, &dirs);
     sh_buf paths = SH_BUF_INIT;
-    for (size_t i = 0; i < dirs.len; ++i) sh_buf_printf(&paths, "PathChanged=%s\n", dirs.items[i]);
+    for (size_t i = 0; i < dirs.len; ++i) {
+        if (has_control(dirs.items[i])) continue;  // a line break would start another setting
+        char *dir = unit_path(dirs.items[i], false);
+        sh_buf_printf(&paths, "PathChanged=%s\n", dir);
+        free(dir);
+    }
     sh_strv_free(&dirs);
     char *text = sh_strfmt("[Unit]\nDescription=Watch agent skill dirs for stray skills\n\n"
                            "[Path]\n%s\n"
@@ -158,6 +184,16 @@ static bool systemctl(sh_store *st, const char *a, const char *b, const char *c)
 
 static bool systemd_install(sh_store *st, bool timer, bool watcher, char **err) {
     char *exe = program(st, AUTO_SYSTEMD);
+    if (has_control(exe)) {
+        if (err) *err = sh_strdup("the path of this program holds a control character, so a unit cannot name it");
+        free(exe);
+        return false;
+    }
+    if (strncmp(exe, "%h/", 3) != 0) {  // %h is systemd's own word for the home folder
+        char *word = unit_path(exe, true);
+        free(exe);
+        exe = word;
+    }
     char *d = unit_dir(st);
     bool ok = true;
     if (timer) {
@@ -556,7 +592,12 @@ bool sh_store_install_units(sh_store *st, bool timer, bool watcher, char **err) 
     if (b == AUTO_SYSTEMD) return systemd_install(st, timer, watcher, err);
     bool ok = true;
     if (timer) ok = (b == AUTO_LAUNCHD ? launchd_one(st, true, err) : schtasks_one(st, true, err)) && ok;
-    if (watcher) ok = (b == AUTO_LAUNCHD ? launchd_one(st, false, err) : schtasks_one(st, false, err)) && ok;
+    if (watcher) {
+        char *later = NULL;
+        ok = (b == AUTO_LAUNCHD ? launchd_one(st, false, &later) : schtasks_one(st, false, &later)) && ok;
+        if (later && err && !*err) *err = later;  // the first message stays
+        else free(later);
+    }
     return ok;
 }
 

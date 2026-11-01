@@ -15,6 +15,8 @@ extern "C" {
 typedef struct sh_toggles sh_toggles;
 sh_toggles *sh_toggles_load(void);
 bool sh_toggles_off(const sh_toggles *t, const char *name, const char *agent_dir);
+// toggles.json exists but cannot be read: sh_toggles_off then says "on" for everything, which is a guess
+bool sh_toggles_broken(const sh_toggles *t);
 void sh_toggles_free(sh_toggles *t);
 void sh_toggles_forget(const char *name);  // the skill is gone
 

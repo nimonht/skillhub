@@ -15,6 +15,7 @@ struct watch {
     char *file;  // the one name that matters in that folder; "" = any
     bool config; // the config folder: settings.json and providers.json
     bool keep;
+    uint64_t dev, ino;  // which folder it watches: one deleted and made again is another, and this watch is dead
 };
 
 static void on_debounce(uv_timer_t *t) { request_scan(t->data); }
@@ -49,9 +50,26 @@ static void drop(struct watch *w) {
     uv_close((uv_handle_t *)&w->h, on_closed);
 }
 
+static bool folder_id(const char *dir, uint64_t *dev, uint64_t *ino) {
+    uv_fs_t req;
+    const bool ok = uv_fs_stat(NULL, &req, dir, NULL) == 0;  // no loop, no callback: it runs here
+    if (ok) {
+        *dev = req.statbuf.st_dev;
+        *ino = req.statbuf.st_ino;
+    }
+    uv_fs_req_cleanup(&req);
+    return ok;
+}
+
+// a watch of the same path whose folder is still the same one; a stale one is never handed back, so a second entry for
+// that path in the same pass finds the new watch
 static struct watch *find(server *sv, const char *dir) {
-    for (size_t i = 0; i < sv->n_watches; ++i)
-        if (strcmp(sv->watches[i]->dir, dir) == 0) return sv->watches[i];
+    uint64_t dev, ino;
+    if (!folder_id(dir, &dev, &ino)) return NULL;
+    for (size_t i = 0; i < sv->n_watches; ++i) {
+        const struct watch *w = sv->watches[i];
+        if (strcmp(w->dir, dir) == 0 && w->dev == dev && w->ino == ino) return sv->watches[i];
+    }
     return NULL;
 }
 
@@ -70,6 +88,7 @@ void watch_sync(server *sv, const sh_strv *dirs, const sh_strv *files) {
         }
         if (!sh_is_dir(dirs->items[i])) continue;
         w = sh_xcalloc(1, sizeof *w);
+        folder_id(dirs->items[i], &w->dev, &w->ino);
         w->sv = sv;
         w->dir = sh_strdup(dirs->items[i]);
         w->file = sh_strdup(files->items[i]);

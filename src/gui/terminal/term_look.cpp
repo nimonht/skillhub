@@ -6,6 +6,13 @@
 #include <QStandardPaths>
 #include <QTextStream>
 
+// a colour of the 16: `index` comes from a config file, and "color-1" is no reason to write outside the list
+static void setColor(QVector<QString> &palette, const QString &index, const QString &value) {
+    bool number = false;
+    const int n = index.toInt(&number);
+    if (number && n >= 0 && n < palette.size()) palette[n] = value;
+}
+
 static QStringList linesOf(const QString &path) {
     QFile f(path);
     QStringList out;
@@ -38,7 +45,7 @@ static QVariantMap readKitty() {
         if (key == QLatin1String("font_family")) look.insert(QStringLiteral("fontFamily"), parts.mid(1).join(QLatin1Char(' ')));
         else if (key == QLatin1String("font_size")) look.insert(QStringLiteral("fontSize"), qRound(parts[1].toDouble() * 4 / 3));
         else if (key == QLatin1String("foreground") || key == QLatin1String("background")) look.insert(key, parts[1]);
-        else if (key.startsWith(QLatin1String("color")) && key.mid(5).toInt() < 16 && key.size() <= 7) palette[key.mid(5).toInt()] = parts[1];
+        else if (key.startsWith(QLatin1String("color"))) setColor(palette, key.mid(5), parts[1]);
     }
     return finish(look, palette);
 }
@@ -55,7 +62,7 @@ static QVariantMap readGhostty() {
         else if (key == QLatin1String("foreground") || key == QLatin1String("background")) look.insert(key, value.startsWith(QLatin1Char('#')) ? value : QLatin1Char('#') + value);
         else if (key == QLatin1String("palette")) {
             const QStringList kv = value.split(QLatin1Char('='));
-            if (kv.size() == 2 && kv[0].trimmed().toInt() < 16) palette[kv[0].trimmed().toInt()] = kv[1].trimmed();
+            if (kv.size() == 2) setColor(palette, kv[0].trimmed(), kv[1].trimmed());
         }
     }
     return finish(look, palette);

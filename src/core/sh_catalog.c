@@ -186,7 +186,7 @@ void sh_store_reload_providers(sh_store *st) {
         yyjson_arr_foreach(lists[l], i, n, v) {
             sh_agent a;
             agent_from_json(v, l == 1, &a);
-            if (!*a.id) {
+            if (!*a.id || (*a.dir && !sh_path_is_absolute(a.dir))) {  // a relative folder would land under the current directory
                 agent_free(&a);
                 continue;
             }

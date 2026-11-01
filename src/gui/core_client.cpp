@@ -201,9 +201,15 @@ void CoreClient::onMessage(const QJsonObject &msg, const SkillRows &rows) {
 
 void CoreClient::onEnded(const QString &why) {
     ready_ = false;
+    waiting_.clear();  // they fail below with the rest: run after a restart, they would do what the window reported as failed
     // every request in flight fails with the reason; callers decide what to show
     for (const Reply &reply : std::exchange(pending_, {}))
         reply(CoreReply{{}, QJsonObject{{QStringLiteral("code"), -32000}, {QStringLiteral("message"), why}}, {}});
+    if (std::exchange(restartWanted_, false)) {
+        stopping_ = false;
+        start();
+        return;
+    }
     if (stopping_ || gaveUp_) return;
     if (!everReady_ && restarts_ >= 3) {  // it never came up: it cannot run here
         gaveUp_ = true;
@@ -222,6 +228,18 @@ void CoreClient::stop() {
     if (ready_) send(++nextId_, QStringLiteral("shutdown"), {});
     QMetaObject::invokeMethod(io_, [io = io_] { io->stop(10000); }, Qt::BlockingQueuedConnection);
     ready_ = false;
+}
+
+// A clean stop, and the new backend starts from onEnded, once the old one is really gone. Nothing to stop while it is
+// starting or waiting for its next try.
+void CoreClient::restart() {
+    if (!ready_) {
+        restart_.stop();
+        start();
+        return;
+    }
+    restartWanted_ = true;
+    stop();
 }
 
 #include "core_client.moc"

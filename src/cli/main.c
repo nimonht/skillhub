@@ -367,6 +367,12 @@ static int cmd_import(sh_store *st, const args_t *a) {
     const bool no_local = has(a, "--no-local");
     sh_strv only = SH_STRV_INIT;
     comma_list(after(a, "--only"), &only);
+    if (has(a, "--only") && only.len == 0) {  // an empty list would select every item
+        errf("--only needs skill names, separated by commas\n");
+        sh_strv_free(&only);
+        sh_import_items_free(&items);
+        return 2;
+    }
     sh_import_item **todo = sh_xcalloc(items.len + 1, sizeof *todo);
     size_t n_todo = 0;
     for (size_t i = 0; i < items.len; ++i) {
@@ -606,8 +612,10 @@ static int update_reviewed(const args_t *a, sh_skills *sk, const sh_strv *names,
     sh_skill **ready = sh_xcalloc(n + 1, sizeof *ready);
     const char **stages = sh_xcalloc(n + 1, sizeof *stages);
     size_t n_ready = 0;
+    bool review_failed = false;
     for (size_t i = 0; i < n; ++i) {
         print_review(&reviews[i], true);
+        review_failed = review_failed || reviews[i].err;
         if (!reviews[i].stage) continue;
         ready[n_ready] = todo[i];
         stages[n_ready++] = reviews[i].stage;
@@ -636,6 +644,11 @@ static int update_reviewed(const args_t *a, sh_skills *sk, const sh_strv *names,
     if (go || n_ready == 0) {
         outf("%d updated, %d failed\n", updated, (int)n_ready - updated);
         rc = updated == (int)n_ready ? 0 : 1;
+    }
+    if (review_failed && rc == 0) rc = 1;  // a review that could not be made is not a clean run
+    if (sh_engine_lock_failed(engine)) {
+        errf("the lock file could not be updated; see the lines above\n");
+        rc = 1;
     }
     free(done);
     for (size_t i = 0; i < n; ++i) sh_review_free(&reviews[i]);
@@ -725,7 +738,13 @@ static int cmd_switch(sh_store *st, const args_t *a, bool on) {
     }
     sh_strv names = SH_STRV_INIT, agents = SH_STRV_INIT;
     for (int i = 0; i < a->n; ++i) {
-        if (strcmp(a->v[i], "--agent") == 0 && i + 1 < a->n) sh_strv_push(&agents, a->v[++i]);
+        if (strcmp(a->v[i], "--agent") == 0 && i + 1 == a->n) {  // no agent named: the default would be all of them
+            errf("--agent needs an agent id\n");
+            sh_strv_free(&names);
+            sh_strv_free(&agents);
+            return 2;
+        }
+        if (strcmp(a->v[i], "--agent") == 0) sh_strv_push(&agents, a->v[++i]);
         else if (strcmp(a->v[i], "--shared") == 0) sh_strv_push(&agents, SH_AGENTS_SHARED);
         else if (strcmp(a->v[i], "--all") == 0) sh_strv_push(&agents, SH_AGENTS_ALL);
         else if (!sh_starts_with(a->v[i], "--")) sh_strv_push(&names, a->v[i]);
@@ -836,6 +855,7 @@ static int cmd_check_update(sh_store *st, const args_t *a, bool do_update) {
         if (done[i]) sh_strv_push(&changed, todo[i]->name);
     free(done);
     free(todo);
+    const bool lock_failed = sh_engine_lock_failed(engine);
     sh_engine_free(engine);
     int rc;
     if (!do_update) {
@@ -856,6 +876,10 @@ static int cmd_check_update(sh_store *st, const args_t *a, bool do_update) {
             free(joined);
         }
         rc = failed ? 1 : 0;
+        if (lock_failed) {
+            errf("the lock file could not be updated; see the lines above\n");
+            rc = 1;
+        }
     }
     sh_strv_free(&changed);
     sh_strv_free(&names);
@@ -948,6 +972,10 @@ static int cmd_add(sh_store *st, const args_t *a) {
     } else {
         if (failed_repos < (int)repos.len) outf("%d installed\n", ok);
         rc = ok && !failed_repos ? 0 : 1;
+        if (sh_engine_lock_failed(engine)) {
+            errf("the lock file could not be updated; see the lines above\n");
+            rc = 1;
+        }
     }
     for (size_t r = 0; r < repos.len; ++r) sh_discovery_free(&found[r]);
     free(found);
@@ -965,7 +993,7 @@ static int cmd_projects(const args_t *a) {
         rc = sh_projects_add(a->v[1], &err) ? 0 : 1;
     } else if (strcmp(what, "remove") == 0 && a->n > 1) {
         rc = sh_projects_remove(a->v[1], &err) ? 0 : 1;
-    } else if (strcmp(what, "auto") == 0 && a->n > 2) {
+    } else if (strcmp(what, "auto") == 0 && a->n > 2 && (strcmp(a->v[2], "on") == 0 || strcmp(a->v[2], "off") == 0)) {
         rc = sh_projects_set_auto(a->v[1], strcmp(a->v[2], "on") == 0, &err) ? 0 : 1;
     } else if (strcmp(what, "list") == 0) {
         sh_projects p;
@@ -982,7 +1010,7 @@ static int cmd_projects(const args_t *a) {
                 yyjson_mut_obj_add_bool(d, o, "autoUpdate", p.items[i].auto_update);
                 yyjson_mut_arr_append(arr, o);
             }
-            char *json = yyjson_mut_write(d, YYJSON_WRITE_PRETTY_TWO_SPACES, NULL);
+            char *json = sh_json_string(d, true);  // yyjson_mut_write gives NULL for a path that is not UTF-8
             outf("%s\n", json);
             free(json);
             yyjson_mut_doc_free(d);
@@ -1216,10 +1244,23 @@ static int run_cli(int argc, char **argv) {
     int n_args = 0;
     for (int i = 0; i < argc; ++i) {
         if (i >= 2 && strcmp(argv[i], "--wait") == 0 && i + 1 < argc) {
-            wait_s = atoi(argv[++i]);
+            char *end;
+            errno = 0;
+            const long v = strtol(argv[++i], &end, 10);  // a huge or negative value would overflow the timeout or never end
+            if (errno || end == argv[i] || *end || v < 0 || v > 86400) {
+                errf("--wait takes a number of seconds, 0 to 86400\n");
+                free(args);
+                return 2;
+            }
+            wait_s = (int)v;
             continue;
         }
-        if (i >= 1 && (strcmp(argv[i], "--project") == 0 || strcmp(argv[i], "-C") == 0) && i + 1 < argc) {
+        if (i >= 1 && (strcmp(argv[i], "--project") == 0 || strcmp(argv[i], "-C") == 0)) {
+            if (i + 1 >= argc || !*argv[i + 1]) {  // without a folder the command would quietly work on the user's own skills
+                errf("%s needs a project folder\n", argv[i]);
+                free(args);
+                return 2;
+            }
             project = argv[++i];
             continue;
         }
@@ -1405,7 +1446,7 @@ static int start_gui(int argc, wchar_t **argv) {
 
 int wmain(int argc, wchar_t **wargv) {
     SetConsoleOutputCP(CP_UTF8);
-    char **argv = calloc((size_t)argc + 1, sizeof *argv);
+    char **argv = sh_xcalloc((size_t)argc + 1, sizeof *argv);
     for (int i = 0; i < argc; ++i) {
         const int n = WideCharToMultiByte(CP_UTF8, 0, wargv[i], -1, NULL, 0, NULL, NULL);
         argv[i] = malloc((size_t)(n > 0 ? n : 1));

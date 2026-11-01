@@ -499,8 +499,7 @@ void AppController::clearCache() { startJob(QStringLiteral("cache.clear"), {}, t
 
 void AppController::restartBackend() {
     if (busy_) return;
-    core_.stop();
-    core_.start();
+    core_.restart();
 }
 
 QString AppController::backendInfo() const {

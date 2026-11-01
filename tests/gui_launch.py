@@ -95,7 +95,8 @@ try:
              ("agent", ["--theme", "dark", "--size", "1280x800", "--agent", "claude-code"]),
              ("agents", ["--theme", "light", "--size", "1280x800", "--mode", "providers"]),
              ("transfer", ["--theme", "dark", "--size", "1280x800", "--mode", "transfer"]),
-             ("small", ["--theme", "dark", "--size", "820x600", "--search", "zzzz"])]
+             ("small", ["--theme", "dark", "--size", "820x600", "--search", "zzzz"]),
+             ("restart", ["--theme", "dark", "--size", "1280x800", "--action", "restart", "--settle", "30"])]
     for name, args in shots:
         png = os.path.join(OUT, name + ".png")
         p = subprocess.run([BIN, "gui", "--shot", png, *args], env=env, capture_output=True, text=True, timeout=240)

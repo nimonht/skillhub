@@ -37,6 +37,7 @@ public:
     void call(const QString &method, const QJsonObject &params = {}, Reply reply = {});
     // Asks the backend to stop at a safe point and waits up to 10 s for it: destroying the process would kill it mid-swap.
     void stop();
+    void restart();
     bool isReady() const { return ready_; }
     QJsonObject init() const { return init_; }  // the initialize result: version, capabilities, paths
 
@@ -57,7 +58,7 @@ private:
     QVector<std::tuple<qint64, QString, QJsonObject>> waiting_;  // sent once the backend is ready
     qint64 nextId_ = 0;
     QJsonObject init_;
-    bool ready_ = false, stopping_ = false, everReady_ = false, gaveUp_ = false;
+    bool ready_ = false, stopping_ = false, restartWanted_ = false, everReady_ = false, gaveUp_ = false;
     int restarts_ = 0;
     QTimer restart_;
 };
