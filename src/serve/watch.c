@@ -15,7 +15,8 @@ struct watch {
     char *file;  // the one name that matters in that folder; "" = any
     bool config; // the config folder: settings.json and providers.json
     bool keep;
-    uint64_t dev, ino;  // which folder it watches: one deleted and made again is another, and this watch is dead
+    uint64_t dev, ino;  // which folder it watches: one deleted and made again is another, and this watch is dead.
+    uv_timespec_t born;  // ext4 hands the freed inode number straight to the new folder, so that alone does not tell
 };
 
 static void on_debounce(uv_timer_t *t) { request_scan(t->data); }
@@ -50,12 +51,13 @@ static void drop(struct watch *w) {
     uv_close((uv_handle_t *)&w->h, on_closed);
 }
 
-static bool folder_id(const char *dir, uint64_t *dev, uint64_t *ino) {
+static bool folder_id(const char *dir, uint64_t *dev, uint64_t *ino, uv_timespec_t *born) {
     uv_fs_t req;
     const bool ok = uv_fs_stat(NULL, &req, dir, NULL) == 0;  // no loop, no callback: it runs here
     if (ok) {
         *dev = req.statbuf.st_dev;
         *ino = req.statbuf.st_ino;
+        *born = req.statbuf.st_birthtim;
     }
     uv_fs_req_cleanup(&req);
     return ok;
@@ -65,10 +67,11 @@ static bool folder_id(const char *dir, uint64_t *dev, uint64_t *ino) {
 // that path in the same pass finds the new watch
 static struct watch *find(server *sv, const char *dir) {
     uint64_t dev, ino;
-    if (!folder_id(dir, &dev, &ino)) return NULL;
+    uv_timespec_t born;
+    if (!folder_id(dir, &dev, &ino, &born)) return NULL;
     for (size_t i = 0; i < sv->n_watches; ++i) {
         const struct watch *w = sv->watches[i];
-        if (strcmp(w->dir, dir) == 0 && w->dev == dev && w->ino == ino) return sv->watches[i];
+        if (strcmp(w->dir, dir) == 0 && w->dev == dev && w->ino == ino && w->born.tv_sec == born.tv_sec && w->born.tv_nsec == born.tv_nsec) return sv->watches[i];
     }
     return NULL;
 }
@@ -88,7 +91,7 @@ void watch_sync(server *sv, const sh_strv *dirs, const sh_strv *files) {
         }
         if (!sh_is_dir(dirs->items[i])) continue;
         w = sh_xcalloc(1, sizeof *w);
-        folder_id(dirs->items[i], &w->dev, &w->ino);
+        folder_id(dirs->items[i], &w->dev, &w->ino, &w->born);
         w->sv = sv;
         w->dir = sh_strdup(dirs->items[i]);
         w->file = sh_strdup(files->items[i]);

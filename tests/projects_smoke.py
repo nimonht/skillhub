@@ -184,7 +184,7 @@ def main():
     # ---- no symlinks here: copies kept identical ----
     nolinks = os.path.join(ROOT, "nolinks")
     os.makedirs(nolinks)
-    env2 = dict(env, SKILLHUB_NO_SYMLINKS="1")
+    env2 = dict(env, SKILLHUB_NO_SYMLINKS="1", SKILLHUB_STATE=ROOT + "/nolinks-state")  # kept below ROOT: macOS's follows the account
     run(env2, "add", "acme/skills", "--skill", "zeta", "--project", nolinks)
     copy = nolinks + "/.claude/skills/zeta"
     check(os.path.isfile(copy + "/SKILL.md") and not os.path.islink(copy), "a copy, not a link")
