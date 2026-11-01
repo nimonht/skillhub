@@ -6,9 +6,11 @@
 
 #include "serve.h"
 #include "sh_engine.h"
+#include "sh_fetch.h"
 #include "sh_fs.h"
 #include "sh_history.h"
 #include "sh_path.h"
+#include "sh_storage.h"
 #include "sh_toggle.h"
 
 // ---- reporting from the job's threads ----
@@ -284,10 +286,10 @@ static void body_diff(job *j, sh_store *st) {
     sh_strv_free(&names);
 }
 
-static void add_size(job *j, yyjson_mut_val *list, const char *label, const char *path) {
-    const int64_t bytes = sh_tree_bytes(path);
-    char *shown = bytes >= 1024 * 1024 ? sh_strfmt("%.1f MB", (double)bytes / (1024 * 1024)) : sh_strfmt("%lld KB", (long long)(bytes / 1024));
+static void add_size(job *j, yyjson_mut_val *list, const char *key, const char *label, const char *path, int64_t bytes) {
+    char *shown = sh_shown_bytes(bytes);
     yyjson_mut_val *o = yyjson_mut_obj(j->out);
+    yyjson_mut_obj_add_str(j->out, o, "key", key);
     yyjson_mut_obj_add_strcpy(j->out, o, "label", label);
     yyjson_mut_obj_add_strcpy(j->out, o, "path", path);
     yyjson_mut_obj_add_int(j->out, o, "bytes", bytes);
@@ -297,10 +299,16 @@ static void add_size(job *j, yyjson_mut_val *list, const char *label, const char
 }
 
 static void body_sizes(job *j, sh_store *st) {
+    sh_storage s;
+    sh_storage_measure(st, &s);
+    const int64_t backups = sh_tree_bytes(st->backup), latest = backups - s.versions - s.removed - s.conflicts;
     yyjson_mut_val *list = yyjson_mut_arr(j->out);
-    add_size(j, list, "Skills", st->central);
-    add_size(j, list, "Backups", st->backup);
-    add_size(j, list, "Cache", st->cache);
+    add_size(j, list, "skills", "Skills", st->central, sh_tree_bytes(st->central));
+    add_size(j, list, "latest", "Latest backup of each skill", st->backup, latest > 0 ? latest : 0);
+    add_size(j, list, "cache", "Cached repositories", st->cache, s.cache);
+    add_size(j, list, "versions", "Older versions", st->backup, s.versions);
+    add_size(j, list, "removed", "Removed skills", st->backup, s.removed);
+    add_size(j, list, "conflicts", "Conflicts", st->backup, s.conflicts);
     yyjson_mut_obj_add_val(j->out, j->extra, "sizes", list);
     int64_t total = 0, free_bytes = 0;
     if (sh_disk_usage(st->central, &total, &free_bytes)) {
@@ -309,11 +317,10 @@ static void body_sizes(job *j, sh_store *st) {
     }
 }
 
-// the clones can always be made again; the stage folders and records stay
-static void body_clear_cache(job *j, sh_store *st) {
-    char *repos = sh_path_join(st->cache, "repos");
-    if (!sh_remove_tree(repos) && sh_exists(repos)) fail(j, "could not remove the cache");
-    free(repos);
+static void body_clean(job *j, sh_store *st) {
+    const int what = (param_bool(j->params, "cache", false) ? SH_CLEAN_CACHE : 0) | (param_bool(j->params, "versions", false) ? SH_CLEAN_VERSIONS : 0) |
+                     (param_bool(j->params, "removed", false) ? SH_CLEAN_REMOVED : 0) | (param_bool(j->params, "conflicts", false) ? SH_CLEAN_CONFLICTS : 0);
+    sum(j, "freed", sh_storage_clean(st, what));
 }
 
 static void body_merge_locks(job *j, sh_store *st) {
@@ -556,7 +563,7 @@ static const job_method METHODS[] = {
     {"skills.copyToProject", "copy", true, body_copy, {"name", "project", NULL}},
     {"lock.merge", "mergeLocks", true, body_merge_locks, {NULL}},
     {"paths.sizes", "sizes", false, body_sizes, {NULL}},
-    {"cache.clear", "clearCache", true, body_clear_cache, {NULL}},
+    {"storage.clean", "clean", true, body_clean, {NULL}},
     {"skills.setAgentEnabled", "setAgentEnabled", true, body_set_enabled, {"agent", NULL}},
     {"skills.track", "track", true, body_track, {"name", "source", NULL}},
     {"sources.discover", "discover", false, body_discover, {"input", NULL}},
@@ -594,6 +601,7 @@ static void job_main(void *arg) {
     if (!opened) fail(j, "that project cannot be opened any more");
     else if (j->mutating) sh_store_recover(&st, false);  // the lock is ours: a dead process's half-done swap is put right first
     if (opened) j->body(j, &st);
+    if (opened && (strcmp(j->kind, "update") == 0 || strcmp(j->kind, "install") == 0 || strcmp(j->kind, "import") == 0)) sh_storage_tidy(&st);
     if (cancelled(j)) j->ok = false;
     check_map_sort(&j->checks);
     sh_store_free(&st);

@@ -8,6 +8,10 @@ The core is now C, and the window talks to it over a pipe. `skillhub list` peaks
 Going back to 1.x: run `skillhub enable --all-parked` first, because 1.x knows nothing of parked skills. Everything else 2.0 adds
 (sidecars, toggles.json, state.json) is ignored by 1.x and does no harm. The 1.x code stays on the `archive/v1` branch.
 
+- **Space stays under control.** Cached clones no longer grow with every update, and the cache has a limit (1 GB by default); the clones used
+  longest ago go first and come back when needed. Removed skills age out after 90 days. Settings → Storage and `skillhub clean` show what uses
+  space and free it. Conflicts hold your own edits, so they go only when you ask.
+
 - **Skills from anywhere.** `skillhub add` and the Add sheet take GitLab projects (nested groups, self-hosted `/-/tree/`
   links), any git URL (https, ssh, `git@host:path`), a branch or tag (`#ref`), a folder inside a repository, and local
   folders, as a copy that updates when you choose or as a live link (`--link`). Input follows `npx skills`, and the lock

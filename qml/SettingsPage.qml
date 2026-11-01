@@ -12,7 +12,7 @@ Rectangle {
     readonly property var sections: [
         { id: "appearance", label: "Appearance", icon: "sun" }, { id: "layout", label: "Layout", icon: "all" },
         { id: "terminal", label: "Terminal", icon: "terminal" }, { id: "updates", label: "Updates and sources", icon: "upgrade" }, { id: "projects", label: "Projects", icon: "branch" },
-        { id: "advanced", label: "Advanced", icon: "tool" }, { id: "about", label: "About", icon: "info" } ]
+        { id: "storage", label: "Storage", icon: "folder" }, { id: "advanced", label: "Advanced", icon: "tool" }, { id: "about", label: "About", icon: "info" } ]
 
     function look(key, fallback) { return Theme.setting("appearance", key, fallback) }
     function setLook(key, value) { app.setSetting("appearance", key, value) }
@@ -417,25 +417,81 @@ Rectangle {
                 }
             }
 
+            // ---- storage
+            Column {
+                id: storage
+                visible: root.section === "storage"
+                width: parent.width
+                spacing: 18
+                property var pick: ({ cache: true, versions: true, removed: true, conflicts: false })
+                readonly property var notes: ({
+                    cache: "Downloaded again when needed.",
+                    versions: "The newest backup of each skill stays, for rollback.",
+                    removed: "Removed skills, duplicates and replaced copies. Restore stops working for these.",
+                    conflicts: "Your own edits. Nothing removes these unless you do."
+                })
+                onVisibleChanged: if (visible) app.measurePaths()
+                Group {
+                    title: "Space in use"
+                    note: "Skills themselves are never touched here."
+                    Repeater {
+                        model: app.pathSizes
+                        delegate: Item {
+                            required property var modelData
+                            readonly property bool choice: storage.notes[modelData.key] !== undefined
+                            width: Math.min(parent ? parent.width : 420, 520)
+                            height: choice ? pickRow.implicitHeight : 22
+                            Toggle {
+                                id: pickRow
+                                visible: parent.choice
+                                width: parent.width
+                                text: modelData.label + "  ·  " + modelData.size
+                                hint: storage.notes[modelData.key] || ""
+                                checked: storage.pick[modelData.key] === true
+                                onToggled: { const p = Object.assign({}, storage.pick); p[modelData.key] = checked; storage.pick = p }
+                            }
+                            Text { textFormat: Text.PlainText; visible: !parent.choice; text: modelData.label + "  ·  " + modelData.size; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
+                        }
+                    }
+                }
+                Row {
+                    spacing: 8
+                    Btn {
+                        kind: "primary"; compact: true; iconName: "trash"; text: "Free up space"
+                        enabled: !app.busy && (storage.pick.cache || storage.pick.versions || storage.pick.removed || storage.pick.conflicts)
+                        onClicked: app.cleanStorage(storage.pick.cache, storage.pick.versions, storage.pick.removed, storage.pick.conflicts)
+                    }
+                    Btn { kind: "ghost"; compact: true; iconName: "refresh"; text: "Measure"; enabled: !app.busy; onClicked: app.measurePaths() }
+                }
+                Group {
+                    title: "Automatically"
+                    note: "Checked after each update, install and import."
+                    Range {
+                        width: Math.min(parent.width, 420)
+                        label: "Cache limit: the clones used longest ago go first"
+                        from: 0; to: 8192; stepSize: 256
+                        value: Theme.setting("storage", "cacheMaxMB", 1024)
+                        shown: value < 1 ? "No limit" : value >= 1024 ? (value / 1024).toFixed(1) + " GB" : Math.round(value) + " MB"
+                        onMoved: (v) => app.setSetting("storage", "cacheMaxMB", Math.round(v))
+                    }
+                    Range {
+                        width: Math.min(parent.width, 420)
+                        label: "Keep removed skills for"
+                        from: 0; to: 360; stepSize: 30
+                        value: Theme.setting("storage", "backupDays", 90)
+                        shown: value < 1 ? "Forever" : Math.round(value) + " days"
+                        onMoved: (v) => app.setSetting("storage", "backupDays", Math.round(v))
+                    }
+                }
+            }
+
             // ---- advanced
             Column {
                 visible: root.section === "advanced"
                 width: parent.width
                 spacing: 12
-                Repeater {
-                    model: app.pathSizes
-                    delegate: Row {
-                        required property var modelData
-                        spacing: 12
-                        Text { textFormat: Text.PlainText; width: 110; text: modelData.label; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
-                        NumText { width: 80; text: modelData.size; color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
-                        Text { textFormat: Text.PlainText; width: page.width - 202; elide: Text.ElideMiddle; text: modelData.path; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
-                    }
-                }
                 Row {
                     spacing: 8
-                    Btn { kind: "ghost"; compact: true; iconName: "refresh"; text: "Measure"; enabled: !app.busy; onClicked: app.measurePaths() }
-                    Btn { kind: "ghost"; compact: true; iconName: "trash"; text: "Clear cache"; enabled: !app.busy; onClicked: app.clearCache() }
                     Btn { kind: "ghost"; compact: true; iconName: "refresh"; text: "Restart background service"; enabled: !app.busy; onClicked: app.restartBackend() }
                 }
                 Line { text: "Backend " + app.backendInfo }

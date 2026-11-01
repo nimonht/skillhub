@@ -201,6 +201,11 @@ Written exactly like `npx skills` `src/local-lock.ts`, because it is committed a
   restores the files only, with an empty `skillFolderHash`, so the next check offers the update again.
 - Retention: the newest N `<stamp>` folders per skill are kept (setting `updates.backupsKept`, default 3, 1–20). Pruning
   removes each folder together with its sidecar.
+- `_removed`, `_dupes` and `.parked-replaced` age out after `storage.backupDays` days (default 90, 0 keeps them for good),
+  checked after each update, install and import. The age comes from the stamp in the name, because a move keeps a folder's
+  own time; a name with no stamp is never removed.
+- Backups are never removed to meet a size. `_conflicts` holds the user's own edits and goes only when they ask, through
+  `skillhub clean --conflicts` or Settings. Cleaning versions by hand keeps the newest of each skill.
 
 - `reason` is `update`, `install`, `rollback` or `remove`. A swap writes the sidecar after the new version is in place, so a
   crash at that moment leaves a backup without one, which then counts as a backup from an older version.
@@ -262,6 +267,12 @@ upstream would mean downloading them. So `check` compares the git tree id of the
 A skill with none on record (installed by npx, or this file was deleted) is offered as an update once, which writes it.
 GitHub entries need no record because their hash in the lock is the tree id. A `local` source hashes the folder itself.
 
+- A clone stays the size of one version: when upstream moves, its refs and reflog go and `git gc --prune=now` runs, because
+  only `HEAD` is ever read. `.git/skillhub-used` records when it was last read.
+- `storage.cacheMaxMB` (default 1024, 0 for no limit) limits the clones, checked after each update, install and import. Over
+  it, the clones used longest ago go first, under their `<key>.lock`; one in use stays. A removed clone comes back the next
+  time it is needed, so a limit below what the sources need means downloading again, never losing anything.
+
 ## 6. Config (`<config>`)
 
 All files are JSON with a `version` field, written atomically. `providers.json` keeps the shape older versions wrote.
@@ -309,6 +320,7 @@ Everything that both the command line and the window need. Missing keys mean the
     "autoSkipScripts": true,
     "checkAtLaunch": true
   },
+  "storage": { "cacheMaxMB": 1024, "backupDays": 90 },
   "projects": { "roots": [] }
 }
 ```

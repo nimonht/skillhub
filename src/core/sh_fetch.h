@@ -21,6 +21,7 @@ typedef struct {
     int cols;           // 0: no limit
 } sh_fetch_opts;
 
+char *sh_shown_bytes(long long n);  // "12 MB", "1.4 GB"
 char *sh_fetch_render(const sh_store *st, const sh_fetch_opts *o);  // the banner, ending in a newline
 char *sh_fetch_json(const sh_store *st);
 char *sh_fetch_field(const sh_store *st, const char *name);         // NULL when there is no such field

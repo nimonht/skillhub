@@ -223,6 +223,9 @@ bool sh_store_put_back(sh_store *st, const char *name, const char *backup, const
 // minutes from cache clones nobody is using. Only call it while holding the mutation lock. Returns the folders put back.
 int sh_store_recover(sh_store *st, bool git_locks);
 
+void sh_cache_clones(const sh_store *st, sh_strv *out);  // every cached clone, as full paths
+void sh_backups_prune(const char *backup_root, const char *name, size_t keep);  // the newest `keep` versions of a skill stay
+
 void sh_skills_free(sh_skills *s);
 void sh_strays_free(sh_strays *s);
 void sh_candidates_free(sh_candidates *c);

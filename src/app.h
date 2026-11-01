@@ -294,7 +294,7 @@ public:
     Q_INVOKABLE void removeProject(const QString &path);
     Q_INVOKABLE void setProjectAuto(const QString &path, bool on);
     Q_INVOKABLE void measurePaths();
-    Q_INVOKABLE void clearCache();
+    Q_INVOKABLE void cleanStorage(bool cache, bool versions, bool removed, bool conflicts);
     Q_INVOKABLE void restartBackend();
     Q_INVOKABLE void setScope(const QString &path);
     Q_INVOKABLE void addProject(const QString &path);

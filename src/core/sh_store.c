@@ -410,7 +410,7 @@ static void wait_quiet(const char *dir) {
 
 static int cmp_str(const char *a, const char *b) { return strcmp(a, b); }
 
-static void prune_backups(const char *backup_root, const char *name, size_t keep) {
+void sh_backups_prune(const char *backup_root, const char *name, size_t keep) {
     char *d = sh_path_join(backup_root, name);
     sh_strv items = SH_STRV_INIT;
     sh_list_dir(d, SH_LIST_DIRS | SH_SORT_NAME, &items);
@@ -726,7 +726,7 @@ static bool swap_in(sh_store *st, const char *name, const char *stage, const cha
         } else {
             if (was_link) sh_remove_link(bk);  // a live link: the folder it led to is still there, nothing to keep
             else if (moved_aside && note) sidecar_write(st, bk, name, note);
-            prune_backups(st->backup, name, st->backups_kept);
+            sh_backups_prune(st->backup, name, st->backups_kept);
         }
     }
     if (!ok && moved_aside && !sh_lexists(dest)) sh_move_dir(bk, dest);  // the old version goes straight back
@@ -833,9 +833,8 @@ static void remove_git_locks_of(const char *clone) {
     free(lock_path);
 }
 
-// git lock files that a killed git left in a cache clone nobody uses now; clones sit directly in repos/ (GitHub) or in a
-// folder per host
-static void remove_git_locks(const sh_store *st) {
+// clones sit directly in repos/ (GitHub) or in a folder per host
+void sh_cache_clones(const sh_store *st, sh_strv *out) {
     char *repos = sh_path_join(st->cache, "repos");
     sh_strv names = SH_STRV_INIT;
     sh_list_dir(repos, SH_LIST_DIRS | SH_LIST_NO_SYMLINKS, &names);
@@ -843,15 +842,11 @@ static void remove_git_locks(const sh_store *st) {
         char *path = sh_path_join(repos, names.items[i]);
         char *dotgit = sh_path_join(path, ".git");
         if (sh_exists(dotgit)) {
-            remove_git_locks_of(path);
+            sh_strv_push(out, path);
         } else {
             sh_strv clones = SH_STRV_INIT;
             sh_list_dir(path, SH_LIST_DIRS | SH_LIST_NO_SYMLINKS, &clones);
-            for (size_t k = 0; k < clones.len; ++k) {
-                char *clone = sh_path_join(path, clones.items[k]);
-                remove_git_locks_of(clone);
-                free(clone);
-            }
+            for (size_t k = 0; k < clones.len; ++k) sh_strv_take(out, sh_path_join(path, clones.items[k]));
             sh_strv_free(&clones);
         }
         free(dotgit);
@@ -859,6 +854,14 @@ static void remove_git_locks(const sh_store *st) {
     }
     sh_strv_free(&names);
     free(repos);
+}
+
+// git lock files that a killed git left in a cache clone nobody uses now
+static void remove_git_locks(const sh_store *st) {
+    sh_strv clones = SH_STRV_INIT;
+    sh_cache_clones(st, &clones);
+    for (size_t i = 0; i < clones.len; ++i) remove_git_locks_of(clones.items[i]);
+    sh_strv_free(&clones);
 }
 
 // what a crash left of a copy from another volume; the mutation lock is ours, so nothing is copying now

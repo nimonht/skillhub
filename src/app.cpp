@@ -495,7 +495,11 @@ void AppController::mergeLocks() { startJob(QStringLiteral("lock.merge"), {}, tr
 
 void AppController::measurePaths() { startJob(QStringLiteral("paths.sizes"), {}, tr("Measuring folders"), QStringLiteral("sizes"), false); }
 
-void AppController::clearCache() { startJob(QStringLiteral("cache.clear"), {}, tr("Clearing the cache"), QStringLiteral("clearCache"), false); }
+void AppController::cleanStorage(bool cache, bool versions, bool removed, bool conflicts) {
+    startJob(QStringLiteral("storage.clean"),
+             {{QStringLiteral("cache"), cache}, {QStringLiteral("versions"), versions}, {QStringLiteral("removed"), removed}, {QStringLiteral("conflicts"), conflicts}},
+             tr("Freeing up space"), QStringLiteral("clean"), false);
+}
 
 void AppController::restartBackend() {
     if (busy_) return;
@@ -1091,8 +1095,8 @@ void AppController::jobDone(const QJsonObject &done) {
     } else if (kind == QLatin1String("sizes")) {
         pathSizes_ = done.value(QStringLiteral("sizes")).toArray().toVariantList();
         emit pathSizesChanged();
-    } else if (kind == QLatin1String("clearCache")) {
-        msg = error.isEmpty() ? tr("Cache cleared") : error;
+    } else if (kind == QLatin1String("clean")) {
+        msg = error.isEmpty() ? tr("Freed %1").arg(QLocale().formattedDataSize(qint64(sum.value(QStringLiteral("freed")).toDouble()))) : error;
         level = error.isEmpty() ? QStringLiteral("ok") : QStringLiteral("error");
         measurePaths();
     } else if (kind == QLatin1String("copy")) {

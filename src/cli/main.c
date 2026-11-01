@@ -22,6 +22,7 @@
 #include "sh_projects.h"
 #include "sh_serve.h"
 #include "sh_store.h"
+#include "sh_storage.h"
 #include "sh_str.h"
 #include "sh_toggle.h"
 #include "sh_utf.h"
@@ -147,6 +148,8 @@ static void usage(void) {
         "  skillhub providers [--all] [--json]     coding agents found on this machine and how each sees skills\n"
         "  skillhub providers enable|disable ID    manage (or stop managing) an agent\n"
         "  skillhub providers add LABEL DIR [--shared] | remove ID   your own agent (--shared: it reads the shared folder)\n"
+        "  skillhub clean [--cache] [--versions] [--removed] [--conflicts] [--dry-run] [--yes]\n"
+        "                                  free space; conflicts, which hold your own edits, go only when named\n"
         "  skillhub uninstall [--dry-run] [--yes] [--keep-cache]\n"
         "                                  remove units, installed files below $HOME and the cache (keeps your skills)\n"
         "  skillhub serve --stdio          the window's background service (JSON-RPC on standard input and output)\n");
@@ -730,6 +733,67 @@ static int cmd_hold(sh_store *st, const char *cmd, const args_t *a) {
     return ok ? 0 : 1;
 }
 
+static bool is_any(const char *s, const char *const *list);
+
+// skillhub clean [--cache] [--versions] [--removed] [--conflicts] [--dry-run] [--yes]
+static int cmd_clean(sh_store *st, const args_t *a) {
+    static const char *const known[] = {"--cache", "--versions", "--removed", "--conflicts", "--dry-run", "--yes", NULL};
+    for (int i = 0; i < a->n; ++i) {
+        if (!is_any(a->v[i], known)) {  // a typo must not fall back to the default set
+            usage();
+            return 2;
+        }
+    }
+    int what = (has(a, "--cache") ? SH_CLEAN_CACHE : 0) | (has(a, "--versions") ? SH_CLEAN_VERSIONS : 0) |
+               (has(a, "--removed") ? SH_CLEAN_REMOVED : 0) | (has(a, "--conflicts") ? SH_CLEAN_CONFLICTS : 0);
+    if (!what) what = SH_CLEAN_CACHE | SH_CLEAN_VERSIONS | SH_CLEAN_REMOVED;  // conflicts hold the user's own edits
+    sh_storage s;
+    sh_storage_measure(st, &s);
+    const struct {
+        int bit;
+        int64_t bytes;
+        const char *text;
+    } rows[] = {{SH_CLEAN_CACHE, s.cache, "cloned repositories (downloaded again when needed)"},
+                {SH_CLEAN_VERSIONS, s.versions, "older versions of skills (the newest of each stays)"},
+                {SH_CLEAN_REMOVED, s.removed, "removed skills, duplicates and replaced copies"},
+                {SH_CLEAN_CONFLICTS, s.conflicts, "conflicts: your own edits, kept when a skill differed"}};
+    int64_t total = 0;
+    for (size_t i = 0; i < sizeof rows / sizeof rows[0]; ++i) {
+        if (!(what & rows[i].bit)) continue;
+        total += rows[i].bytes;
+        char *shown = sh_shown_bytes(rows[i].bytes);
+        outf("%8s  %s\n", shown, rows[i].text);
+        free(shown);
+    }
+    char *sum = sh_shown_bytes(total);
+    int rc = 0;
+    if (has(a, "--dry-run")) {
+        outf("would free %s\n", sum);
+    } else if (total == 0) {
+        out("nothing to clean\n");
+    } else if (!has(a, "--yes") && !stdin_is_terminal()) {
+        errf("pass --yes to clean without a prompt\n");
+        rc = 2;
+    } else {
+        bool go = true;
+        if (!has(a, "--yes")) {
+            outf("Free %s? [y/N] ", sum);
+            fflush(stdout);
+            go = confirmed();
+        }
+        if (go) {
+            char *freed = sh_shown_bytes(sh_storage_clean(st, what));
+            outf("freed %s\n", freed);
+            free(freed);
+        } else {
+            out("aborted\n");
+            rc = 1;
+        }
+    }
+    free(sum);
+    return rc;
+}
+
 // skillhub disable|enable NAME... [--agent ID]... [--shared] [--all]
 static int cmd_switch(sh_store *st, const args_t *a, bool on) {
     if (on && has(a, "--all-parked")) {
@@ -1192,6 +1256,7 @@ static bool mutates(const char *cmd, const args_t *a) {
     if (is_any(cmd, always)) return true;
     if (strcmp(cmd, "add") == 0) return has(a, "--all") || has(a, "--skill");  // listing what a repository offers changes nothing
     if (strcmp(cmd, "doctor") == 0) return has(a, "--fix");
+    if (strcmp(cmd, "clean") == 0) return !has(a, "--dry-run");
     if (strcmp(cmd, "providers") == 0) return a->n > 0 && is_any(a->v[0], provider_changes);
     if (strcmp(cmd, "autoupdate") == 0 || strcmp(cmd, "watch") == 0) return a->n > 0 && is_any(a->v[0], switches);
     return false;
@@ -1327,6 +1392,7 @@ static int run_cli(int argc, char **argv) {
     else if (strcmp(cmd, "hold") == 0 || strcmp(cmd, "release") == 0) rc = cmd_hold(&st, cmd, &a);
     else if (strcmp(cmd, "disable") == 0 || strcmp(cmd, "enable") == 0) rc = cmd_switch(&st, &a, strcmp(cmd, "enable") == 0);
     else if (strcmp(cmd, "copy") == 0) rc = cmd_copy(&st, &a);
+    else if (strcmp(cmd, "clean") == 0) rc = cmd_clean(&st, &a);
     else if (strcmp(cmd, "fetch") == 0) rc = cmd_fetch(&st, &a);
     else if (strcmp(cmd, "remove") == 0) {
         if (a.n == 0) {
@@ -1351,6 +1417,8 @@ static int run_cli(int argc, char **argv) {
         usage();
         rc = !*cmd || strcmp(cmd, "help") == 0 || strcmp(cmd, "--help") == 0 ? 0 : 2;
     }
+    static const char *const add_to_storage[] = {"update", "add", "import", NULL};
+    if (lock && is_any(cmd, add_to_storage)) sh_storage_tidy(&st);
     fflush(stdout);
     sh_flock_release(lock);
     sh_store_free(&st);

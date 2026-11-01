@@ -64,6 +64,7 @@ that into one directory plus a few symlinks, and tells you the moment something 
 - **Yours to arrange**: every panel resizes and remembers its size, the rail shrinks to icons, and **Settings** holds it all:
   dark, light or system, any accent colour (or your desktop's), blur or Liquid Glass where your system offers it, density and
   scale. Whatever colour you pick stays readable: contrast is computed, and checked in CI for 72 hues.
+- **Tidy on its own**: cached clones stay small and have a size limit, old removed skills age out, and Settings shows what uses space and frees it. Your own edits are never removed without you.
 - **Compatible with `npx skills`**: reads and writes the same `~/.agents/.skill-lock.json` (v3) lock file.
 
 <table>
@@ -256,6 +257,7 @@ are never touched.
 | `track NAME OWNER/REPO [PATH]` | set the upstream of a skill you already have |
 | `autoupdate on\|off\|status` | daily update: systemd user timer, launchd agent, or a scheduled task. Automatic runs leave out skills on hold and updates that add or change scripts |
 | `watch on\|off\|status` | stray-skill watcher: systemd path unit, launchd agent, or a task that starts `skillhub watch --run` at logon |
+| `clean [--cache] [--versions] [--removed] [--conflicts] [--dry-run] [--yes]` | free space; the newest backup of each skill stays, and conflicts, your own edits, go only when named |
 | `uninstall [--dry-run] [--yes] [--keep-cache]` | remove units, installed files below `$HOME` and the cache; keeps your skills |
 
 ## Uninstall

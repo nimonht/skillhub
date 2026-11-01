@@ -54,7 +54,7 @@ typedef struct {
     long long folder_bytes, backup_bytes, cache_bytes, disk_total, disk_free;
 } facts;
 
-static char *shown_bytes(long long n) {
+char *sh_shown_bytes(long long n) {
     if (n >= 1024LL * 1024 * 1024 * 10) return sh_strfmt("%lld GB", n / (1024LL * 1024 * 1024));
     if (n >= 1024LL * 1024 * 1024) return sh_strfmt("%.1f GB", (double)n / (1024.0 * 1024 * 1024));
     if (n >= 1024 * 1024) return sh_strfmt("%lld MB", n / (1024 * 1024));
@@ -308,7 +308,7 @@ char *sh_fetch_render(const sh_store *st, const sh_fetch_opts *o) {
     gather(st, &f);
     ink c = {o->color, 0, 0, 0};
     read_accent(&c);
-    char *shown_folder = shown_bytes(f.folder_bytes), *shown_disk = shown_bytes(f.disk_total), *shown_backup = shown_bytes(f.backup_bytes), *shown_cache = shown_bytes(f.cache_bytes);
+    char *shown_folder = sh_shown_bytes(f.folder_bytes), *shown_disk = sh_shown_bytes(f.disk_total), *shown_backup = sh_shown_bytes(f.backup_bytes), *shown_cache = sh_shown_bytes(f.cache_bytes);
     const double share = f.disk_total > 0 ? 100.0 * (double)f.folder_bytes / (double)f.disk_total : 0;
     row rows[] = {
         {"OS", sh_strdup(f.sys.os), "\xef\x8c\x9a "},

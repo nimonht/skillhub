@@ -189,8 +189,8 @@ Parameters marked `?` are optional. `names` is a list of skill names; an empty o
 | `settings.get` | none | the whole `settings.json` object |
 | `settings.set` | `patch` (an object merged into the settings; a `null` value removes that key) | the whole object; the backend also sends `settings.changed`. Settings are not skills, so this needs no mutation lock and works while a job runs |
 | `system.info` | none | `{ "user","host","os","kernel","shell","terminal","uptime","shells":[{"name","path"}] }` |
-| `paths.sizes` | none | job; the results carry `sizes:[{"label","path","bytes","size"}]`, `diskTotal`, `diskFree` |
-| `cache.clear` | none | job; removes the cached clones, which can always be made again |
+| `paths.sizes` | none | job; the results carry `sizes:[{"key","label","path","bytes","size"}]`, with the keys `skills`, `latest`, `cache`, `versions`, `removed`, `conflicts`, `diskTotal`, `diskFree` |
+| `storage.clean` | `cache`, `versions`, `removed`, `conflicts` (booleans, all off by default) | job; the summary carries `freed` in bytes |
 | `lock.merge` | none | job; the one-time merge of the two user lock files (`docs/formats.md` section 2), with backups of both |
 | `fetch.render` | `colors?` (`truecolor` or `256`), `icons?`, `logo?` | `{ "ansi": "<the banner as terminal text>" }` |
 | `jobs.cancel` | `job` | `{}` |
@@ -201,7 +201,7 @@ The backend answers: `initialize`, `shutdown`, `state.snapshot`, `skills.read`,
 `skills.check`, `skills.update`, `skills.install`, `skills.remove`, `skills.track`, `skills.diff`, `skills.history`,
 `skills.rollback`, `skills.restore`, `skills.hold`, `skills.setAgentEnabled`, `skills.copyToProject`, `sources.discover`,
 `adopt`, `relink`, `scope.set`, `projects.list`, `projects.add`, `projects.remove`, `projects.setAuto`, `paths.sizes`,
-`cache.clear`, `lock.merge`, `fetch.render`, `system.info`,
+`storage.clean`, `lock.merge`, `fetch.render`, `system.info`,
 `providers.list`, `providers.setManaged`, `providers.addCustom`, `providers.removeCustom`, `providers.rescan`,
 `transfer.export`, `transfer.preview`, `transfer.import`, `automation.status`, `automation.set`, `settings.get`,
 `settings.set`, `jobs.cancel`, and `doctor`, which only the command line has so far (`-32601`).

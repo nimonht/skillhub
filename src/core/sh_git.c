@@ -23,6 +23,7 @@ void sh_git_result_free(sh_git_result *r) {
 // work in the cache clones, which other threads and processes read at the same time, and never the two transports that
 // run commands (ext::, fd::), whatever the user's git config says, so a URL in a lock or export file cannot start a program.
 static const char *const CONFIG[] = {"core.longpaths=true", "gc.auto=0", "maintenance.auto=false", "core.fsmonitor=false",
+                                     "core.logAllRefUpdates=false",
                                      "protocol.ext.allow=never", "protocol.fd.allow=never"};
 #define N_CONFIG (sizeof CONFIG / sizeof CONFIG[0])
 
@@ -178,6 +179,29 @@ static char *remote_head(const sh_repo *r, const char *ref, char **err) {
     return head;
 }
 
+// Each update leaves the old version's objects in the clone: gc.auto is off here, and the reflog and the refs of the first
+// clone keep them alive, so a clone would grow with every update. Only HEAD is ever read. Best effort: a clone that stays
+// big still works, and the cache limit deals with it.
+static void compact_clone(const sh_repo *r) {
+    const char *list[] = {"for-each-ref", "--format=%(refname)", NULL};
+    sh_git_result g = sh_git_run(list, r->dir, 0);
+    sh_strv refs = SH_STRV_INIT;
+    if (g.ok) sh_split(sh_buf_str(&g.out), g.out.len, '\n', true, &refs);
+    sh_git_result_free(&g);
+    for (size_t i = 0; i < refs.len; ++i) {
+        const char *drop[] = {"update-ref", "-d", refs.items[i], NULL};
+        sh_git_result d = sh_git_run(drop, r->dir, 0);
+        sh_git_result_free(&d);
+    }
+    sh_strv_free(&refs);
+    const char *expire[] = {"reflog", "expire", "--expire=now", "--all", NULL};
+    const char *gc[] = {"gc", "--prune=now", "--quiet", NULL};
+    sh_git_result e = sh_git_run(expire, r->dir, 0);
+    sh_git_result_free(&e);
+    sh_git_result c = sh_git_run(gc, r->dir, 0);
+    sh_git_result_free(&c);
+}
+
 static bool update_clone(sh_repo *r, const char *url, const char *ref, sh_limiter *fetches, char **err) {
     char *host = url_host(url);
     bool ok;
@@ -207,6 +231,7 @@ static bool update_clone(sh_repo *r, const char *url, const char *ref, sh_limite
                 g = sh_git_run(move, r->dir, 0);
                 ok = !failed(&g, err) && read_heads(r, err);
                 sh_git_result_free(&g);
+                if (ok) compact_clone(r);
             }
         }
         free(remote);
@@ -266,6 +291,11 @@ bool sh_repo_open(sh_repo *r, const char *dir, const char *url, const char *ref,
         return false;
     }
     const bool ok = update_clone(r, url, ref, fetches, err) && read_tree(r, err);
+    if (ok) {  // the cache limit removes what was used longest ago
+        char *mark = sh_path_join(dir, ".git/skillhub-used");
+        sh_write_file(mark, "1", 1);
+        free(mark);
+    }
     sh_flock_release(lock);
     return ok;
 }

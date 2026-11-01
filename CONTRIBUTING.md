@@ -17,6 +17,7 @@ python3 tests/toggles_smoke.py build/skillhub # per-agent switches, parked skill
 python3 tests/projects_smoke.py build/skillhub # project skills, hostile lock files, the registry
 python3 tests/automation_smoke.py build/skillhub # systemd, launchd and Task Scheduler in a dry run, the resident watcher
 python3 tests/parallel_smoke.py build/skillhub # many repositories at once: the parallel engine under load
+python3 tests/storage_smoke.py build/skillhub # clones that do not grow, the cache limit, old backups, skillhub clean
 sh tests/install-roundtrip.sh                 # cmake --install / uninstall into a fake root; shared dirs must survive
 python3 tests/contrast.py build/skillhub      # WCAG gate on qml/Theme.qml, 72 hues of accent, tint floors of the materials
 sh tests/gui-smoke.sh build/skillhub out      # headless render of every page, the tour and the terminal; fails on QML errors

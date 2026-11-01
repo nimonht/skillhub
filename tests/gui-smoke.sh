@@ -78,7 +78,7 @@ for theme in dark light; do
   shot "$theme-project" --theme "$theme" --size 1280x800 --scope "$H/app" --select demo --settle 12
   shot "$theme-collapsed" --theme "$theme" --size 1280x800 --layout rail=64 --select alpha
   shot "$theme-resized" --theme "$theme" --size 1600x900 --layout rail=300,detail=560,dock=260 --select alpha
-  for section in appearance layout updates projects advanced about; do
+  for section in appearance layout updates projects storage advanced about; do
     shot "$theme-settings-$section" --theme "$theme" --size 1280x800 --mode settings --section "$section"
   done
   shot "$theme-scopes" --theme "$theme" --size 1280x800 --action scopes
