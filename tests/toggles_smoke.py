@@ -129,6 +129,24 @@ def main():
     check("2 skill" in run(env, "enable", "--all-parked").stdout, "--all-parked")
     check({"alpha", "beta"} <= set(lock(home)), "everything is back in the lock")
 
+    # ---- unparking died between the folder and the lock: state.json holds the only copy of the entry ----
+    run(env, "disable", "alpha", "--shared")
+    source = state(env)["parked"]["alpha"]["lockEntry"]["source"]
+    shutil.move(home + "/.agents/.parked/alpha", home + "/.agents/skills/alpha")
+    run(env, "adopt")
+    check(lock(home)["alpha"]["source"] == source, "the skill lost its source")
+    check("alpha" not in state(env).get("parked", {}), "the row stayed after its entry came back")
+
+    if os.name != "nt":  # ---- someone's own link of the same name is theirs ----
+        own = home + "/elsewhere"
+        os.makedirs(own)
+        os.remove(link_of(home, "beta"))
+        os.symlink(own, link_of(home, "beta"))
+        run(env, "remove", "beta")
+        check(os.path.islink(link_of(home, "beta")), "remove took a link it did not make")
+        os.remove(link_of(home, "beta"))
+        run(env, "restore", "beta")
+
     # ---- over the backend ----
     (_, done) = rpc(env, ("skills.setAgentEnabled", {"name": "alpha", "agent": CLAUDE, "enabled": False}))[0]
     check(done["ok"] and not os.path.lexists(link_of(home, "alpha")), "one agent: %s" % done)

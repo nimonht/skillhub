@@ -204,12 +204,17 @@ static bool park_many(sh_store *st, const char *const *names, size_t n, char **e
     sh_mkpath(st->parked);
     for (size_t i = 0; ok && i < k; ++i) {
         char *from = sh_path_join(st->central, to_move[i]), *to = sh_path_join(st->parked, to_move[i]);
-        if (sh_move_dir(from, to)) moved[m++] = to_move[i];
-        else sh_store_log(st, "FAILED to park %s", to_move[i]);
+        if (sh_move_dir(from, to)) {
+            moved[m++] = to_move[i];
+        } else {
+            sh_store_log(st, "FAILED to park %s", to_move[i]);
+            if (err && !*err) *err = sh_strfmt("could not park %s", to_move[i]);
+        }
         free(from);
         free(to);
     }
     if (m) ok = sh_lock_files_put(st, moved, none, m) && ok;
+    if (m < k) ok = false;
     free(none);
     free(moved);
     free(to_move);
@@ -217,14 +222,16 @@ static bool park_many(sh_store *st, const char *const *names, size_t n, char **e
     return ok;
 }
 
-static void set_aside(sh_store *st, const char *name) {
+static bool set_aside(sh_store *st, const char *name) {
     char *from = sh_path_join(st->parked, name);
     char *stamp = sh_stamp();
     char *to = sh_strfmt("%s/.parked-replaced/%s-%s", st->backup, name, stamp);
-    if (sh_move_dir(from, to)) sh_store_log(st, "%s came back to the shared folder; kept the parked copy in %s", name, to);
+    const bool moved = sh_move_dir(from, to);
+    if (moved) sh_store_log(st, "%s came back to the shared folder; kept the parked copy in %s", name, to);
     free(to);
     free(stamp);
     free(from);
+    return moved;
 }
 
 // back to the shared folder; the state entry goes last, so a crash loses nothing
@@ -236,14 +243,20 @@ static bool unpark_many(sh_store *st, const char *const *names, size_t n, char *
     sh_source *entries = sh_xcalloc(n + 1, sizeof *entries);
     const sh_source **srcs = sh_xcalloc(n + 1, sizeof *srcs);
     size_t k = 0;
-    bool changed = false;
+    bool changed = false, all_moved = true;
     sh_mkpath(st->central);
     for (size_t i = 0; i < n; ++i) {
         char *from = sh_path_join(st->parked, names[i]), *to = sh_path_join(st->central, names[i]);
         if (sh_lexists(from)) {
-            if (sh_lexists(to)) {
-                set_aside(st, names[i]);
-            } else if (sh_move_dir(from, to)) {
+            const bool taken = sh_lexists(to);
+            if (taken ? !set_aside(st, names[i]) : !sh_move_dir(from, to)) {
+                sh_store_log(st, "FAILED to bring back %s", names[i]);
+                all_moved = false;
+                free(from);
+                free(to);
+                continue;
+            }
+            if (!taken) {
                 yyjson_mut_val *row = yyjson_mut_obj_get(parked, names[i]);
                 yyjson_mut_val *entry = row ? yyjson_mut_obj_get(row, "lockEntry") : NULL;
                 if (yyjson_mut_is_obj(entry)) {
@@ -251,11 +264,6 @@ static bool unpark_many(sh_store *st, const char *const *names, size_t n, char *
                     srcs[k] = &entries[k];
                     back[k++] = names[i];
                 }
-            } else {
-                sh_store_log(st, "FAILED to bring back %s", names[i]);
-                free(from);
-                free(to);
-                continue;
             }
             yyjson_mut_obj_remove_str(parked, names[i]);
             changed = true;
@@ -265,12 +273,34 @@ static bool unpark_many(sh_store *st, const char *const *names, size_t n, char *
     }
     bool ok = k == 0 || sh_lock_files_put(st, back, srcs, k);
     if (changed && ok) ok = sh_state_save(state);
+    ok = ok && all_moved;
     if (!ok && err && !*err) *err = sh_strdup("cannot record the change");
     for (size_t i = 0; i < k; ++i) sh_source_free(&entries[i]);
     free(srcs);
     free(entries);
     free(back);
     yyjson_mut_doc_free(state);
+    return ok;
+}
+
+// A row whose folder went back may hold the only copy of its lock entry: unparking died between the two. It goes once that is safe.
+static bool entry_is_safe(sh_store *st, const char *name, yyjson_mut_val *row) {
+    yyjson_mut_val *entry = yyjson_mut_obj_get(row, "lockEntry");
+    char *folder = sh_path_join(st->central, name);
+    const bool back = sh_lexists(folder);
+    free(folder);
+    if (!back || !yyjson_mut_is_obj(entry)) return true;
+    sh_source have;
+    if (sh_lock_entry(st, name, &have)) {
+        sh_source_free(&have);
+        return true;
+    }
+    sh_source kept = {0};
+    sh_source_from_mut_json(entry, &kept);
+    const char *const names[] = {name};
+    const sh_source *const srcs[] = {&kept};
+    const bool ok = sh_lock_files_put(st, names, srcs, 1);
+    sh_source_free(&kept);
     return ok;
 }
 
@@ -295,7 +325,7 @@ void sh_parked_reconcile(sh_store *st) {
     yyjson_mut_val *key, *val;
     yyjson_mut_obj_foreach(parked_of(state), i, n, key, val) {
         char *folder = sh_path_join(st->parked, yyjson_mut_get_str(key));
-        if (!sh_lexists(folder)) sh_strv_push(&stale, yyjson_mut_get_str(key));
+        if (!sh_lexists(folder) && entry_is_safe(st, yyjson_mut_get_str(key), val)) sh_strv_push(&stale, yyjson_mut_get_str(key));
         free(folder);
     }
     for (size_t k = 0; k < stale.len; ++k) yyjson_mut_obj_remove_str(parked_of(state), stale.items[k]);

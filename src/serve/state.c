@@ -423,11 +423,13 @@ static void build_watches(scan_result *r, const sh_store *st) {
 
 scan_result *scan_build(const char *project, const check_map *checks, const sh_strv *just_updated) {
     sh_store st;
-    scope_store(project, &st, NULL, NULL);
-    sh_skills sk;
-    sh_store_scan(&st, &sk);
-    sh_strays strays;
-    sh_store_strays(&st, &strays);
+    const bool opened = scope_store(project, &st, NULL, NULL);
+    sh_skills sk = {0};
+    sh_strays strays = {0};
+    if (opened) {  // a project that is gone shows nothing, never the user's own skills under its name
+        sh_store_scan(&st, &sk);
+        sh_store_strays(&st, &strays);
+    }
     scan_result *r = sh_xcalloc(1, sizeof *r);
     tally t = {0, 0, 0, 0};
     build_rows(r, &st, &sk, checks, just_updated, &t);

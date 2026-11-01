@@ -469,6 +469,8 @@ static bool cross_device(void) {
 #endif
 }
 
+static bool copy_tree(const char *from, const char *to, bool whole);
+
 bool sh_move_dir(const char *from, const char *to) {
     char *parent = sh_path_parent(to);
     sh_mkpath(parent);
@@ -481,7 +483,7 @@ bool sh_move_dir(const char *from, const char *to) {
     char *partial = sh_strfmt("%s/" SH_PARTIAL_PREFIX "%s", dir, sh_path_name(to));
     free(dir);
     sh_remove_tree(partial);
-    const bool copied = sh_copy_tree(from, partial) && sh_rename(partial, to);
+    const bool copied = copy_tree(from, partial, true) && sh_rename(partial, to);
     if (!copied) sh_remove_tree(partial);
     free(partial);
     return copied && sh_remove_tree(from);
@@ -536,28 +538,32 @@ bool sh_copy_file(const char *from, const char *to) {
 #endif
 }
 
-bool sh_copy_tree(const char *from, const char *to) {
+// `whole`: for a move, whose source goes next: what cannot be copied stops it
+static bool copy_tree(const char *from, const char *to, bool whole) {
     if (sh_is_link(from)) return false;
     if (!sh_mkpath(to)) return false;
     sh_strv names = SH_STRV_INIT;
-    sh_list_dir(from, SH_LIST_ALL, &names);
-    bool ok = true;
+    bool ok = sh_list_dir(from, SH_LIST_ALL, &names);
     for (size_t i = 0; ok && i < names.len; ++i) {
         char *src = sh_path_join(from, names.items[i]);
         char *dst = sh_path_join(to, names.items[i]);
         if (sh_is_link(src)) {
-            // links are skipped, never followed
+            ok = !whole;  // links are skipped, never followed
         } else if (sh_is_dir(src)) {
-            ok = sh_copy_tree(src, dst);
+            ok = copy_tree(src, dst, whole);
         } else if (sh_is_file(src)) {
             ok = sh_copy_file(src, dst);
-        }  // sockets and FIFOs are skipped too
+        } else {
+            ok = !whole;  // sockets and FIFOs are skipped too
+        }
         free(src);
         free(dst);
     }
     sh_strv_free(&names);
     return ok;
 }
+
+bool sh_copy_tree(const char *from, const char *to) { return copy_tree(from, to, false); }
 
 bool sh_set_executable(const char *path, bool exec) {
 #ifdef _WIN32

@@ -397,6 +397,8 @@ void sh_store_strays(const sh_store *st, sh_strays *out) {
 
 // ---- adopt / relink ----
 
+static char *unused_backup(char *base);
+
 // wait until nothing in `dir` changed for a few seconds (an installer may still be writing)
 static void wait_quiet(const char *dir) {
     for (int i = 0; i < 30; ++i) {
@@ -488,11 +490,13 @@ int sh_store_adopt(sh_store *st) {
         } else {
             char *a = dir_digest(s->path), *b = dir_digest(dest), *stamp = sh_stamp();
             const bool same = strcmp(a, b) == 0;
-            char *bk = sh_strfmt("%s/%s/%s-%s-%s", st->backup, same ? "_dupes" : "_conflicts", agent->id, s->name, stamp);
+            char *bk = unused_backup(sh_strfmt("%s/%s/%s-%s-%s", st->backup, same ? "_dupes" : "_conflicts", agent->id, s->name, stamp));
             if (sh_move_dir(s->path, bk)) {
                 if (same) sh_store_log(st, "removed duplicate %s in %s (backup: %s)", s->name, agent->label, bk);
                 else sh_store_log(st, "CONFLICT %s in %s differs from central; kept central, moved yours to %s", s->name, agent->label, bk);
                 ++changes;
+            } else {
+                sh_store_log(st, "FAILED to move %s", s->path);
             }
             free(bk);
             free(stamp);
@@ -511,7 +515,7 @@ static int sync_copy(sh_store *st, const sh_agent *a, const sh_skill *s, const c
     if (sh_exists(copy)) {
         if (!sh_is_dir(copy) || same_folder(copy, s->path)) return 0;
         char *stamp = sh_stamp();
-        char *bk = sh_strfmt("%s/_conflicts/%s-%s-%s", st->backup, a->id, s->name, stamp);
+        char *bk = unused_backup(sh_strfmt("%s/_conflicts/%s-%s-%s", st->backup, a->id, s->name, stamp));
         const bool moved = sh_move_dir(copy, bk);
         free(bk);
         free(stamp);
@@ -883,8 +887,22 @@ int sh_store_recover(sh_store *st, bool git_locks) {
     return put_back;
 }
 
+// the link for skill `name` in agent folder `dir`, if it leads to `dest`, also when that is gone already; someone's own link
+// to another folder of that name stays
+static bool link_of(const char *dir, const char *name, const char *dest) {
+    char *lp = sh_path_join(dir, name);
+    bool same = sh_points_to(lp, dest);
+    if (!same && sh_is_link(lp)) {
+        char *target = sh_link_target(lp);
+        same = target && strcmp(target, dest) == 0;
+        free(target);
+    }
+    free(lp);
+    return same;
+}
+
 bool sh_store_remove_skill(sh_store *st, const char *name) {
-    if (!*name || strchr(name, '/') || hidden_name(name)) return false;
+    if (!*name || strpbrk(name, "/\\") || hidden_name(name)) return false;
     char *dest = sh_store_skill_dir(st, name);
     if (!sh_lexists(dest)) {  // lexists: a live link whose folder is gone can still be removed
         free(dest);
@@ -898,6 +916,8 @@ bool sh_store_remove_skill(sh_store *st, const char *name) {
     sh_trees *t = tracked ? sh_trees_load(st) : NULL;
     char *tree = sh_strdup(sh_trees_get(t, name));
     sh_trees_free(t);
+    bool *ours = sh_xcalloc(st->n_agents + 1, sizeof *ours);  // asked first: once the folder has moved, every link dangles
+    for (size_t k = 0; k < st->n_agents; ++k) ours[k] = *st->agents[k]->dir && link_of(st->agents[k]->dir, name, dest);
     const bool gone = live ? sh_remove_link(dest) : sh_move_dir(dest, bk);
     if (gone && !live) {
         const sh_backup_note note = {"remove", tracked ? &entry : NULL, tree};
@@ -905,15 +925,27 @@ bool sh_store_remove_skill(sh_store *st, const char *name) {
     }
     free(tree);
     if (tracked) sh_source_free(&entry);
-    free(bk);
-    free(stamp);
     free(dest);
-    if (!gone) return false;
-    for (size_t k = 0; k < st->n_agents; ++k) {
-        char *lp = sh_path_join(st->agents[k]->dir, name);
-        if (!sh_remove_link(lp) && uses_copies(st) && st->agents[k]->linked && sh_is_dir(lp)) sh_remove_tree(lp);  // the backup holds the same files
+    for (size_t k = 0; gone && k < st->n_agents; ++k) {
+        const sh_agent *a = st->agents[k];
+        char *lp = sh_path_join(a->dir, name);
+        if (ours[k]) {
+            sh_remove_link(lp);
+        } else if (*a->dir && uses_copies(st) && a->linked && sh_is_dir(lp) && !sh_is_link(lp)) {  // a synced copy
+            if (same_folder(lp, bk)) {
+                sh_remove_tree(lp);
+            } else {  // edited, or not ours at all: the backup does not hold it
+                char *keep = unused_backup(sh_strfmt("%s/_conflicts/%s-%s-%s", st->backup, a->id, name, stamp));
+                if (!sh_move_dir(lp, keep)) sh_store_log(st, "FAILED to set aside %s", lp);
+                free(keep);
+            }
+        }
         free(lp);
     }
+    free(ours);
+    free(bk);
+    free(stamp);
+    if (!gone) return false;
     sh_lock_put(st, name, NULL);
     if (!st->project) sh_toggles_forget(name);
     if (live) sh_store_log(st, "removed the link %s", name);

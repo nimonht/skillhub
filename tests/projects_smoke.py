@@ -196,8 +196,10 @@ def main():
     write(copy + "/drift.md", "x\n")
     run(env2, "adopt", "--project", nolinks)
     check(not os.path.exists(copy + "/drift.md"), "relink keeps it identical")
+    write(copy + "/edited.md", "my own work\n")  # the backup does not hold this
     run(env2, "remove", "zeta", "--project", nolinks)
     check(not os.path.exists(copy), "the copy goes with the skill")
+    check(any("edited.md" in names for _, _, names in os.walk(ROOT)), "an edited copy was deleted, not kept")
 
     # ---- a skill of yours, into a project ----
     run(env, "add", "acme/skills", "--skill", "alpha")
@@ -219,6 +221,22 @@ def main():
     check("error" in reply, "scope.set on no folder: %s" % reply)
     replies = rpc(env, ("scope.set", {"scope": team}), ("scope.set", {"scope": "user"}))
     check(replies[1][0]["result"]["scope"] == "user", "back: %s" % (replies[1],))
+
+    # ---- agents are the user's, whatever project the window shows ----
+    skill(team + "/.agents/skills/theirs", "theirs")
+    skill(home + "/.claude/skills/mine", "mine")
+    (_, done) = rpc(env, ("scope.set", {"scope": team}), ("providers.setManaged", {"id": CLAUDE, "on": True}))[1]
+    check(done["ok"] and not os.path.exists(team + "/.agents/skills/mine"), "a stray of the user's went into the repository: %s" % done)
+    check(not os.path.lexists(home + "/.claude/skills/theirs"), "a project's skill reached every project")
+
+    # ---- a project that went away is not the user's library ----
+    doomed = os.path.join(ROOT, "doomed")
+    skill(doomed + "/.agents/skills/own", "own")
+    skill(home + "/.agents/skills/own", "own")
+    replies = rpc(env, ("scope.set", {"scope": doomed}), lambda: shutil.rmtree(doomed), ("skills.remove", {"name": "own"}),
+                  ("state.snapshot", {"rescan": True, "page": 0, "pageSize": 1000}))
+    check(not replies[2][1]["ok"] and os.path.isfile(home + "/.agents/skills/own/SKILL.md"), "a job fell through to the user's skills: %s" % (replies[2],))
+    check(replies[3][0]["result"]["skills"] == [], "the user's skills under the project's name: %s" % (replies[3],))
     rpc(env, ("projects.remove", {"path": team}))
 
     # ---- the registry ----

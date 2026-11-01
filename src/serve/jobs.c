@@ -483,17 +483,21 @@ static void body_relink(job *j, sh_store *st) {
 }
 
 // switching an agent on links the skills into it; switching it off leaves what is there untouched
-static void body_set_managed(job *j, sh_store *st) {
+static void body_set_managed(job *j, sh_store *scoped) {
+    (void)scoped;  // agents are the user's: on a project's store, adopt would pull the user's strays into the repository
+    sh_store st;
+    sh_store_init(&st, job_log, j);
     const char *id = param_str(j->params, "id");
     const bool on = param_bool(j->params, "on", false);
     char *err = NULL;
-    if (!sh_store_set_provider_managed(st, id, on, &err)) {
+    if (!sh_store_set_provider_managed(&st, id, on, &err)) {
         fail(j, err);
     } else {
-        sh_store_sync_watcher(st);
-        sum(j, "changes", on ? sh_store_adopt(st) : 0);
+        sh_store_sync_watcher(&st);
+        sum(j, "changes", on ? sh_store_adopt(&st) : 0);
     }
     free(err);
+    sh_store_free(&st);
     j->rescan = true;
 }
 
@@ -579,9 +583,10 @@ static const char *missing_param(const char *kind, yyjson_val *params) {
 static void job_main(void *arg) {
     job *j = arg;
     sh_store st;
-    scope_store(j->project, &st, job_log, j);
-    if (j->mutating) sh_store_recover(&st, false);  // the lock is ours: a dead process's half-done swap is put right first
-    j->body(j, &st);
+    const bool opened = scope_store(j->project, &st, job_log, j);
+    if (!opened) fail(j, "that project cannot be opened any more");
+    else if (j->mutating) sh_store_recover(&st, false);  // the lock is ours: a dead process's half-done swap is put right first
+    if (opened) j->body(j, &st);
     if (cancelled(j)) j->ok = false;
     check_map_sort(&j->checks);
     sh_store_free(&st);

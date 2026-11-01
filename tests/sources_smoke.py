@@ -116,7 +116,8 @@ def listed(env):
 
 
 def rpc(env, *requests):
-    """One backend session: each request in turn, each job until it is done. The replies and every jobDone, by request."""
+    """One backend session: each request in turn, each job until it is done. The replies and every jobDone, by request.
+    A function among the requests runs between the two around it."""
     p = subprocess.Popen([BIN, "serve", "--stdio"], env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=None if os.environ.get("SKILLHUB_TEST_STDERR") else subprocess.DEVNULL)
 
     def ask(i, method, params):
@@ -139,7 +140,7 @@ def rpc(env, *requests):
 
     try:
         ask(0, "initialize", {"protocol": 1, "client": "sources_smoke"})
-        return [ask(i + 1, m, ps) for i, (m, ps) in enumerate(requests)]
+        return [r() if callable(r) else ask(i + 1, *r) for i, r in enumerate(requests)]
     finally:
         p.stdin.close()
         p.wait(timeout=30)

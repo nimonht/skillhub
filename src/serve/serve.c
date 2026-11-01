@@ -255,8 +255,10 @@ typedef struct {
     sh_strv just_updated;
 } scan_args;
 
-void scope_store(const char *project, sh_store *st, sh_log_fn log, void *user) {
-    if (!project || !sh_store_init_project(st, project, log, user, NULL)) sh_store_init(st, log, user);
+bool scope_store(const char *project, sh_store *st, sh_log_fn log, void *user) {
+    if (project && sh_store_init_project(st, project, log, user, NULL)) return true;
+    sh_store_init(st, log, user);
+    return !project;
 }
 
 static void scan_main(void *arg) {

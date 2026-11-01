@@ -88,7 +88,8 @@ typedef struct {
 // Runs on the scanner thread: the whole state from a fresh store, with the check results applied.
 scan_result *scan_build(const char *project, const check_map *checks, const sh_strv *just_updated);
 // the store of a scope: a project's, or (`project` NULL, or a folder that went away) the user's own
-void scope_store(const char *project, sh_store *st, sh_log_fn log, void *user);
+// false when the project cannot be opened any more: `st` is then the user's store, and nothing may be changed through it
+bool scope_store(const char *project, sh_store *st, sh_log_fn log, void *user);
 void scan_result_free(scan_result *r);
 // The state.delta params between two scans, or NULL when nothing changed. `d` owns the result.
 yyjson_mut_val *scan_delta(yyjson_mut_doc *d, const scan_result *before, const scan_result *after, long base_rev, long rev);
