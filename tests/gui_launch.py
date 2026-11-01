@@ -6,6 +6,7 @@ usage: python3 tests/gui_launch.py PATH/TO/skillhub [OUTPUT_DIR]
 Needs no display (QT_QPA_PLATFORM=offscreen; set SKILLHUB_TEST_PLATFORM=cocoa|windows to test a deployed app that
 ships only its native platform plugin) and no network. Used by CI on Linux, macOS and Windows.
 """
+import http.server
 import json
 import os
 import re
@@ -13,6 +14,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 
 BIN = os.path.abspath(sys.argv[1])
 OUT = os.path.abspath(sys.argv[2]) if len(sys.argv) > 2 else tempfile.mkdtemp(prefix="skillhub-shots-")
@@ -29,6 +31,55 @@ env = dict(os.environ, HOME=home, USERPROFILE=home, SKILLHUB_HOME=home, XDG_CONF
 def fail(msg):
     print("FAIL:", msg, file=sys.stderr)
     sys.exit(1)
+
+
+def hostile_text():
+    """What a repository wrote is text: the window must not fetch anything because of it, on any page."""
+    qml = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "qml")
+    for folder, _, names in os.walk(qml):
+        for name in names:
+            if not name.endswith(".qml"):
+                continue
+            with open(os.path.join(folder, name), encoding="utf-8") as f:
+                text = f.read()
+            if len(re.findall(r"(?<![\w.])Text \{", text)) != text.count("textFormat: Text.PlainText"):
+                fail("%s: every Text must set textFormat: Text.PlainText, or text from a repository can fetch things" % name)
+    hits = []
+
+    class Trap(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            hits.append(self.path)
+            self.send_error(404)
+
+        def log_message(self, *args):
+            pass
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Trap)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    trap = "http://127.0.0.1:%d" % server.server_address[1]
+    md = ("---\nname: %s\ndescription: <img src=\"%s/%s-description.png\"> <b>bold</b>\n---\n\n"
+          "![a picture](%s/%s-markdown.png)\n\n<img src=\"%s/%s-html.png\">\n")
+
+    def write(folder, name):
+        os.makedirs(folder)
+        with open(folder + "/SKILL.md", "w", newline="\n") as f:
+            f.write(md % (name, trap, name, trap, name, trap, name))
+
+    write(home + "/.agents/skills/hostile", "hostile")
+    write(home + "/upstream/skills/stranger", "stranger")
+    try:
+        for name, args in (("hostile-detail", ["--select", "hostile"]), ("hostile-add", ["--mode", "add", "--discover", home + "/upstream"])):
+            png = os.path.join(OUT, name + ".png")
+            p = subprocess.run([BIN, "gui", "--shot", png, "--theme", "dark", "--size", "1280x800", "--settle", "20", *args],
+                               env=env, capture_output=True, text=True, timeout=240)
+            if p.returncode != 0:
+                fail("%s: exit %d\n%s" % (name, p.returncode, p.stderr))
+    finally:
+        server.shutdown()
+        shutil.rmtree(home + "/.agents/skills/hostile", ignore_errors=True)
+    if hits:
+        fail("the window fetched what a repository named: %s" % sorted(set(hits)))
+    print("ok  hostile text")
 
 
 try:
@@ -83,6 +134,7 @@ try:
         if shell and not re.search(r"Shell\s+%s\s" % shell, screen):   # the banner, naming the shell it runs in
             fail("%s: no banner naming %s in the terminal:\n%s\n--- stdout\n%s\n--- stderr\n%s" % (name, shell, screen, p.stdout, p.stderr))
         print("ok  " + name)
+    hostile_text()
     print("gui launch test passed (screenshots in %s)" % OUT)
 finally:
     shutil.rmtree(home, ignore_errors=True)

@@ -44,12 +44,14 @@ static const char *const GIT_ENV[] = {"GIT_TERMINAL_PROMPT=0", "GCM_INTERACTIVE=
 
 static sh_git_result result_of(sh_proc_result *p) {
     sh_git_result r = {0};
+    r.exit_code = -1;
     if (!p->started) {
         r.err = sh_strdup("git was not found: install Git (https://git-scm.com) and make sure it is on your PATH");
     } else if (p->timed_out) {
         r.err = sh_strdup("git timed out");
     } else {
         r.ok = p->exit_code == 0;
+        r.exit_code = p->exit_code;
         r.err = sh_trimmed(sh_buf_str(&p->err), p->err.len);
     }
     r.out = p->out;

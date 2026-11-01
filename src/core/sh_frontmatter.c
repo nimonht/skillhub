@@ -95,8 +95,8 @@ void sh_fm_parse(const char *raw, size_t n, sh_frontmatter *fm) {
         } else if (vlen == 0) {
             while (i + 1 < end && lines.items[i + 1][0] == ' ') ++i;  // a nested map: skipped
         }
-        sh_strip_controls(val);  // a repository wrote this, and it will be printed
-        put(fm, key, val);
+        put(fm, key, sh_printable(val, false));  // a repository wrote this, and it will be printed
+        free(val);
     }
     sh_strv_free(&lines);
 }

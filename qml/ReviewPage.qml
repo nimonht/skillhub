@@ -77,12 +77,14 @@ Rectangle {
             width: parent.width - actions.width - 72
             spacing: 2
             Text {
+                textFormat: Text.PlainText
                 width: parent.width
                 elide: Text.ElideRight
                 text: app.reviewLoading ? "Reading what changed" : root.many ? "Review " + root.reviews.length + " updates" : root.reviews.length === 1 ? "Review " + root.reviews[0].name : "Review"
                 color: Theme.text; font.family: Theme.display; font.pixelSize: Theme.fsHead; font.weight: Font.Bold
             }
             Text {
+                textFormat: Text.PlainText
                 visible: !app.reviewLoading && root.reviews.length > 0
                 width: parent.width
                 elide: Text.ElideRight
@@ -114,7 +116,7 @@ Rectangle {
         anchors.centerIn: parent
         spacing: 12
         Spinner { anchors.horizontalCenter: parent.horizontalCenter }
-        Text { text: "Comparing upstream with the files on disk"; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsBody }
+        Text { textFormat: Text.PlainText; text: "Comparing upstream with the files on disk"; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsBody }
     }
 
     SplitView {
@@ -172,6 +174,7 @@ Rectangle {
             }
 
             Text {
+                textFormat: Text.PlainText
                 id: pathLine
                 visible: root.current !== null
                 anchors.top: notes.bottom
@@ -204,6 +207,7 @@ Rectangle {
                     height: code.implicitHeight + 2
                     color: sign === "+" ? Theme.gainLow : sign === "-" ? Theme.dangerLow : sign === "@" ? Theme.bg3 : "transparent"
                     Text {
+                        textFormat: Text.PlainText
                         id: glyph
                         x: 6
                         width: 14
@@ -212,17 +216,18 @@ Rectangle {
                         font.family: Theme.mono; font.pixelSize: Theme.fsSmall; font.weight: Font.Bold
                     }
                     Text {
+                        textFormat: Text.PlainText
                         id: code
                         x: 22
                         width: parent.width - 26
                         text: line.sign === "@" ? line.modelData : line.modelData.substring(1)
-                        textFormat: Text.PlainText
                         wrapMode: Text.WrapAnywhere
                         color: line.sign === "@" ? Theme.text2 : Theme.text
                         font.family: Theme.mono; font.pixelSize: Theme.fsSmall
                     }
                 }
                 footer: Text {
+                    textFormat: Text.PlainText
                     visible: root.current !== null && root.current.cut
                     width: diff.width
                     height: visible ? implicitHeight + 16 : 0
@@ -234,6 +239,7 @@ Rectangle {
             }
 
             Text {
+                textFormat: Text.PlainText
                 visible: root.current !== null && root.lines.length === 0
                 anchors.top: pathLine.bottom
                 anchors.topMargin: 12
@@ -245,6 +251,7 @@ Rectangle {
             }
 
             Text {
+                textFormat: Text.PlainText
                 visible: root.current === null && root.reviews.length > 0
                 anchors.centerIn: parent
                 text: "Nothing differs"
@@ -265,6 +272,7 @@ Rectangle {
         color: fill
         Icon { x: 10; y: 8; name: note.icon; size: 16; color: note.tone }
         Text {
+            textFormat: Text.PlainText
             id: noteText
             x: 34; y: 8
             width: parent.width - 44
@@ -314,12 +322,14 @@ Rectangle {
                     width: parent.width - x - 16
                     spacing: 1
                     Text {
+                        textFormat: Text.PlainText
                         width: parent.width
                         elide: Text.ElideRight
                         text: row.r.name
                         color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold
                     }
                     Text {
+                        textFormat: Text.PlainText
                         width: parent.width
                         elide: Text.ElideRight
                         text: row.r.error ? row.r.error : !row.r.available && row.r.files.length === 0 ? "current, nothing differs" : (row.r.files.length + (row.r.files.length === 1 ? " file" : " files") + (row.r.risk ? "  ·  scripts" : "") + (row.r.localEdits ? "  ·  local edits" : ""))
@@ -347,6 +357,7 @@ Rectangle {
             background: Rectangle { color: row.active ? Theme.bg4 : row.hovered ? Theme.bg3 : "transparent"; border.color: Theme.focus; border.width: row.visualFocus ? 2 : 0 }
             contentItem: Item {
                 Text {
+                    textFormat: Text.PlainText
                     id: sign
                     x: 20
                     anchors.verticalCenter: parent.verticalCenter
@@ -356,6 +367,7 @@ Rectangle {
                     font.family: Theme.mono; font.pixelSize: Theme.fsBody; font.weight: Font.Bold
                 }
                 Text {
+                    textFormat: Text.PlainText
                     x: 40
                     anchors.verticalCenter: parent.verticalCenter
                     width: counts.x - x - 8

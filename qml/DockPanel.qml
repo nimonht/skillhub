@@ -39,7 +39,7 @@ Rectangle {
             Accessible.name: text
             background: Rectangle { color: t.on ? Theme.bg3 : t.hovered ? Theme.bg2 : "transparent"; border.color: Theme.focus; border.width: t.visualFocus ? 2 : 0 }
             contentItem: Item {
-                Text { id: label; x: 12; anchors.verticalCenter: parent.verticalCenter; text: t.text; color: t.on ? Theme.text : Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
+                Text { textFormat: Text.PlainText; id: label; x: 12; anchors.verticalCenter: parent.verticalCenter; text: t.text; color: t.on ? Theme.text : Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
                 Icon { visible: t.closable; x: label.x + label.width + 8; anchors.verticalCenter: parent.verticalCenter; name: "x"; size: 12; color: Theme.text2; TapHandler { onTapped: t.closed() } }
             }
         }

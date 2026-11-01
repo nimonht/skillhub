@@ -172,6 +172,7 @@ FocusScope {
             }
 
             Text {
+                textFormat: Text.PlainText
                 width: parent.width
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.Wrap
@@ -235,12 +236,13 @@ FocusScope {
                         Column {
                             x: 48
                             anchors.verticalCenter: parent.verticalCenter
-                            Text { text: modelData.label; color: "#FFFFFF"; font.family: Theme.ui; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold }
-                            Text { text: modelData.detectedBy ? "Found via " + modelData.detectedBy : ""; color: "#C6CEDA"; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
+                            Text { textFormat: Text.PlainText; text: modelData.label; color: "#FFFFFF"; font.family: Theme.ui; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold }
+                            Text { textFormat: Text.PlainText; text: modelData.detectedBy ? "Found via " + modelData.detectedBy : ""; color: "#C6CEDA"; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
                         }
                     }
                 }
                 Text {
+                    textFormat: Text.PlainText
                     visible: wires.list.length === 0
                     x: 130; anchors.verticalCenter: parent.verticalCenter
                     width: parent.width - 130
@@ -263,7 +265,7 @@ FocusScope {
                         delegate: Column {
                             required property var modelData
                             NumText { anchors.horizontalCenter: parent.horizontalCenter; text: modelData.n; color: "#FFFFFF"; font.family: Theme.display; font.pixelSize: 38; font.weight: Font.Bold }
-                            Text { anchors.horizontalCenter: parent.horizontalCenter; text: modelData.t; color: "#C6CEDA"; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
+                            Text { textFormat: Text.PlainText; anchors.horizontalCenter: parent.horizontalCenter; text: modelData.t; color: "#C6CEDA"; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
                         }
                     }
                 }
@@ -278,7 +280,7 @@ FocusScope {
                             required property var modelData
                             spacing: 10
                             PortDot { link: modelData.l; anchors.verticalCenter: parent.verticalCenter }
-                            Text { text: modelData.t; color: "#E8ECF1"; font.family: Theme.ui; font.pixelSize: Theme.fsBody; anchors.verticalCenter: parent.verticalCenter }
+                            Text { textFormat: Text.PlainText; text: modelData.t; color: "#E8ECF1"; font.family: Theme.ui; font.pixelSize: Theme.fsBody; anchors.verticalCenter: parent.verticalCenter }
                         }
                     }
                 }
@@ -288,6 +290,7 @@ FocusScope {
                     width: parent.width
                     spacing: 8
                     Text {
+                        textFormat: Text.PlainText
                         width: parent.width
                         horizontalAlignment: Text.AlignHCenter
                         wrapMode: Text.Wrap
@@ -346,6 +349,7 @@ FocusScope {
                     }
                 }
                 Text {
+                    textFormat: Text.PlainText
                     width: parent.width
                     horizontalAlignment: Text.AlignHCenter
                     wrapMode: Text.Wrap
@@ -369,9 +373,9 @@ FocusScope {
                         Rectangle {
                             width: 76; height: 26; radius: 3
                             color: Theme.bg3
-                            Text { anchors.centerIn: parent; text: modelData.k; color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
+                            Text { textFormat: Text.PlainText; anchors.centerIn: parent; text: modelData.k; color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
                         }
-                        Text { text: modelData.t; color: "#E8ECF1"; font.family: Theme.ui; font.pixelSize: Theme.fsBody; anchors.verticalCenter: parent.verticalCenter }
+                        Text { textFormat: Text.PlainText; text: modelData.t; color: "#E8ECF1"; font.family: Theme.ui; font.pixelSize: Theme.fsBody; anchors.verticalCenter: parent.verticalCenter }
                     }
                 }
             }
@@ -421,8 +425,8 @@ FocusScope {
             x: 16; y: 14
             width: parent.width - 32
             spacing: 8
-            Text { width: parent.width; wrapMode: Text.Wrap; text: root.mark ? root.mark.title : ""; color: Theme.text; font.family: Theme.display; font.pixelSize: Theme.fsLead + 2; font.weight: Font.Bold }
-            Text { width: parent.width; wrapMode: Text.Wrap; text: root.mark ? root.mark.text : ""; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsBody; lineHeight: 1.2 }
+            Text { textFormat: Text.PlainText; width: parent.width; wrapMode: Text.Wrap; text: root.mark ? root.mark.title : ""; color: Theme.text; font.family: Theme.display; font.pixelSize: Theme.fsLead + 2; font.weight: Font.Bold }
+            Text { textFormat: Text.PlainText; width: parent.width; wrapMode: Text.Wrap; text: root.mark ? root.mark.text : ""; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsBody; lineHeight: 1.2 }
             Item {
                 width: parent.width
                 height: 34

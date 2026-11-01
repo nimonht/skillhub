@@ -57,6 +57,7 @@ AbstractButton {
             spacing: 8
             Icon { visible: root.iconName !== ""; name: root.iconName; size: root.compact ? 16 : 18; color: root.fg; anchors.verticalCenter: parent.verticalCenter }
             Text {
+                textFormat: Text.PlainText
                 visible: root.text !== ""
                 text: root.text
                 color: root.fg
@@ -83,6 +84,6 @@ AbstractButton {
         height: 26
         radius: 4
         color: Theme.inkBg
-        Text { id: tipText; anchors.centerIn: parent; text: root.Accessible.name; color: Theme.inkText; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
+        Text { textFormat: Text.PlainText; id: tipText; anchors.centerIn: parent; text: root.Accessible.name; color: Theme.inkText; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
     }
 }

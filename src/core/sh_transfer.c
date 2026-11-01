@@ -257,6 +257,14 @@ void sh_import_items_free(sh_import_items *items) {
     items->len = 0;
 }
 
+static char *unsafe_path(const char *path) {
+    char *cut = sh_left_utf16(path, 60), *shown = sh_printable(cut, false);
+    char *problem = sh_strfmt("unsafe file path \"%s\"", shown);
+    free(shown);
+    free(cut);
+    return problem;
+}
+
 static void set(char **field, char *value) {
     free(*field);
     *field = value;
@@ -317,8 +325,9 @@ void sh_store_read_export_data(const sh_store *st, const char *data, size_t n, s
         sh_import_item *it = &out->items[out->len++];
         memset(it, 0, sizeof *it);
         it->name = sh_strdup(sh_json_str(o, "name"));
-        it->description = sh_left_utf16(sh_json_str(o, "description"), 600);
-        sh_strip_controls(it->description);
+        char *cut = sh_left_utf16(sh_json_str(o, "description"), 600);
+        it->description = sh_printable(cut, false);
+        free(cut);
         it->local = sh_json_bool(o, "local");
         it->source = sh_strdup("");
         it->url = sh_strdup("");
@@ -358,18 +367,12 @@ void sh_store_read_export_data(const sh_store *st, const char *data, size_t n, s
                 if (*it->problem) break;
                 const char *fpath = sh_json_str(fv, "path");
                 if (!valid_rel(fpath)) {
-                    char *shown = sh_left_utf16(fpath, 60);
-                    sh_strip_controls(shown);
-                    set(&it->problem, sh_strfmt("unsafe file path \"%s\"", shown));
-                    free(shown);
+                    set(&it->problem, unsafe_path(fpath));
                     break;
                 }
                 for (size_t k = 0; k < it->n_files; ++k) {  // two names that one case-insensitive disk would merge
                     if (name_cmp(it->files[k].path, fpath) == 0) {
-                        char *shown = sh_left_utf16(fpath, 60);
-                        sh_strip_controls(shown);
-                        set(&it->problem, sh_strfmt("unsafe file path \"%s\"", shown));
-                        free(shown);
+                        set(&it->problem, unsafe_path(fpath));
                     }
                 }
                 if (*it->problem) break;

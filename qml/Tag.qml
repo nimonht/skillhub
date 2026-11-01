@@ -32,6 +32,7 @@ Item {
         spacing: 6
         Icon { name: root.s.icon; size: 15; weight: 2; color: root.s.fg; anchors.verticalCenter: parent.verticalCenter }
         Text {
+            textFormat: Text.PlainText
             visible: !root.iconOnly
             text: root.label !== "" ? root.label : root.s.text
             color: root.s.fg

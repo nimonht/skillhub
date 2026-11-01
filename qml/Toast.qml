@@ -35,7 +35,7 @@ Rectangle {
         anchors.centerIn: parent
         spacing: 9
         Icon { name: root.level === "ok" ? "check" : "alert"; size: 16; weight: 2.4; color: root.level === "error" ? Theme.inkDanger : root.level === "warn" ? Theme.inkWarn : Theme.inkOk; anchors.verticalCenter: parent.verticalCenter }
-        Text { text: root.message; color: Theme.inkText; font.family: Theme.ui; font.pixelSize: Theme.fsBody; font.weight: Font.Medium; anchors.verticalCenter: parent.verticalCenter }
+        Text { textFormat: Text.PlainText; text: root.message; color: Theme.inkText; font.family: Theme.ui; font.pixelSize: Theme.fsBody; font.weight: Font.Medium; anchors.verticalCenter: parent.verticalCenter }
         AbstractButton {
             id: act
             visible: root.action !== ""
@@ -53,7 +53,7 @@ Rectangle {
                 color: act.hovered ? Qt.alpha(Theme.inkText, 0.14) : "transparent"
                 border.color: Theme.inkOk
                 border.width: act.visualFocus ? 2 : 0
-                Text { id: actText; anchors.centerIn: parent; text: root.action; color: Theme.inkOk; font.family: Theme.ui; font.pixelSize: Theme.fsBody; font.weight: Font.Bold }
+                Text { textFormat: Text.PlainText; id: actText; anchors.centerIn: parent; text: root.action; color: Theme.inkOk; font.family: Theme.ui; font.pixelSize: Theme.fsBody; font.weight: Font.Bold }
             }
         }
     }

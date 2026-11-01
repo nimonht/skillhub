@@ -87,6 +87,7 @@ ApplicationWindow {
                         z: 2
                         Icon { x: 16; anchors.verticalCenter: parent.verticalCenter; name: "alert"; size: 16; color: Theme.notifyText }
                         Text {
+                            textFormat: Text.PlainText
                             x: 42
                             width: parent.width - x - mergeButton.width - 32
                             anchors.verticalCenter: parent.verticalCenter
@@ -159,11 +160,13 @@ ApplicationWindow {
                             readonly property bool good: !none && app.filter.mode === "updates" && app.filter.text === ""
                             Icon { anchors.horizontalCenter: parent.horizontalCenter; name: parent.good ? "check" : parent.none ? "folder" : "search"; size: 30; color: parent.good ? Theme.markText : Theme.text3 }
                             Text {
+                                textFormat: Text.PlainText
                                 width: parent.width; horizontalAlignment: Text.AlignHCenter
                                 text: parent.none ? "The shared folder is empty" : parent.good ? "Everything is current" : "No skill matches"
                                 color: Theme.text; font.family: Theme.display; font.pixelSize: Theme.fsHead; font.weight: Font.Bold
                             }
                             Text {
+                                textFormat: Text.PlainText
                                 width: parent.width; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.Wrap
                                 text: parent.none ? "Install skills from a repository or a folder, or drop a folder with a SKILL.md into " + app.centralPath + "."
                                     : parent.good ? "Every tracked skill matches its upstream. Check again any time."
@@ -324,8 +327,8 @@ ApplicationWindow {
                 anchors.centerIn: parent
                 spacing: 10
                 Icon { anchors.horizontalCenter: parent.horizontalCenter; name: "import"; size: 36; weight: 1.8; color: Theme.markText }
-                Text { anchors.horizontalCenter: parent.horizontalCenter; text: "Drop a Skill Hub export to import it"; color: Theme.text; font.family: Theme.display; font.pixelSize: Theme.fsHead; font.weight: Font.Bold }
-                Text { anchors.horizontalCenter: parent.horizontalCenter; text: "You see what is inside before anything is installed"; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsBody }
+                Text { textFormat: Text.PlainText; anchors.horizontalCenter: parent.horizontalCenter; text: "Drop a Skill Hub export to import it"; color: Theme.text; font.family: Theme.display; font.pixelSize: Theme.fsHead; font.weight: Font.Bold }
+                Text { textFormat: Text.PlainText; anchors.horizontalCenter: parent.horizontalCenter; text: "You see what is inside before anything is installed"; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsBody }
             }
         }
     }

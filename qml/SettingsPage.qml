@@ -28,17 +28,17 @@ Rectangle {
         default property alias content: inner.data
         width: parent ? parent.width : 400
         spacing: 8
-        Text { text: parent.title; color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold }
-        Text { visible: parent.note !== ""; width: parent.width; wrapMode: Text.Wrap; text: parent.note; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall; lineHeight: 1.2 }
+        Text { textFormat: Text.PlainText; text: parent.title; color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold }
+        Text { textFormat: Text.PlainText; visible: parent.note !== ""; width: parent.width; wrapMode: Text.Wrap; text: parent.note; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall; lineHeight: 1.2 }
         Column { id: inner; width: parent.width; spacing: 8 }
     }
-    component Line: Text { width: parent ? parent.width : 400; wrapMode: Text.Wrap; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall; lineHeight: 1.2 }
+    component Line: Text { textFormat: Text.PlainText; width: parent ? parent.width : 400; wrapMode: Text.Wrap; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall; lineHeight: 1.2 }
 
     Item {
         id: nav
         width: 220
         height: parent.height
-        Text { x: 24; y: 22; text: "Settings"; color: Theme.text; font.family: Theme.display; font.pixelSize: Theme.fsHead; font.weight: Font.Bold }
+        Text { textFormat: Text.PlainText; x: 24; y: 22; text: "Settings"; color: Theme.text; font.family: Theme.display; font.pixelSize: Theme.fsHead; font.weight: Font.Bold }
         Column {
             x: 12; y: 68
             width: parent.width - 24
@@ -59,7 +59,7 @@ Rectangle {
                     background: Rectangle { radius: 4; color: entry.on ? Theme.bg4 : entry.hovered ? Theme.bg3 : "transparent"; border.color: Theme.focus; border.width: entry.visualFocus ? 2 : 0 }
                     contentItem: Item {
                         Icon { x: 12; anchors.verticalCenter: parent.verticalCenter; name: entry.modelData.icon; size: 16; color: entry.on ? Theme.markText : Theme.text2 }
-                        Text { x: 40; anchors.verticalCenter: parent.verticalCenter; text: entry.modelData.label; color: entry.on ? Theme.text : Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsBody; font.weight: entry.on ? Font.DemiBold : Font.Medium }
+                        Text { textFormat: Text.PlainText; x: 40; anchors.verticalCenter: parent.verticalCenter; text: entry.modelData.label; color: entry.on ? Theme.text : Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsBody; font.weight: entry.on ? Font.DemiBold : Font.Medium }
                     }
                 }
             }
@@ -200,14 +200,15 @@ Rectangle {
                                     Rectangle {
                                         width: 92; height: 30; radius: 3
                                         color: parent.parent.fill
-                                        Text { anchors.centerIn: parent; text: "Primary"; color: parent.parent.parent.ink; font.family: Theme.ui; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
+                                        Text { textFormat: Text.PlainText; anchors.centerIn: parent; text: "Primary"; color: parent.parent.parent.ink; font.family: Theme.ui; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
                                     }
                                     Row {
                                         spacing: 8
                                         Rectangle { width: 10; height: 10; radius: 5; color: parent.parent.parent.mark; anchors.verticalCenter: parent.verticalCenter }
-                                        Text { text: "Selected"; color: parent.parent.parent.markText; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
+                                        Text { textFormat: Text.PlainText; text: "Selected"; color: parent.parent.parent.markText; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
                                     }
                                     Text {
+                                        textFormat: Text.PlainText
                                         text: modelData.label + "  ·  " + app.contrast(parent.parent.markText, modelData.bg).toFixed(1) + ":1 text  ·  " + app.contrast(parent.parent.fill, parent.parent.ink).toFixed(1) + ":1 button"
                                         color: modelData.text
                                         font.family: Theme.ui
@@ -384,7 +385,7 @@ Rectangle {
                 width: parent.width
                 spacing: 12
                 Line { text: "Projects keep their own skills in .agents/skills and share them through skills-lock.json. Switch between them at the top of the rail." }
-                Text { visible: app.projects.length === 0; text: "No projects yet"; color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsBody }
+                Text { textFormat: Text.PlainText; visible: app.projects.length === 0; text: "No projects yet"; color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsBody }
                 Repeater {
                     model: app.projects
                     delegate: Item {
@@ -394,8 +395,8 @@ Rectangle {
                         Column {
                             width: parent.width - autoToggle.width - forget.width - 16
                             anchors.verticalCenter: parent.verticalCenter
-                            Text { width: parent.width; elide: Text.ElideRight; text: modelData.name + "  ·  " + modelData.skills + (modelData.skills === 1 ? " skill" : " skills"); color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsBody }
-                            Text { width: parent.width; elide: Text.ElideMiddle; text: modelData.path; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
+                            Text { textFormat: Text.PlainText; width: parent.width; elide: Text.ElideRight; text: modelData.name + "  ·  " + modelData.skills + (modelData.skills === 1 ? " skill" : " skills"); color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsBody }
+                            Text { textFormat: Text.PlainText; width: parent.width; elide: Text.ElideMiddle; text: modelData.path; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
                         }
                         Toggle { id: autoToggle; anchors.right: forget.left; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; implicitWidth: 150; text: "Daily update"; checked: modelData.autoUpdate; onToggled: app.setProjectAuto(modelData.path, checked) }
                         Btn { id: forget; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; kind: "ghost"; compact: true; text: "Remove"; onClicked: app.removeProject(modelData.path) }
@@ -426,9 +427,9 @@ Rectangle {
                     delegate: Row {
                         required property var modelData
                         spacing: 12
-                        Text { width: 110; text: modelData.label; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
+                        Text { textFormat: Text.PlainText; width: 110; text: modelData.label; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
                         NumText { width: 80; text: modelData.size; color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
-                        Text { width: page.width - 202; elide: Text.ElideMiddle; text: modelData.path; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
+                        Text { textFormat: Text.PlainText; width: page.width - 202; elide: Text.ElideMiddle; text: modelData.path; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
                     }
                 }
                 Row {
@@ -446,7 +447,7 @@ Rectangle {
                 width: parent.width
                 spacing: 12
                 Logo { size: 48 }
-                Text { text: "Skill Hub " + app.version; color: Theme.text; font.family: Theme.display; font.pixelSize: Theme.fsHead; font.weight: Font.Bold }
+                Text { textFormat: Text.PlainText; text: "Skill Hub " + app.version; color: Theme.text; font.family: Theme.display; font.pixelSize: Theme.fsHead; font.weight: Font.Bold }
                 Line { text: "One skills folder for every coding agent. MIT licence. Third-party licences are listed in NOTICE.md, next to the program." }
                 Btn { iconName: "refresh"; text: "Take the tour again"; onClicked: { root.closeRequested(); app.startTour(0, 0) } }
             }

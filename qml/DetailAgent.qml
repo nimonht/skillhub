@@ -31,7 +31,7 @@ Flickable {
             Row {
                 spacing: 12
                 AgentTile { size: 40; text: root.a.monogram || ""; icon: root.a.icon; tone: root.a.detected === false ? "off" : root.a.health || "ok" }
-                Text { text: root.a.label || ""; color: Theme.text; font.family: Theme.display; font.pixelSize: Theme.fsHead; font.weight: Font.Bold; anchors.verticalCenter: parent.verticalCenter }
+                Text { textFormat: Text.PlainText; text: root.a.label || ""; color: Theme.text; font.family: Theme.display; font.pixelSize: Theme.fsHead; font.weight: Font.Bold; anchors.verticalCenter: parent.verticalCenter }
             }
             Tag {
                 kind: root.a.detected === false ? "absent" : root.a.health === "ok" ? "healthy" : "attention"
@@ -39,17 +39,18 @@ Flickable {
                        : root.a.health === "ok" ? (root.a.ok === root.a.total ? "All skills visible" : (root.a.total - root.a.ok) + " turned off")
                        : (root.a.problems || 0) > 0 ? root.a.problems + " need repair" : "Not wired up"
             }
-            Text { width: parent.width; wrapMode: Text.Wrap; text: root.a.mechanism || ""; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsBody }
-            Text { width: parent.width; wrapMode: Text.Wrap; visible: (root.a.detectedBy || "") !== ""; text: "Found via " + (root.a.detectedBy || ""); color: Theme.text3; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
+            Text { textFormat: Text.PlainText; width: parent.width; wrapMode: Text.Wrap; text: root.a.mechanism || ""; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsBody }
+            Text { textFormat: Text.PlainText; width: parent.width; wrapMode: Text.Wrap; visible: (root.a.detectedBy || "") !== ""; text: "Found via " + (root.a.detectedBy || ""); color: Theme.text3; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
         }
 
         Row {
             spacing: 6
             NumText { text: root.a.ok; color: Theme.text; font.family: Theme.display; font.pixelSize: Theme.fsBig; font.weight: Font.Bold }
-            Text { text: "of " + root.a.total + " skills visible"; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsBody; anchors.baseline: parent.children[0].baseline }
+            Text { textFormat: Text.PlainText; text: "of " + root.a.total + " skills visible"; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsBody; anchors.baseline: parent.children[0].baseline }
         }
 
         Text {
+            textFormat: Text.PlainText
             visible: root.a.detected === false
             width: parent.width
             wrapMode: Text.Wrap
@@ -60,6 +61,7 @@ Flickable {
             lineHeight: 1.2
         }
         Text {
+            textFormat: Text.PlainText
             visible: root.a.wired === false
             width: parent.width
             wrapMode: Text.Wrap
@@ -97,7 +99,7 @@ Flickable {
                         spacing: 10
                         leftPadding: 8
                         PortDot { link: "missing"; agentLabel: root.a.label; anchors.verticalCenter: parent.verticalCenter }
-                        Text { text: modelData; color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsBody; anchors.verticalCenter: parent.verticalCenter }
+                        Text { textFormat: Text.PlainText; text: modelData; color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsBody; anchors.verticalCenter: parent.verticalCenter }
                     }
                     HoverHandler { cursorShape: Qt.PointingHandCursor; enabled: !app.noHover }
                 }
@@ -110,6 +112,7 @@ Flickable {
             spacing: 6
             SectionLabel { width: parent.width; text: "Skills"; trailing: root.skills.length }
             Text {
+                textFormat: Text.PlainText
                 visible: root.readsShared
                 width: parent.width
                 wrapMode: Text.Wrap
@@ -136,6 +139,7 @@ Flickable {
                     height: 34
                     PortDot { link: modelData.state; agentLabel: root.a.label || ""; anchors.verticalCenter: parent.verticalCenter }
                     Text {
+                        textFormat: Text.PlainText
                         x: 32
                         width: parent.width - x - toggle.width
                         elide: Text.ElideRight
@@ -162,7 +166,7 @@ Flickable {
             width: parent.width
             spacing: 4
             SectionLabel { width: parent.width; text: "Folder" }
-            Text { width: parent.width; text: root.a.folder || ""; wrapMode: Text.WrapAnywhere; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
+            Text { textFormat: Text.PlainText; width: parent.width; text: root.a.folder || ""; wrapMode: Text.WrapAnywhere; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
             Row {
                 spacing: 6
                 Btn { kind: "ghost"; compact: true; iconName: "sliders"; text: "Manage agents"; onClicked: app.detailMode = "providers" }

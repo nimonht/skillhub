@@ -184,17 +184,21 @@ static void read_patches(sh_review *r, const char *out, size_t len) {
     }
 }
 
+// git exits 1 when the folders differ. Anything else means it did not finish, and half a list must not pass for a review.
+// stderr says nothing either way: Windows prints line-ending warnings there.
+static bool diff_finished(const sh_git_result *g) { return g->ok || g->exit_code == 1; }
+
 void sh_review_compare(const char *stage, sh_review *r) {
-    // git exits 1 when the folders differ, so only an error message says it failed
     static const char *const list[] = {"-c", "core.quotepath=false", "diff", "--no-index", "--no-color", "--no-ext-diff", "--no-textconv", "--no-renames", "--raw", "--numstat", "-z", "--", "old", "new", NULL};
     static const char *const patches[] = {"-c", "core.quotepath=false", "diff", "--no-index", "--no-color", "--no-ext-diff", "--no-textconv", "--no-renames", "-p", "--", "old", "new", NULL};
     sh_git_result g = sh_git_run(list, stage, 0);
-    if (!g.ok && !g.out.len) {
+    if (!diff_finished(&g)) {
         r->err = sh_strdup(g.err && *g.err ? g.err : "git diff failed");
     } else {
         read_list(r, stage, sh_buf_str(&g.out), g.out.len);
         sh_git_result p = sh_git_run(patches, stage, 0);
-        read_patches(r, sh_buf_str(&p.out), p.out.len);
+        if (diff_finished(&p)) read_patches(r, sh_buf_str(&p.out), p.out.len);
+        else r->err = sh_strdup(p.err && *p.err ? p.err : "git diff failed");
         sh_git_result_free(&p);
     }
     sh_git_result_free(&g);

@@ -47,6 +47,7 @@ AbstractButton {
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
             Text {
+                textFormat: Text.PlainText
                 text: root.text
                 width: parent.width
                 elide: Text.ElideRight
@@ -56,6 +57,7 @@ AbstractButton {
                 font.weight: Font.Medium
             }
             Text {
+                textFormat: Text.PlainText
                 visible: root.hint !== ""
                 text: root.hint
                 width: parent.width

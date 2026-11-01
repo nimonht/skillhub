@@ -10,7 +10,7 @@ Item {
         implicitHeight: 24
         radius: 4
         color: Theme.bg3
-        Text { id: kt; anchors.centerIn: parent; text: parent.label; color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsMicro; font.weight: Font.DemiBold }
+        Text { textFormat: Text.PlainText; id: kt; anchors.centerIn: parent; text: parent.label; color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsMicro; font.weight: Font.DemiBold }
     }
     Column {
         anchors.left: parent.left
@@ -21,6 +21,7 @@ Item {
         spacing: 14
         Icon { name: "config"; size: 30; color: Theme.text3 }
         Text {
+            textFormat: Text.PlainText
             width: parent.width
             text: "Pick a skill"
             color: Theme.text
@@ -29,6 +30,7 @@ Item {
             font.weight: Font.Bold
         }
         Text {
+            textFormat: Text.PlainText
             width: parent.width
             wrapMode: Text.Wrap
             text: "Its SKILL.md, where it came from and which agents can use it show up here. Click an agent above the list to inspect that agent instead."
@@ -44,7 +46,7 @@ Item {
                 required property var modelData
                 spacing: 10
                 Key { label: modelData.k; anchors.verticalCenter: parent.verticalCenter }
-                Text { text: modelData.t; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsBody; anchors.verticalCenter: parent.verticalCenter }
+                Text { textFormat: Text.PlainText; text: modelData.t; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsBody; anchors.verticalCenter: parent.verticalCenter }
             }
         }
     }

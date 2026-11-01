@@ -65,6 +65,7 @@ Item {
             width: parent.width
             spacing: 8
             Text {
+                textFormat: Text.PlainText
                 id: nameText
                 width: Math.min(implicitWidth, parent.width)
                 text: row.name
@@ -75,6 +76,7 @@ Item {
                 font.weight: Font.DemiBold
             }
             Text {
+                textFormat: Text.PlainText
                 visible: row.source !== "" && parent.width - nameText.width > 70
                 width: Math.max(0, parent.width - nameText.width - 8)
                 text: row.source
@@ -86,6 +88,7 @@ Item {
             }
         }
         Text {
+            textFormat: Text.PlainText
             width: parent.width
             text: row.description
             elide: Text.ElideRight

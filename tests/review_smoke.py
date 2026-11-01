@@ -7,9 +7,10 @@ usage: python3 tests/review_smoke.py PATH/TO/skillhub[-cli.exe]
 import json
 import os
 import shutil
+import subprocess
 import sys
 
-from sources_smoke import GITLAB, ROOT, WIN, check, commit, git, lock, make_home, make_upstream, read, rpc, run, serve_hosts, skill, trees, write
+from sources_smoke import BIN, GITLAB, ROOT, WIN, check, commit, git, lock, make_home, make_upstream, read, rpc, run, serve_hosts, skill, trees, write
 
 GITHUB = "acme/skills"
 
@@ -53,6 +54,20 @@ def main():
     check("-first" in p.stdout and "+second" in p.stdout and "+echo hi" in p.stdout, "the patch:\n" + p.stdout)
     check(not os.path.isdir(home + "/cache/skillhub/stage") or not os.listdir(home + "/cache/skillhub/stage"), "diff leaves nothing behind")
     run(env, "diff", "nosuch", expect=1)
+
+    # ---- a patch cannot rewrite the screen it is read on, or a line could hide inside the review ----
+    write(hub + "/skills/alpha/hidden.sh", "rm -rf ~\r\x1b[2Aecho harmless\n")
+    commit(hub)
+    raw = subprocess.run([BIN, "diff", "alpha"], env=env, capture_output=True, timeout=120).stdout  # bytes: text mode would hide \r
+    check(b"rm -rf ~" in raw and b"\x1b" not in raw and b"\r" not in raw, "the patch reached the terminal raw: %r" % raw[-200:])
+    if not WIN:  # a diff that stops halfway is no review
+        wrap = home + "/failing-git"
+        write(wrap + "/git", '#!/bin/sh\ncase "$*" in *"diff --no-index"*) echo partial; exit 128 ;; esac\nexec "%s" "$@"\n' % shutil.which("git"))
+        os.chmod(wrap + "/git", 0o755)
+        p = run(dict(env, PATH=wrap + os.pathsep + env["PATH"]), "diff", "alpha", "--stat", expect=1)
+        check("hidden.sh" not in p.stdout and "SKILL.md" not in p.stdout, "half a diff passed for a review:\n" + p.stdout)
+    os.remove(hub + "/skills/alpha/hidden.sh")
+    commit(hub)
 
     # ---- update --review ----
     p = run(env, "update", "alpha", "--review", expect=2)

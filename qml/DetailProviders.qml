@@ -32,8 +32,9 @@ Flickable {
             anchors.verticalCenter: parent.verticalCenter
             width: parent.width - 44 - (p.custom ? 110 : 76)
             spacing: 1
-            Text { width: parent.width; text: p.label + (p.custom ? "  (yours)" : ""); elide: Text.ElideRight; color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold }
+            Text { textFormat: Text.PlainText; width: parent.width; text: p.label + (p.custom ? "  (yours)" : ""); elide: Text.ElideRight; color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold }
             Text {
+                textFormat: Text.PlainText
                 width: parent.width
                 elide: Text.ElideRight
                 text: p.managed ? p.mechanism : p.detected ? "Found via " + p.detectedBy + ", switched off" : "Not found on this machine"
@@ -76,8 +77,9 @@ Flickable {
         Column {
             width: parent.width
             spacing: 10
-            Text { width: parent.width; text: "Agents"; color: Theme.text; font.family: Theme.display; font.pixelSize: Theme.fsHead; font.weight: Font.Bold }
+            Text { textFormat: Text.PlainText; width: parent.width; text: "Agents"; color: Theme.text; font.family: Theme.display; font.pixelSize: Theme.fsHead; font.weight: Font.Bold }
             Text {
+                textFormat: Text.PlainText
                 width: parent.width
                 wrapMode: Text.Wrap
                 text: "Skill Hub manages the coding agents it finds on this machine (" + app.agents.length + " now). Switch one on to link skills into it anyway, off to leave it alone, or add your own."
@@ -141,12 +143,14 @@ Flickable {
             Repeater { model: root.showAll || root.needle !== "" ? root.rest : []; delegate: AgentRow { required property var modelData; p: modelData } }
         }
         Text {
+            textFormat: Text.PlainText
             visible: root.managed.length + root.foundOff.length + root.rest.length === 0
             width: parent.width
             text: "No agent matches that search."
             color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsBody
         }
         Text {
+            textFormat: Text.PlainText
             width: parent.width
             wrapMode: Text.Wrap
             text: "The list of agents and where each keeps skills comes from the open-source registry of the skills CLI (vercel-labs/skills, MIT)."

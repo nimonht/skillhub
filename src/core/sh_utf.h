@@ -27,8 +27,9 @@ char *sh_trimmed(const char *s, size_t n);
 char *sh_simplified(const char *s, size_t n);
 bool sh_is_blank(const char *s);  // only spaces, or empty
 
-// removes in place what a terminal would act on: C0 controls except tab, DEL, and C1 controls. `s` is valid UTF-8.
-void sh_strip_controls(char *s);
+// a malloc'd copy of text from outside that a terminal only displays: valid UTF-8, without C0 controls (tab stays, newline on
+// request), DEL or C1 controls
+char *sh_printable(const char *s, bool keep_newlines);
 
 // Slugify for agent ids: lowercase, letters and digits kept, every other run becomes one '-', no '-' at the ends.
 // Like Qt, which looked at UTF-16 units, a character outside the Basic Multilingual Plane counts as a separator.

@@ -17,6 +17,7 @@ typedef struct {
     bool ok;
     sh_buf out;
     char *err;  // trimmed stderr, or why git could not run
+    int exit_code;  // -1 when it did not run to its end
 } sh_git_result;
 
 // git with the options every call gets. work_dir NULL: the current folder; timeout_ms 0: three minutes.

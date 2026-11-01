@@ -40,14 +40,26 @@
 
 // ---- output ----
 
+// fixed text, and `fetch` with its colours: the only output that may hold escape sequences
 static void out(const char *s) { fputs(s, stdout); }
+
+// Names, paths and patches come from repositories, so a terminal must not act on them: a review could hide what it shows.
+static char *printable(const char *fmt, va_list ap) {
+    sh_buf b = SH_BUF_INIT;
+    sh_buf_vprintf(&b, fmt, ap);
+    char *shown = sh_printable(sh_buf_str(&b), true);
+    sh_buf_free(&b);
+    return shown;
+}
 
 static void outf(const char *fmt, ...) SH_PRINTF(1, 2);
 static void outf(const char *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
-    vfprintf(stdout, fmt, ap);
+    char *shown = printable(fmt, ap);
     va_end(ap);
+    fputs(shown, stdout);
+    free(shown);
 }
 
 static void errf(const char *fmt, ...) SH_PRINTF(1, 2);
@@ -55,20 +67,24 @@ static void errf(const char *fmt, ...) {
     fflush(stdout);
     va_list ap;
     va_start(ap, fmt);
-    vfprintf(stderr, fmt, ap);
+    char *shown = printable(fmt, ap);
     va_end(ap);
+    fputs(shown, stderr);
+    free(shown);
     fflush(stderr);
 }
 
 // QString::leftJustified: pad with spaces to `width` UTF-16 units, never cut
 static void padded(const char *s, size_t width) {
-    out(s);
-    for (size_t n = sh_utf16_len(s); n < width; ++n) putchar(' ');
+    char *shown = sh_printable(s, false);
+    out(shown);
+    for (size_t n = sh_utf16_len(shown); n < width; ++n) putchar(' ');
+    free(shown);
 }
 
 static void log_line(void *user, const char *line) {
     (void)user;
-    char *shown = sh_strdup(line);
+    char *shown = sh_printable(line, false);
     puts(shown);
     fflush(stdout);
     free(shown);

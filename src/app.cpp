@@ -25,6 +25,7 @@
 #include <QJsonDocument>
 #include <QProcess>
 #include <QPalette>
+#include <QRegularExpression>
 #include <QSettings>
 #include <QStandardPaths>
 #include <QTextBlock>
@@ -1295,7 +1296,7 @@ QString AppController::renderMarkdown(const QString &markdown, bool dark) const 
     QFont base(QStringLiteral("Barlow Semi Condensed"));
     base.setPixelSize(14);
     doc.setDefaultFont(base);
-    doc.setMarkdown(markdown);
+    doc.setMarkdown(markdown, QTextDocument::MarkdownFeatures(QTextDocument::MarkdownDialectGitHub) | QTextDocument::MarkdownNoHTML);
 
     struct Span { int pos, len; QTextCharFormat fmt; };
     QVector<Span> spans;
@@ -1343,6 +1344,7 @@ QString AppController::renderMarkdown(const QString &markdown, bool dark) const 
         c.setBlockFormat(bf);
     }
     QString html = doc.toHtml();
+    html.remove(QRegularExpression(QStringLiteral("<img[^>]*>")));  // a repository wrote this: the window fetches nothing it names
     // keep only the body so the QML item's colour and font apply
     const int b0 = html.indexOf(QStringLiteral("<body"));
     const int b1 = html.indexOf(QLatin1Char('>'), b0);

@@ -24,6 +24,7 @@ AbstractButton {
     contentItem: Item {
         Icon { x: root.compact ? (parent.width - width) / 2 : 10; anchors.verticalCenter: parent.verticalCenter; name: app.inProject ? "branch" : "all"; size: 16; color: Theme.markText }
         Text {
+            textFormat: Text.PlainText
             visible: !root.compact
             x: 34
             width: parent.width - x - 28
@@ -62,8 +63,8 @@ AbstractButton {
                     x: 32
                     width: parent.width - x - 8
                     anchors.verticalCenter: parent.verticalCenter
-                    Text { width: parent.width; elide: Text.ElideRight; text: choice.text; color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsBody }
-                    Text { visible: choice.detail !== ""; width: parent.width; elide: Text.ElideMiddle; text: choice.detail; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
+                    Text { textFormat: Text.PlainText; width: parent.width; elide: Text.ElideRight; text: choice.text; color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsBody }
+                    Text { textFormat: Text.PlainText; visible: choice.detail !== ""; width: parent.width; elide: Text.ElideMiddle; text: choice.detail; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
                 }
             }
         }

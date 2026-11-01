@@ -47,6 +47,7 @@ Rectangle {
         contentItem: Item {
             Icon { x: root.compact ? (parent.width - width) / 2 : 12; anchors.verticalCenter: parent.verticalCenter; name: item.iconName; size: 17; color: item.on ? Theme.markText : Theme.text2 }
             Text {
+                textFormat: Text.PlainText
                 visible: !root.compact
                 x: 40
                 anchors.verticalCenter: parent.verticalCenter
@@ -95,6 +96,7 @@ Rectangle {
             height: 64
             Logo { x: root.compact ? (parent.width - width) / 2 : 4; anchors.verticalCenter: parent.verticalCenter; size: 34 }
             Text {
+                textFormat: Text.PlainText
                 visible: !root.compact
                 x: 48
                 anchors.verticalCenter: parent.verticalCenter

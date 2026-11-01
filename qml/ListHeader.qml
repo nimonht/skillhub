@@ -33,6 +33,7 @@ Item {
             leftPadding: 2
             anchors.verticalCenter: parent.verticalCenter
             Text {
+                textFormat: Text.PlainText
                 text: cell.text
                 color: cell.active ? Theme.text : Theme.text2
                 font.family: Theme.ui
@@ -58,6 +59,7 @@ Item {
     Cell { text: root.tight ? "" : "Status"; sortKey: "status"; x: root.statusX; width: root.tight ? 40 : Theme.statusW; Accessible.name: "Sort by status" }
     Rectangle { visible: app.columnCount > 0; x: root.portsX - 1; y: 8; width: 1; height: root.height - 16; color: Theme.line }
     Text {
+        textFormat: Text.PlainText
         visible: app.columnCount > 0
         x: root.portsX
         width: app.columnCount * app.portW

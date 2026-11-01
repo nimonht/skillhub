@@ -46,6 +46,7 @@ Rectangle {
     }
 
     Text {
+        textFormat: Text.PlainText
         visible: !root.hasIcon
         anchors.centerIn: parent
         text: root.text

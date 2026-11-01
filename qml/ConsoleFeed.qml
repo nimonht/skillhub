@@ -39,6 +39,7 @@ Rectangle {
                 NumText { text: line.time; width: 62; color: Theme.text3; font.family: Theme.ui; font.pixelSize: Theme.fsSmall; anchors.verticalCenter: parent.verticalCenter }
                 Icon { visible: line.level !== "info"; name: "alert"; size: 14; color: line.level === "error" ? Theme.dangerText : Theme.notifyText; anchors.verticalCenter: parent.verticalCenter }
                 Text {
+                    textFormat: Text.PlainText
                     text: line.text
                     width: list.width - 130 - (line.level !== "info" ? 24 : 0)
                     elide: Text.ElideMiddle
@@ -50,6 +51,7 @@ Rectangle {
             }
         }
         Text {
+            textFormat: Text.PlainText
             visible: list.count === 0
             anchors.centerIn: parent
             text: "Nothing has run yet. Clones, links and updates will be listed here."

@@ -22,7 +22,7 @@ Flickable {
     component Step: Row {
         property string label
         spacing: 8
-        Text { text: label; color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold }
+        Text { textFormat: Text.PlainText; text: label; color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold }
     }
 
     Column {
@@ -35,8 +35,9 @@ Flickable {
         Column {
             width: parent.width
             spacing: 10
-            Text { width: parent.width; text: "Transfer"; color: Theme.text; font.family: Theme.display; font.pixelSize: Theme.fsHead; font.weight: Font.Bold }
+            Text { textFormat: Text.PlainText; width: parent.width; text: "Transfer"; color: Theme.text; font.family: Theme.display; font.pixelSize: Theme.fsHead; font.weight: Font.Bold }
             Text {
+                textFormat: Text.PlainText
                 width: parent.width
                 wrapMode: Text.Wrap
                 text: "Take your whole skill set to another computer. Export writes one file; import on the other machine installs every skill from it: GitHub skills are downloaded again, local skills come out of the file."
@@ -50,6 +51,7 @@ Flickable {
             spacing: 10
             SectionLabel { width: parent.width; text: "Export"; trailing: app.exportInfo.tracked + app.exportInfo.local + " skills" }
             Text {
+                textFormat: Text.PlainText
                 width: parent.width
                 wrapMode: Text.Wrap
                 text: app.exportInfo.tracked + " come from GitHub (only their source is saved) and " + app.exportInfo.local + " are local."
@@ -69,6 +71,7 @@ Flickable {
                 Btn { visible: root.dialogsOk; kind: "ghost"; iconName: "folder"; text: "Choose location"; onClicked: dialogs.item.saveFile("skillhub-skills.json") }
             }
             Text {
+                textFormat: Text.PlainText
                 visible: root.includeLocal && app.exportInfo.local > 0
                 width: parent.width
                 wrapMode: Text.Wrap
@@ -83,6 +86,7 @@ Flickable {
             spacing: 10
             SectionLabel { width: parent.width; text: "Import" }
             Text {
+                textFormat: Text.PlainText
                 width: parent.width
                 wrapMode: Text.Wrap
                 text: "Choose an export file, or drop one on this window. You see what it contains before anything is installed."
@@ -94,7 +98,7 @@ Flickable {
                 Btn { visible: root.dialogsOk; kind: "primary"; iconName: "folder"; text: "Choose file"; onClicked: dialogs.item.openFile() }
                 Btn { kind: root.dialogsOk ? "secondary" : "primary"; iconName: "search"; text: "Read file"; enabled: importPath.text.trim() !== "" && !app.busy; onClicked: app.importPreview(importPath.text) }
             }
-            Text { visible: app.importError !== ""; width: parent.width; wrapMode: Text.Wrap; text: app.importError; color: Theme.dangerText; font.family: Theme.ui; font.pixelSize: Theme.fsBody }
+            Text { textFormat: Text.PlainText; visible: app.importError !== ""; width: parent.width; wrapMode: Text.Wrap; text: app.importError; color: Theme.dangerText; font.family: Theme.ui; font.pixelSize: Theme.fsBody }
         }
 
         // ---- preview
@@ -144,8 +148,9 @@ Flickable {
                             width: parent.width - 42 - 8
                             anchors.verticalCenter: parent.verticalCenter
                             spacing: 2
-                            Text { width: parent.width; text: modelData.name; elide: Text.ElideRight; color: modelData.installable ? Theme.text : Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold }
+                            Text { textFormat: Text.PlainText; width: parent.width; text: modelData.name; elide: Text.ElideRight; color: modelData.installable ? Theme.text : Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold }
                             Text {
+                                textFormat: Text.PlainText
                                 width: parent.width
                                 elide: Text.ElideRight
                                 text: modelData.problem !== "" ? "Rejected: " + modelData.problem
@@ -161,6 +166,7 @@ Flickable {
                 }
             }
             Text {
+                textFormat: Text.PlainText
                 width: parent.width
                 wrapMode: Text.Wrap
                 text: "Skills are instructions your agents follow with your permissions: install only files you trust. GitHub skills arrive at their latest version, not necessarily the one on the other machine."

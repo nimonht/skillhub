@@ -16,8 +16,8 @@ Item {
     implicitWidth: 280
     implicitHeight: 48
 
-    Text { text: root.label; color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsBody }
-    Text { anchors.right: parent.right; text: root.shown; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
+    Text { textFormat: Text.PlainText; text: root.label; color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsBody }
+    Text { textFormat: Text.PlainText; anchors.right: parent.right; text: root.shown; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
     Slider {
         id: s
         anchors.left: parent.left

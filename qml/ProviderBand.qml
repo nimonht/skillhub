@@ -40,9 +40,9 @@ Item {
             Row {
                 spacing: 6
                 NumText { text: app.skillCount; color: Theme.text; font.family: Theme.display; font.pixelSize: Theme.fsHead }
-                Text { text: app.skillCount === 1 ? "skill" : "skills"; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsBody; anchors.baseline: parent.children[0].baseline }
+                Text { textFormat: Text.PlainText; text: app.skillCount === 1 ? "skill" : "skills"; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsBody; anchors.baseline: parent.children[0].baseline }
             }
-            Text { text: app.centralPath; width: parent.width; elide: Text.ElideMiddle; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
+            Text { textFormat: Text.PlainText; text: app.centralPath; width: parent.width; elide: Text.ElideMiddle; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
         }
         MouseArea { id: hubMouse; anchors.fill: parent; hoverEnabled: !app.noHover; cursorShape: Qt.PointingHandCursor; onClicked: app.openFolder() }
     }
@@ -55,8 +55,8 @@ Item {
         y: 30
         width: Math.max(0, root.width - root.hubW - 20 - 20 - 28)
         spacing: 8
-        Text { width: parent.width; text: "No coding agent found"; color: Theme.text; font.family: Theme.display; font.pixelSize: Theme.fsTitle; font.weight: Font.Bold; horizontalAlignment: Text.AlignRight }
-        Text { width: parent.width; text: "Skill Hub looks for the agents it knows. Switch one on, or add your own."; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap; horizontalAlignment: Text.AlignRight }
+        Text { textFormat: Text.PlainText; width: parent.width; text: "No coding agent found"; color: Theme.text; font.family: Theme.display; font.pixelSize: Theme.fsTitle; font.weight: Font.Bold; horizontalAlignment: Text.AlignRight }
+        Text { textFormat: Text.PlainText; width: parent.width; text: "Skill Hub looks for the agents it knows. Switch one on, or add your own."; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap; horizontalAlignment: Text.AlignRight }
         Btn { anchors.right: parent.right; kind: "secondary"; compact: true; iconName: "sliders"; text: "Manage agents"; onClicked: app.detailMode = "providers" }
     }
 
@@ -90,6 +90,7 @@ Item {
             }
             AgentTile { x: (parent.width - width) / 2; y: 22; text: col.a.monogram; icon: col.a.icon; tone: !col.a.detected ? "off" : col.a.health; selected: col.focused }
             Text {
+                textFormat: Text.PlainText
                 y: 64
                 width: parent.width - 4
                 x: 2
@@ -138,8 +139,9 @@ Item {
         Keys.onSpacePressed: app.detailMode = "providers"
         Rectangle { anchors.fill: parent; anchors.margins: 2; visible: moreMouse.containsMouse; color: Theme.bg3; opacity: 0.55 }
         AgentTile { x: (parent.width - width) / 2; y: 22; text: "+" + app.hiddenCount; tone: more.issue ? "issue" : "ok" }
-        Text { y: 64; width: parent.width; horizontalAlignment: Text.AlignHCenter; text: "more"; color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
+        Text { textFormat: Text.PlainText; y: 64; width: parent.width; horizontalAlignment: Text.AlignHCenter; text: "more"; color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
         Text {
+            textFormat: Text.PlainText
             y: 82
             width: parent.width
             horizontalAlignment: Text.AlignHCenter

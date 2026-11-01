@@ -170,15 +170,17 @@ int sh_casecmp(const char *a, const char *b) {
     return strcmp(a, b);
 }
 
-void sh_strip_controls(char *s) {
-    char *to = s;
-    for (const char *p = s; *p; ++p) {
-        const unsigned char c = (unsigned char)*p, next = (unsigned char)p[1];
-        if (c == 0xC2 && next >= 0x80 && next <= 0x9F) {
-            ++p;
-            continue;
-        }
-        if ((c >= 0x20 && c != 0x7F) || c == '\t') *to++ = *p;
+char *sh_printable(const char *s, bool keep_newlines) {
+    char *clean = sh_utf8_clean(s, strlen(s));  // first: dropping a byte must not be able to complete a character
+    const char *end = clean + strlen(clean), *p = clean;
+    char *to = clean;
+    while (p < end) {
+        const char *at = p;
+        const uint32_t c = sh_utf8_next(&p, end);
+        if ((c < 0x20 || (c >= 0x7F && c <= 0x9F)) && c != '\t' && !(keep_newlines && c == '\n')) continue;
+        memmove(to, at, (size_t)(p - at));
+        to += p - at;
     }
     *to = '\0';
+    return clean;
 }

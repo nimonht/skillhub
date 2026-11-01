@@ -29,8 +29,9 @@ Item {
         x: 24; y: 24
         width: root.width - 48
         spacing: 12
-        Text { width: parent.width; text: "Add skills"; color: Theme.text; font.family: Theme.display; font.pixelSize: Theme.fsHead; font.weight: Font.Bold }
+        Text { textFormat: Text.PlainText; width: parent.width; text: "Add skills"; color: Theme.text; font.family: Theme.display; font.pixelSize: Theme.fsHead; font.weight: Font.Bold }
         Text {
+            textFormat: Text.PlainText
             width: parent.width
             wrapMode: Text.Wrap
             text: "Name a repository or a folder. Skill Hub lists every SKILL.md in it; you choose which ones to install into the shared folder."
@@ -51,6 +52,7 @@ Item {
             Btn { kind: "ghost"; text: "Close"; onClicked: app.closeAdd() }
         }
         Text {
+            textFormat: Text.PlainText
             visible: app.candidateError !== ""
             width: parent.width
             wrapMode: Text.Wrap
@@ -146,8 +148,8 @@ Item {
                         width: parent.width - 58 - 24 - (installed.visible ? 80 : 0)
                         anchors.verticalCenter: parent.verticalCenter
                         spacing: 2
-                        Text { width: parent.width; text: cand.modelData.name; elide: Text.ElideRight; color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold }
-                        Text { width: parent.width; text: cand.modelData.description; elide: Text.ElideRight; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
+                        Text { textFormat: Text.PlainText; width: parent.width; text: cand.modelData.name; elide: Text.ElideRight; color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold }
+                        Text { textFormat: Text.PlainText; width: parent.width; text: cand.modelData.description; elide: Text.ElideRight; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
                     }
                     Tag { id: installed; visible: cand.modelData.installed; kind: "current"; label: "Installed"; anchors.right: parent.right; anchors.rightMargin: 24; anchors.verticalCenter: parent.verticalCenter }
                 }

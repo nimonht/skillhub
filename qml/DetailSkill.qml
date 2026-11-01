@@ -31,7 +31,7 @@ Flickable {
         visible: value !== ""
         spacing: 10
         width: parent ? parent.width : 300
-        Text { text: parent.label; width: 76; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall; topPadding: 1 }
+        Text { textFormat: Text.PlainText; text: parent.label; width: 76; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall; topPadding: 1 }
         NumText {
             text: parent.value
             width: parent.width - 86
@@ -54,6 +54,7 @@ Flickable {
             width: parent.width
             spacing: 8
             Text {
+                textFormat: Text.PlainText
                 width: parent.width
                 text: root.d.name
                 wrapMode: Text.WrapAnywhere
@@ -66,6 +67,7 @@ Flickable {
                 spacing: 8
                 Tag { kind: root.d.state }
                 Text {
+                    textFormat: Text.PlainText
                     visible: root.d.state === "error" && root.d.note !== ""
                     text: root.d.note
                     color: Theme.dangerText
@@ -75,6 +77,7 @@ Flickable {
                 }
             }
             Text {
+                textFormat: Text.PlainText
                 id: desc
                 width: parent.width
                 text: root.d.description
@@ -132,6 +135,7 @@ Flickable {
                 onAccepted: if (text !== "") { app.trackSkill(root.d.name, text); root.editSource = false }
             }
             Text {
+                textFormat: Text.PlainText
                 width: parent.width
                 wrapMode: Text.Wrap
                 text: "The skill folder is matched by name inside that repository. Nothing changes until you update."
@@ -155,6 +159,7 @@ Flickable {
                 width: parent.width - 28
                 spacing: 10
                 Text {
+                    textFormat: Text.PlainText
                     width: parent.width
                     wrapMode: Text.Wrap
                     text: "Move " + root.d.name + " to the backup folder and unlink it from every agent? You can restore it from ~/.agents/.backup."
@@ -180,8 +185,9 @@ Flickable {
                     width: parent.width
                     height: 32
                     PortDot { id: dot; link: modelData.state; agentLabel: modelData.label; anchors.verticalCenter: parent.verticalCenter }
-                    Text { x: 32; text: modelData.label; width: 110; elide: Text.ElideRight; color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsBody; anchors.verticalCenter: parent.verticalCenter }
+                    Text { textFormat: Text.PlainText; x: 32; text: modelData.label; width: 110; elide: Text.ElideRight; color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsBody; anchors.verticalCenter: parent.verticalCenter }
                     Text {
+                        textFormat: Text.PlainText
                         x: 152
                         width: parent.width - x - agentSwitch.width
                         elide: Text.ElideRight
@@ -224,8 +230,9 @@ Flickable {
                     x: 32
                     width: parent.width - x - sharedSwitch.width
                     anchors.verticalCenter: parent.verticalCenter
-                    Text { width: parent.width; elide: Text.ElideRight; text: "Shared-folder readers (" + parent.parent.readers.length + ")"; color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsBody }
+                    Text { textFormat: Text.PlainText; width: parent.width; elide: Text.ElideRight; text: "Shared-folder readers (" + parent.parent.readers.length + ")"; color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsBody }
                     Text {
+                        textFormat: Text.PlainText
                         width: parent.width
                         elide: Text.ElideRight
                         text: root.d.parked ? "turned off, the skill is parked" : parent.parent.readers.map(function (l) { return l.label }).join(", ")
@@ -248,6 +255,7 @@ Flickable {
         }
 
         Text {
+            textFormat: Text.PlainText
             visible: app.inProject
             width: parent.width
             wrapMode: Text.Wrap
@@ -267,6 +275,7 @@ Flickable {
                 spacing: 8
                 Icon { name: "clock"; size: 16; color: Theme.notifyText; anchors.verticalCenter: parent.verticalCenter }
                 Text {
+                    textFormat: Text.PlainText
                     width: parent.width - 24 - holdOff.width
                     anchors.verticalCenter: parent.verticalCenter
                     wrapMode: Text.Wrap
@@ -291,7 +300,7 @@ Flickable {
                         width: parent.width - back.width - 8
                         anchors.verticalCenter: parent.verticalCenter
                         NumText { width: parent.width; text: modelData.when; color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
-                        Text { width: parent.width; text: modelData.label; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
+                        Text { textFormat: Text.PlainText; width: parent.width; text: modelData.label; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
                     }
                     Btn { id: back; kind: "ghost"; compact: true; iconName: "refresh"; text: "Roll back"; enabled: !app.busy; onClicked: app.rollback(root.d.name, modelData.stamp) }
                 }

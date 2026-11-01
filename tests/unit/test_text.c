@@ -42,9 +42,17 @@ static void hashes(void) {
 }
 
 static void controls(void) {
-    char text[] = "a\x1b[2Jb\tc\x07\x7f\xc2\x9b" "31md\xc3\xa9";  // ESC, BEL, DEL, the 8-bit CSI; tab and letters stay
-    sh_strip_controls(text);
-    CHECK_EQ_STR(text, "a[2Jb\tc31md\xc3\xa9");
+    // ESC, BEL, CR, DEL and the 8-bit CSI go; tab and letters stay
+    CHECK_STR(sh_printable("a\x1b[2Jb\tc\x07\r\x7f\xc2\x9b" "31md\xc3\xa9", false), "a[2Jb\tc31md\xc3\xa9");
+    CHECK_STR(sh_printable("one\ntwo", false), "onetwo");
+    CHECK_STR(sh_printable("one\ntwo\r\n", true), "one\ntwo\n");
+    // removing the ESC must not join what is around it into an 8-bit CSI, and a lone 0x9B is no text at all
+    char *joined = sh_printable("\xc2\x1b\x9b[2J", false);
+    CHECK(!strstr(joined, "\xc2\x9b") && !strchr(joined, 0x1b));
+    free(joined);
+    char *lone = sh_printable("x\x9by", false);
+    CHECK(!strstr(lone, "\xc2\x9b") && lone[0] == 'x');
+    free(lone);
 }
 
 static void base64(void) {

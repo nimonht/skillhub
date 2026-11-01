@@ -41,6 +41,7 @@ Item {
                     anchors.centerIn: parent
                     Icon { visible: seg.modelData.icon !== undefined; name: seg.modelData.icon || ""; size: 14; color: seg.on ? Theme.markText : Theme.text2; anchors.verticalCenter: parent.verticalCenter }
                     Text {
+                        textFormat: Text.PlainText
                         text: seg.modelData.label
                         color: seg.on ? Theme.text : Theme.text2
                         font.family: Theme.ui

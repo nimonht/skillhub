@@ -13,6 +13,7 @@ Item {
 
     Rectangle { x: 0; anchors.verticalCenter: parent.verticalCenter; width: 3; height: 14; color: Theme.mark }
     Text {
+        textFormat: Text.PlainText
         x: 12
         anchors.verticalCenter: parent.verticalCenter
         text: root.text
