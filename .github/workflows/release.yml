@@ -177,11 +177,14 @@ jobs:
           if (Test-Path "$dir\skillhub.exe") { throw "uninstall left the program behind" }
       - name: Updating over an installed copy brings the window back
         shell: pwsh
+        timeout-minutes: 10
         run: |
           $dir = Join-Path $env:RUNNER_TEMP "skillhub-updated"
           $setup = "dist/SkillHub-$env:VERSION-windows-x64-setup.exe"
           Start-Process -Wait -FilePath $setup -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/DIR=$dir"
-          Start-Process -Wait -FilePath $setup -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/CLOSEAPPLICATIONS","/FORCECLOSEAPPLICATIONS","/RELAUNCH=1"
+          # not -Wait: that also waits for what the installer starts, and the window it starts stays open
+          $update = Start-Process -PassThru -FilePath $setup -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/CLOSEAPPLICATIONS","/FORCECLOSEAPPLICATIONS","/RELAUNCH=1"
+          $update.WaitForExit()
           $window = $null
           foreach ($i in 1..60) {
             $window = Get-Process skillhub -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$dir*" }
