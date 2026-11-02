@@ -175,19 +175,30 @@ jobs:
           & "$dir\skillhub-cli.exe" --version
           Start-Process -Wait -FilePath "$dir\unins000.exe" -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES"
           if (Test-Path "$dir\skillhub.exe") { throw "uninstall left the program behind" }
-      - name: Updating over an installed copy brings the window back
+      - name: Updating over a running copy, started the way the program starts the installer
         shell: pwsh
         timeout-minutes: 10
         run: |
           $dir = Join-Path $env:RUNNER_TEMP "skillhub-updated"
-          $setup = "dist/SkillHub-$env:VERSION-windows-x64-setup.exe"
+          $setup = (Resolve-Path "dist/SkillHub-$env:VERSION-windows-x64-setup.exe").Path
           Start-Process -Wait -FilePath $setup -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/DIR=$dir"
-          # not -Wait: that also waits for what the installer starts, and the window it starts stays open
-          $update = Start-Process -PassThru -FilePath $setup -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/CLOSEAPPLICATIONS","/FORCECLOSEAPPLICATIONS","/RELAUNCH=1"
+          $old = Start-Process -PassThru -FilePath "$dir\skillhub.exe"
+          $oldId = $old.Id
+          Start-Sleep -Seconds 5
+          if ($old.HasExited) { throw "the installed window did not stay up" }
+          # CreateProcess, as QProcess::startDetached and sh_proc_detach do, not ShellExecute, which is what Start-Process uses; and the
+          # flags of sh_update_install. Not -Wait either: that also waits for the window the installer starts, which stays open.
+          $info = New-Object System.Diagnostics.ProcessStartInfo
+          $info.FileName = $setup
+          $info.Arguments = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /FORCECLOSEAPPLICATIONS /RELAUNCH=1"
+          $info.UseShellExecute = $false
+          $update = [System.Diagnostics.Process]::Start($info)
           $update.WaitForExit()
+          if ($update.ExitCode -ne 0) { throw "the installer ended with $($update.ExitCode)" }
+          if (Get-Process -Id $oldId -ErrorAction SilentlyContinue) { throw "the old window is still running" }
           $window = $null
           foreach ($i in 1..60) {
-            $window = Get-Process skillhub -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$dir*" }
+            $window = Get-Process skillhub -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$dir*" -and $_.Id -ne $oldId }
             if ($window) { break }
             Start-Sleep -Seconds 1
           }
