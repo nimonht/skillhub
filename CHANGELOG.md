@@ -1,6 +1,8 @@
 # Changelog
 
-## 2.0.0 - unreleased
+## 2.0.0-beta1 - 2026-11-02
+
+A beta: the first public build of 2.0. Please report what breaks. It installs over 1.x, and the final 2.0.0 installs over it.
 
 The core is now C, and the window talks to it over a pipe. `skillhub list` peaks under 4 MB instead of 35, and 10,000 skills install in
 5 s, check in under 2 s and update in under 3 s, with the window staying responsive throughout.

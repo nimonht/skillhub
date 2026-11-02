@@ -93,7 +93,7 @@ jobs:
       - name: Disk image
         id: dmg
         run: |
-          V=$(sed -n 's/^project(skillhub VERSION \([0-9][0-9.]*\).*/\1/p' CMakeLists.txt)
+          V=$(sed -n 's/^project(skillhub VERSION \([0-9][0-9.]*\).*/\1/p' CMakeLists.txt)$(sed -n 's/^set(SKILLHUB_VERSION_SUFFIX "\([^"]*\)".*/\1/p' CMakeLists.txt)
           echo "version=$V" >> "$GITHUB_OUTPUT"
           echo "bin=$(packaging/macos/make-dmg.sh build "$V" | tail -1)" >> "$GITHUB_OUTPUT"
           ls -la dist
@@ -132,7 +132,7 @@ jobs:
       - name: Deploy Qt next to the program
         shell: bash
         run: |
-          V=$(sed -n 's/^project(skillhub VERSION \([0-9][0-9.]*\).*/\1/p' CMakeLists.txt)
+          V=$(sed -n 's/^project(skillhub VERSION \([0-9][0-9.]*\).*/\1/p' CMakeLists.txt)$(sed -n 's/^set(SKILLHUB_VERSION_SUFFIX "\([^"]*\)".*/\1/p' CMakeLists.txt)
           echo "VERSION=$V" >> "$GITHUB_ENV"
           D=dist/SkillHub
           mkdir -p "$D"
@@ -193,13 +193,22 @@ jobs:
           path: artifacts
           pattern: "{deb-*,rpm-*,macos-dmg,windows}"
           merge-multiple: true
-      - name: The tag and every file name the same version, with no suffix
+      - name: The tag and every file name the same version
         run: sh packaging/check-version.sh "${GITHUB_REF_NAME#v}"
+      # GitHub rewrites the ~ of a Debian or Fedora pre-release in a file name, and SHA256SUMS must name what people download.
+      - name: File names without a tilde
+        run: |
+          cd artifacts
+          for f in *~*; do
+            [ -e "$f" ] && mv "$f" "$(echo "$f" | tr '~' '-')"
+          done
+          ls -la
       - name: Checksums and release notes
         run: |
           cd artifacts && sha256sum * > SHA256SUMS && cat SHA256SUMS && cd ..
           V="${GITHUB_REF_NAME#v}"
           awk -v v="$V" '$0 ~ "^## "v" " {on=1; next} /^## / {on=0} on' CHANGELOG.md > notes.md
+          test -s notes.md
           cat >> notes.md <<'NOTES'
 
           ### Downloads
@@ -219,4 +228,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" --title "Skill Hub ${GITHUB_REF_NAME#v}" --notes-file notes.md artifacts/*
+          # a tag with a hyphen is a pre-release, and the Latest link keeps pointing at the last final one
+          case "$GITHUB_REF_NAME" in
+            *-*) pre=--prerelease ;;
+            *) pre= ;;
+          esac
+          gh release create "$GITHUB_REF_NAME" $pre --title "Skill Hub ${GITHUB_REF_NAME#v}" --notes-file notes.md artifacts/*

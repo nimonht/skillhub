@@ -29,7 +29,8 @@ through `-DCMAKE_C_FLAGS=-fsanitize=thread -DCMAKE_EXE_LINKER_FLAGS=-fsanitize=t
 parser of untrusted input (`-DSKILLHUB_FUZZ=ON`, see `tests/fuzz`). CI runs the test suites under ASan, UBSan and ThreadSanitizer.
 `tools/demo-screenshots.sh` remakes the README pictures from a demo home; it is optional, and only worth running when the window
 changes. `tools/gen-unicode.py` and `tools/make-icns.py` regenerate checked-in files. `packaging/check-version.sh` checks that every
-file names the same version: change them all together.
+file names the same version: change them all together. A beta is `-beta1` in `CMakeLists.txt` and `CHANGELOG.md`, `2.0.0~beta1` in the Debian,
+Fedora and AppStream files so that it sorts before 2.0.0, and `2.0.0beta1` in the PKGBUILD. A tag with a hyphen is published as a pre-release.
 
 Look at the UI without a display: `QT_QPA_PLATFORM=offscreen build/skillhub gui --shot out.png --theme light --size 1000x640
 --select NAME` (also `--agent ID`, `--mode add|review|settings|terminal|onboarding`, `--section NAME`, `--step N`, `--coach N`,
