@@ -8,6 +8,13 @@ if(APPLE AND NOT CMAKE_OSX_DEPLOYMENT_TARGET)
     set(CMAKE_OSX_DEPLOYMENT_TARGET 12.0 CACHE STRING "Oldest macOS the program runs on")
 endif()
 
+# Release unless told otherwise. This must stay above project(): for MSVC, project() fills an empty build type with Debug on
+# NMake and Ninja, and a Debug program needs Qt's debug DLLs and the debug C runtime, which no user has.
+get_property(_skillhub_multi_config GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+if(NOT CMAKE_BUILD_TYPE AND NOT _skillhub_multi_config)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+endif()
+
 project(skillhub VERSION 2.0.0
         DESCRIPTION "One skills folder for every coding agent"
         HOMEPAGE_URL "https://github.com/nimonht/skillhub"
@@ -32,10 +39,6 @@ if(UNIX AND NOT APPLE AND CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
     set(CMAKE_INSTALL_PREFIX "$ENV{HOME}/.local" CACHE PATH "Install prefix" FORCE)
 endif()
 include(GNUInstallDirs)
-
-if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
-    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
-endif()
 
 set(CMAKE_C_STANDARD 17)
 set(CMAKE_C_STANDARD_REQUIRED ON)

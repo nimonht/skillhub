@@ -86,7 +86,7 @@ jobs:
           cache: true
       - name: Build
         run: |
-          cmake -B build -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR" -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64"
+          cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR" -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64"
           cmake --build build -j"$(sysctl -n hw.ncpu)"
           lipo -archs build/skillhub-gui.app/Contents/MacOS/skillhub-gui
           lipo -archs build/skillhub-gui.app/Contents/MacOS/skillhub
@@ -99,6 +99,9 @@ jobs:
           ls -la dist
       - name: The deployed app runs (CLI, then the window with its bundled Qt)
         run: |
+          # the runner's Qt is on PATH and in QT_PLUGIN_PATH, where a broken deployment would find what it lacks; the cache step wants it back
+          mv "$QT_ROOT_DIR" "$QT_ROOT_DIR.hidden"
+          trap 'mv "$QT_ROOT_DIR.hidden" "$QT_ROOT_DIR"' EXIT
           "${{ steps.dmg.outputs.bin }}" --version
           python3 tests/portable_smoke.py "${{ steps.dmg.outputs.bin }}"
           SKILLHUB_TEST_PLATFORM=cocoa python3 tests/gui_launch.py "${{ steps.dmg.outputs.bin }}" "$RUNNER_TEMP/screens"
@@ -127,7 +130,7 @@ jobs:
       - name: Build
         shell: cmd
         run: |
-          cmake -B build -G "NMake Makefiles" -DCMAKE_PREFIX_PATH="%QT_ROOT_DIR%"
+          cmake -B build -G "NMake Makefiles" -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="%QT_ROOT_DIR%"
           cmake --build build
       - name: Deploy Qt next to the program
         shell: bash
@@ -146,6 +149,11 @@ jobs:
       - name: The deployed program runs (CLI, then the window with its bundled Qt)
         shell: bash
         run: |
+          # the runner has Visual Studio's debug runtime, so starting the program cannot show that the folder is complete: read its imports
+          python3 tests/deployed_imports.py dist/SkillHub
+          # the runner's Qt is on PATH and in QT_PLUGIN_PATH, where a broken deployment would find what it lacks; the cache step wants it back
+          mv "$QT_ROOT_DIR" "$QT_ROOT_DIR.hidden"
+          trap 'mv "$QT_ROOT_DIR.hidden" "$QT_ROOT_DIR"' EXIT
           dist/SkillHub/skillhub-cli.exe --version
           python3 tests/portable_smoke.py dist/SkillHub/skillhub-cli.exe
           SKILLHUB_NO_SYMLINKS=1 python3 tests/portable_smoke.py dist/SkillHub/skillhub-cli.exe

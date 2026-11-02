@@ -223,6 +223,9 @@ jobs:
           cmake -B build -G Ninja -DCMAKE_PREFIX_PATH="%QT_ROOT_DIR%" -DSKILLHUB_WERROR=ON
           cmake --build build -- -k 0
           dir build\*.exe
+      - name: A build that names no build type is a Release build
+        shell: bash
+        run: grep -q '^CMAKE_BUILD_TYPE:STRING=Release' build/CMakeCache.txt
       - name: Version
         run: ./build/skillhub-cli.exe --version
         shell: bash
