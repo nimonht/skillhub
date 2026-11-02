@@ -318,7 +318,8 @@ Everything that both the command line and the window need. Missing keys mean the
     "backupsKept": 3,
     "reviewBeforeUpdate": true,
     "autoSkipScripts": true,
-    "checkAtLaunch": true
+    "checkAtLaunch": true,
+    "appCheck": true
   },
   "storage": { "cacheMaxMB": 1024, "backupDays": 90 },
   "projects": { "roots": [] }
@@ -327,6 +328,7 @@ Everything that both the command line and the window need. Missing keys mean the
 
 - `appearance.theme`: `system`, `dark` or `light`. `accent.source`: `default` (mint), `system`, `preset` or `custom`;
   `color` is the chosen `#RRGGBB`. `material`: `solid`, `blur` or `glass`. `density`: `comfortable` or `compact`.
+- `updates.appCheck`: the window looks for a new version of Skill Hub itself. `updates.checkAtLaunch` is about skills.
 - `updates.parallel` and `updates.parallelPerHost` limit git fetches (each can use tens of MB);
   `updates.parallelChecksPerHost` limits the lightweight `ls-remote` checks, which are bound by network round trips.
 - `terminal.shell` and `terminal.external` are empty for "detect". `importLook` is `kitty`, `ghostty`, `alacritty` or

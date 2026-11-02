@@ -1105,6 +1105,21 @@ void AppController::jobDone(const QJsonObject &done) {
     const QJsonArray results = done.value(QStringLiteral("results")).toArray();
     const QString error = done.value(QStringLiteral("error")).toString();
     QString msg, level = QStringLiteral("ok");
+    if (kind == QLatin1String("selfUpdate")) {
+        const QStringList then = done.value(QStringLiteral("then")).toVariant().toStringList();
+        if (!error.isEmpty() || then.isEmpty()) {
+            emit toast(QStringLiteral("error"), error.isEmpty() ? tr("Skill Hub could not start the new version") : error);
+            return;
+        }
+        core_.stop();  // the installer replaces the program that runs as the backend, too
+        if (!QProcess::startDetached(then.first(), then.mid(1))) {
+            core_.restart();
+            emit toast(QStringLiteral("error"), tr("Skill Hub could not start %1").arg(then.first()));
+            return;
+        }
+        QCoreApplication::quit();
+        return;
+    }
     if (kind == QLatin1String("check") || kind == QLatin1String("check-quiet")) {
         const int avail = sum.value(QStringLiteral("available")).toInt();
         if (avail) {
@@ -1243,6 +1258,27 @@ void AppController::checkUpdates() { startJob(QStringLiteral("skills.check"), {}
 void AppController::checkUpdatesQuietly() {
     if (!setting(QStringLiteral("updates"), QStringLiteral("checkAtLaunch"), true).toBool()) return;
     startJob(QStringLiteral("skills.check"), {}, tr("Checking upstream"), QStringLiteral("check-quiet"), false);
+}
+
+void AppController::checkAppUpdate(bool asked) {
+    if (!asked && !setting(QStringLiteral("updates"), QStringLiteral("appCheck"), true).toBool()) return;
+    core_.call(QStringLiteral("app.checkUpdate"), {}, [this, asked](const CoreReply &r) {
+        if (!r.ok()) {
+            if (asked) emit toast(QStringLiteral("error"), r.message());
+            return;
+        }
+        appUpdate_ = r.result.toObject().toVariantMap();
+        emit appUpdateChanged();
+        if (asked && !appUpdate_.value(QStringLiteral("available")).toBool()) emit toast(QStringLiteral("ok"), tr("Skill Hub %1 is the newest version").arg(version()));
+    });
+}
+
+void AppController::installAppUpdate() { startJob(QStringLiteral("app.update"), {}, tr("Updating Skill Hub"), QStringLiteral("selfUpdate"), false); }
+
+void AppController::showAppUpdate(const QString &latest, bool canInstall) {
+    appUpdate_ = {{QStringLiteral("available"), true}, {QStringLiteral("canInstall"), canInstall}, {QStringLiteral("latest"), latest}, {QStringLiteral("page"), QStringLiteral("https://github.com/nimonht/skillhub/releases")},
+                  {QStringLiteral("advice"), canInstall ? QString() : QStringLiteral("Built from source: pull, rebuild and install again.")}};
+    emit appUpdateChanged();
 }
 
 void AppController::updateAll() { startJob(QStringLiteral("skills.update"), {}, tr("Updating skills"), QStringLiteral("update"), true); }

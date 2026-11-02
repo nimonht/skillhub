@@ -49,6 +49,17 @@ Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
             }
         }
+        Btn {   // a new version of Skill Hub itself: one click where it can replace itself, what to do where it cannot
+            id: appUpdate
+            readonly property bool can: app.appUpdate.canInstall === true
+            visible: app.appUpdate.available === true
+            enabled: !app.busy
+            kind: "ghost"; compact: true; iconName: "upgrade"
+            text: can ? "Update to " + app.appUpdate.latest : app.appUpdate.latest + " is out"
+            onClicked: can ? app.installAppUpdate() : app.showSettings("about")
+            anchors.verticalCenter: parent.verticalCenter
+            Accessible.description: can ? "Downloads the new version of Skill Hub and restarts" : "Shows how to get the new version of Skill Hub"
+        }
         Btn {
             kind: "ghost"; compact: true; iconName: "terminal"
             text: "Activity"

@@ -356,6 +356,7 @@ Rectangle {
                 Group {
                     title: "Updating"
                     Toggle { width: Math.min(parent.width, 420); text: "Review before updating"; hint: "Update all opens the review first"; checked: Theme.setting("updates", "reviewBeforeUpdate", true); onToggled: app.setSetting("updates", "reviewBeforeUpdate", checked) }
+                    Toggle { width: Math.min(parent.width, 420); text: "Look for new versions of Skill Hub"; hint: "Reads the list of versions from GitHub at launch and once a day. Nothing is installed until you ask."; checked: Theme.setting("updates", "appCheck", true); onToggled: app.setSetting("updates", "appCheck", checked) }
                     Toggle { width: Math.min(parent.width, 420); text: "Check at launch"; checked: Theme.setting("updates", "checkAtLaunch", true); onToggled: app.setSetting("updates", "checkAtLaunch", checked) }
                     Range {
                         width: Math.min(parent.width, 420)
@@ -514,6 +515,13 @@ Rectangle {
                 Logo { size: 48 }
                 Text { textFormat: Text.PlainText; text: "Skill Hub " + app.version; color: Theme.text; font.family: Theme.display; font.pixelSize: Theme.fsHead; font.weight: Font.Bold }
                 Line { text: "One skills folder for every coding agent. MIT licence. Third-party licences are listed in NOTICE.md, next to the program." }
+                Line { visible: app.appUpdate.available === true; text: "Skill Hub " + (app.appUpdate.latest || "") + " is out. " + (app.appUpdate.advice || "") }
+                Row {
+                    spacing: 8
+                    Btn { visible: app.appUpdate.canInstall === true; enabled: !app.busy; iconName: "upgrade"; text: "Update to " + (app.appUpdate.latest || ""); onClicked: app.installAppUpdate() }
+                    Btn { visible: app.appUpdate.available === true; kind: "ghost"; text: "What is new"; onClicked: Qt.openUrlExternally(app.appUpdate.page) }
+                    Btn { visible: app.appUpdate.available !== true; kind: "secondary"; iconName: "refresh"; text: "Look for a new version"; onClicked: app.checkAppUpdate(true) }
+                }
                 Btn { iconName: "refresh"; text: "Take the tour again"; onClicked: { root.closeRequested(); app.startTour(0, 0) } }
             }
         }

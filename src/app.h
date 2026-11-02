@@ -167,6 +167,7 @@ class AppController : public QObject {
     Q_PROPERTY(QString watcherState READ watcherState NOTIFY automationChanged)
     Q_PROPERTY(QString centralPath READ centralPath NOTIFY countsChanged)
     Q_PROPERTY(QString version READ version CONSTANT)
+    Q_PROPERTY(QVariantMap appUpdate READ appUpdate NOTIFY appUpdateChanged)  // a new version of Skill Hub itself, docs/protocol.md
     Q_PROPERTY(QString themeMode READ themeMode WRITE setThemeMode NOTIFY themeChanged)  // system | dark | light
     Q_PROPERTY(bool reduceMotion READ reduceMotion WRITE setReduceMotion NOTIFY themeChanged)  // the user's setting
     Q_PROPERTY(bool stillMotion READ stillMotion NOTIFY themeChanged)                          // setting or forced (tests)
@@ -231,6 +232,7 @@ public:
     QString watcherState() const { return watch_; }
     QString centralPath() const;
     QString version() const;
+    QVariantMap appUpdate() const { return appUpdate_; }
     QString themeMode() const { return themeMode_; }
     void setThemeMode(const QString &m);
     bool reduceMotion() const { return reduce_; }
@@ -298,6 +300,9 @@ public:
     Q_INVOKABLE void measurePaths();
     Q_INVOKABLE void cleanStorage(bool cache, bool versions, bool removed, bool conflicts);
     Q_INVOKABLE void restartBackend();
+    Q_INVOKABLE void checkAppUpdate(bool asked);   // asked: says so when there is nothing new, and ignores the setting
+    Q_INVOKABLE void installAppUpdate();
+    void showAppUpdate(const QString &latest, bool canInstall);   // the screenshots
     Q_INVOKABLE void setScope(const QString &path);
     Q_INVOKABLE void addProject(const QString &path);
     Q_INVOKABLE void copyToProject(const QString &name, const QString &project);
@@ -355,6 +360,7 @@ signals:
     void settingsChanged();
     void pathSizesChanged();
     void showSettings(const QString &section);
+    void appUpdateChanged();
     void scopeChanged();
     void projectsChanged();
     void showScopeMenu();
@@ -401,6 +407,7 @@ private:
     QJsonObject settings_;
     QVariantList pathSizes_, shells_;
     int settingsRev_ = 0, lockSplit_ = -1;
+    QVariantMap appUpdate_;
     QString portalAccent_;
     QVariantMap paletteDark_, paletteLight_;
     QString undoMethod_;       // skills.rollback or skills.restore, for what just happened

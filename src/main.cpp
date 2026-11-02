@@ -89,6 +89,12 @@ int main(int argc, char **argv) {
         window_effects::prepare();
         AppController controller;
         QTimer::singleShot(500, &controller, &AppController::checkUpdatesQuietly);  // verdicts without a click
+        if (!args.contains(QStringLiteral("--shot"))) {   // Skill Hub itself: soon after the start, and once a day in a window left open
+            QTimer::singleShot(3000, &controller, [&controller] { controller.checkAppUpdate(false); });
+            auto *daily = new QTimer(&app);
+            QObject::connect(daily, &QTimer::timeout, &controller, [&controller] { controller.checkAppUpdate(false); });
+            daily->start(24 * 60 * 60 * 1000);
+        }
         QQmlApplicationEngine engine;
         engine.rootContext()->setContextProperty(QStringLiteral("app"), &controller);
         if (!shotFile.isEmpty()) {
@@ -138,6 +144,7 @@ int main(int argc, char **argv) {
                     if (opt("--mode") == QLatin1String("review")) controller.reviewAll();
                     if (opt("--mode") == QLatin1String("onboarding")) emit controller.startTour(opt("--step").toInt(), opt("--coach").toInt());
                     if (opt("--mode") == QLatin1String("terminal")) emit controller.showTerminal();
+                    if (!opt("--app-update").isEmpty()) controller.showAppUpdate(opt("--app-update"), !args.contains(QStringLiteral("--app-update-notice")));
                     if (opt("--mode") == QLatin1String("settings")) emit controller.showSettings(opt("--section").isEmpty() ? QStringLiteral("appearance") : opt("--section"));
                     if (opt("--action") == QLatin1String("update-all")) controller.updateAll();
                     if (opt("--action") == QLatin1String("check")) controller.checkUpdates();

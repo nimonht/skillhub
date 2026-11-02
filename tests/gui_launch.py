@@ -96,7 +96,9 @@ try:
              ("agents", ["--theme", "light", "--size", "1280x800", "--mode", "providers"]),
              ("transfer", ["--theme", "dark", "--size", "1280x800", "--mode", "transfer"]),
              ("small", ["--theme", "dark", "--size", "820x600", "--search", "zzzz"]),
-             ("restart", ["--theme", "dark", "--size", "1280x800", "--action", "restart", "--settle", "30"])]
+             ("restart", ["--theme", "dark", "--size", "1280x800", "--action", "restart", "--settle", "30"]),
+             ("app-update", ["--theme", "dark", "--size", "1280x800", "--app-update", "9.9.9"]),
+             ("app-update-notice", ["--theme", "light", "--size", "1280x800", "--app-update", "9.9.9", "--app-update-notice", "--mode", "settings", "--section", "about"])]
     for name, args in shots:
         png = os.path.join(OUT, name + ".png")
         p = subprocess.run([BIN, "gui", "--shot", png, *args], env=env, capture_output=True, text=True, timeout=240)
