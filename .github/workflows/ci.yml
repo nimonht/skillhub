@@ -55,7 +55,7 @@ jobs:
       - name: Disk space
         run: python3 tests/storage_smoke.py build/skillhub
       - name: Skill Hub updating itself, and what it refuses
-        run: python3 tests/selfupdate_smoke.py build/skillhub-update-test
+        run: python3 tests/selfupdate_smoke.py build/skillhub-update-test build/skillhub-gui
       - name: Install / uninstall round trip (must not remove shared directories)
         run: CMAKE_PREFIX_PATH="$QT_ROOT_DIR" sh tests/install-roundtrip.sh
       - name: GUI renders headless (both themes, three sizes) with no QML errors
@@ -266,7 +266,7 @@ jobs:
         run: python3 tests/storage_smoke.py build/skillhub-cli.exe
       - name: Skill Hub updating itself, and what it refuses
         shell: bash
-        run: python3 tests/selfupdate_smoke.py build/skillhub-update-test.exe
+        run: python3 tests/selfupdate_smoke.py build/skillhub-update-test.exe build/skillhub.exe
       - name: Task Scheduler takes what we give it
         shell: bash
         run: SKILLHUB_TEST_REAL_AUTOMATION=1 python3 tests/automation_smoke.py build/skillhub-cli.exe

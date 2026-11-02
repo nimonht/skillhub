@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Skill Hub updating itself: what it installs, and above all what it refuses.
 
-usage: python3 tests/selfupdate_smoke.py PATH/TO/skillhub-update-test
+usage: python3 tests/selfupdate_smoke.py PATH/TO/skillhub-update-test [PATH/TO/THE/WINDOW]
 
 That program calls itself 1.0.0-beta1 and trusts the test key below (RFC 8032, section 7.1, TEST 1), never the project's key. A local
 git repository plays the tags and a local web server plays the release, so no network is needed. Used by CI on Linux, macOS and Windows.
+With the window's program, it also presses the window's update button (Linux and Windows).
 """
 import hashlib
 import http.server
@@ -18,8 +19,10 @@ import sys
 import tarfile
 import tempfile
 import threading
+import time
 
 BIN = os.path.abspath(sys.argv[1])
+WINDOW = os.path.abspath(sys.argv[2]) if len(sys.argv) > 2 else None
 SEED = bytes.fromhex("9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60")
 OTHER_SEED = bytes.fromhex("4ccd089b28ff96da9db6c346ec114e0f5b8a319f35aba624da8cf6ed4fb8a6fb")
 PUBLIC = "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"
@@ -140,6 +143,7 @@ def linux_asset(says_version):
     folder = os.path.join(top, "build-asset")
     shutil.rmtree(folder, ignore_errors=True)
     executable(os.path.join(folder, "bin", "skillhub"), says(says_version))
+    executable(os.path.join(folder, "bin", "skillhub-gui"), '#!/bin/sh\necho started > "$HOME/new-window-started"\n')
     name = "skillhub-%s-linux-%s.tar.gz" % (NEW, machine())
     path = os.path.join(top, name)
     with tarfile.open(path, "w:gz") as t:
@@ -370,6 +374,35 @@ try:
                 fail("wget did not get the update through")
             print("ok  wget does the same as curl")
     print("ok  the update itself")
+
+    if WINDOW and sys.platform != "darwin":
+        # the button in the window: the job runs, the backend stops, what the job named starts, and the window quits
+        folder = os.path.dirname(program)
+        shutil.copyfile(WINDOW, os.path.join(folder, os.path.basename(WINDOW)))
+        os.chmod(os.path.join(folder, os.path.basename(WINDOW)), 0o755)
+        if os.name == "nt":
+            shutil.copyfile(BIN, os.path.join(folder, "skillhubw.exe"))  # what the window starts as its backend
+        else:
+            os.remove(os.path.join(install, "current"))
+            os.symlink("1.0.0-beta1", os.path.join(install, "current"))
+            shutil.rmtree(os.path.join(install, NEW))
+        shot = os.path.join(top, "window.png")
+        p = subprocess.run([os.path.join(folder, os.path.basename(WINDOW)), "gui", "--shot", shot, "--size", "800x600", "--action", "app-update", "--settle", "200"],
+                           env=dict(env, QT_QPA_PLATFORM="offscreen", QT_QUICK_BACKEND="software", SKILLHUB_REDUCE_MOTION="1"), capture_output=True, text=True, timeout=120)
+        if p.returncode != 0:
+            fail("the window ended with %d\n%s" % (p.returncode, p.stderr[-800:]))
+        if os.path.exists(shot):
+            fail("the update failed, so the window lived on to take its screenshot\n%s" % p.stderr[-800:])
+        if os.name != "nt":
+            if os.readlink(os.path.join(install, "current")) != NEW:
+                fail("the button did not switch current")
+            for _ in range(100):
+                if os.path.exists(os.path.join(top, "new-window-started")):
+                    break
+                time.sleep(0.1)
+            else:
+                fail("the window quit, but the new version was never started")
+        print("ok  the button in the window")
     print("self-update test passed")
 finally:
     server.shutdown()
