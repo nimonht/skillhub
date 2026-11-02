@@ -20,7 +20,7 @@ project(skillhub VERSION 2.0.0
         HOMEPAGE_URL "https://github.com/nimonht/skillhub"
         LANGUAGES C CXX)
 
-set(SKILLHUB_VERSION_SUFFIX "-beta2" CACHE STRING "Appended to the version number (empty for a final release, -betaN for a beta, -dev between releases)")
+set(SKILLHUB_VERSION_SUFFIX "-beta3" CACHE STRING "Appended to the version number (empty for a final release, -betaN for a beta, -dev between releases)")
 set(SKILLHUB_VERSION "${PROJECT_VERSION}${SKILLHUB_VERSION_SUFFIX}")
 
 option(SKILLHUB_GUI "Build the window (skillhub-gui), which needs Qt 6.4 or newer" ON)

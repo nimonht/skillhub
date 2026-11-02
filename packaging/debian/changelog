@@ -1,3 +1,9 @@
+skillhub (2.0.0~beta3) unstable; urgency=medium
+
+  * Says when a new version is out, and what to run.
+
+ -- nimonht <181256175+nimonht@users.noreply.github.com>  Mon, 02 Nov 2026 22:00:00 +0700
+
 skillhub (2.0.0~beta2) unstable; urgency=medium
 
   * A closed terminal gives its number back.

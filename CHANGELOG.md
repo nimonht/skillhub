@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.0.0-beta3 - 2026-11-02
+
+Install this version by hand once: earlier versions have no updater. From here on it updates itself.
+
+- **Skill Hub updates itself.** The Windows installer, the macOS app and the Linux tarball show *Update to X* in the status bar when a new
+  version is out, and one click downloads it, checks it and restarts. `skillhub self-update` does the same in a terminal, and
+  `skillhub self-update --check` only looks. Betas follow betas, final versions follow final versions, and it never moves backwards.
+- **A tarball for Linux, without root.** `skillhub-<version>-linux-<arch>.tar.gz` brings its own Qt, installs below `~/.local` with
+  `install.sh`, and is the Linux install that updates itself.
+- **A notice everywhere else.** The `.deb`, `.rpm` and PKGBUILD are not in a repository, so `apt` and `dnf` do not find a new version by
+  themselves. Those installs, source builds and the Windows zip now say when one is out and what to do.
+- **Releases are signed.** The programs are not code-signed, so the updater installs only what carries a signature by a key that stays
+  offline, and a release without one does not exist for it. [SECURITY.md](SECURITY.md) has the details.
+- **One more thing on the network.** The window now reads the list of Skill Hub's versions from GitHub at launch and once a day. Nothing
+  else is sent, nothing is installed until you ask, and Settings turns it off.
+
 ## 2.0.0-beta2 - 2026-11-02
 
 - **The Windows build starts.** The Windows zip and installer of 2.0.0-beta1 held Debug builds. `skillhub.exe` stopped at once with
