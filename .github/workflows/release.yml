@@ -227,11 +227,13 @@ jobs:
       - name: System libraries
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends build-essential cmake git pkg-config libgl1-mesa-dev libxkbcommon-dev libegl1 libfontconfig1 libxcb-cursor0
+          sudo apt-get install -y --no-install-recommends build-essential cmake git pkg-config libgl1-mesa-dev libxkbcommon-dev libegl1 libfontconfig1 \
+            libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 libxcb-xkb1 libxkbcommon-x11-0
       - name: Build
         run: |
           cmake -B build -DCMAKE_BUILD_TYPE=Release -DSKILLHUB_SELF_UPDATE=ON -DSKILLHUB_SYSTEM_LIBUV=OFF -DSKILLHUB_TESTS=OFF \
-                -DCMAKE_INSTALL_RPATH='$ORIGIN/../lib' -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR"
+                -DCMAKE_INSTALL_RPATH='$ORIGIN/../lib' -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON -DOpenGL_GL_PREFERENCE=LEGACY \
+                -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR"
           cmake --build build -j"$(nproc)"
       - name: Tarball
         id: tarball
@@ -247,6 +249,7 @@ jobs:
             echo "::endgroup::"
           done
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: portable-${{ matrix.arch }}
           path: dist/*.tar.gz

@@ -216,9 +216,10 @@ sh_install_kind sh_update_detect(const sh_update_build *b, const char *exe) {
 #endif
 }
 
+// with forward slashes, which is what the path functions split on: on Windows sh_exe_path gives backslashes
 static char *running_program(void) {
     char exe[4096];
-    return sh_exe_path(exe, sizeof exe) ? sh_strdup(exe) : sh_strdup("");
+    return sh_exe_path(exe, sizeof exe) ? sh_path_clean(exe) : sh_strdup("");
 }
 
 // the file a release holds for this install, NULL when it has none to replace it with

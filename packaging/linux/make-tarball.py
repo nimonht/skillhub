@@ -3,8 +3,9 @@
 
 usage: python3 packaging/linux/make-tarball.py BUILD VERSION OUT_DIR
 
-Configure the build with -DSKILLHUB_SELF_UPDATE=ON, -DCMAKE_INSTALL_RPATH='$ORIGIN/../lib' and -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON. Needs
-Qt's qtpaths on PATH. The last line printed is the tarball's path. What every desktop has (glibc, X11, Wayland, OpenGL, fontconfig) stays
+Configure the build with -DSKILLHUB_SELF_UPDATE=ON, -DCMAKE_INSTALL_RPATH='$ORIGIN/../lib', -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON and
+-DOpenGL_GL_PREFERENCE=LEGACY (the program calls no OpenGL itself, and Qt's libGL.so.1 is everywhere, which libOpenGL.so.0 is not). Needs Qt's
+qtpaths on PATH. The last line printed is the tarball's path. What every desktop has (glibc, X11, Wayland, OpenGL, fontconfig) stays
 out, so build it on the oldest system it should run on.
 """
 import json
@@ -18,7 +19,9 @@ import tarfile
 
 BUILD, VERSION, OUT = sys.argv[1], sys.argv[2], sys.argv[3]
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-SHIPPED = re.compile(r"^(libQt6|libicu|libxcb-cursor)")
+# Qt, and what its X11 plugin needs beyond libxcb itself: these go missing on Wayland desktops and minimal installs, and the window then
+# fails with "could not load the xcb platform plugin". git, which the program needs anyway, brings libgssapi_krb5 for Qt Network.
+SHIPPED = re.compile(r"^(libQt6|libicu|libxcb-(cursor|icccm|image|keysyms|render-util|util|xkb)|libxkbcommon-x11)")
 PLUGINS = ["platforms", "platforminputcontexts", "xcbglintegrations", "wayland-decoration-client", "wayland-graphics-integration-client",
            "wayland-shell-integration", "imageformats", "iconengines", "tls"]
 
@@ -49,6 +52,8 @@ with open(os.path.join(stage, "bin", "qt.conf"), "w") as f:
 dynamic = subprocess.run(["readelf", "-d", os.path.join(stage, "bin", "skillhub-gui")], check=True, capture_output=True, text=True).stdout
 if "$ORIGIN/../lib" not in dynamic:
     fail("skillhub-gui does not look in ../lib: see the usage above")
+if "libOpenGL" in dynamic:
+    fail("skillhub-gui asks for libOpenGL.so.0, which not every desktop has: see the usage above")
 
 for plugin in PLUGINS:
     source = os.path.join(qt("QT_INSTALL_PLUGINS"), plugin)
@@ -78,12 +83,13 @@ for folder in ("plugins", "qml"):
         queue += [os.path.join(parent, n) for n in names if n.endswith(".so") or ".so." in n]
 seen = set()
 missing = set()
+find_qt = dict(os.environ, LD_LIBRARY_PATH=qt("QT_INSTALL_LIBS"))  # what is not copied yet still has to be found
 while queue:
     path = queue.pop()
     if path in seen or os.path.islink(path) or not is_elf(path):
         continue
     seen.add(path)
-    for line in subprocess.run(["ldd", path], capture_output=True, text=True).stdout.splitlines():
+    for line in subprocess.run(["ldd", path], env=find_qt, capture_output=True, text=True).stdout.splitlines():
         m = re.match(r"\s*(\S+) => (\S+)", line)
         if not m or not SHIPPED.match(m.group(1)):
             continue
