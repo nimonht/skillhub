@@ -2,8 +2,29 @@
 
 ## What Skill Hub does with the network
 
-Only `git clone` / `git fetch` over HTTPS for repositories you add or track, into `~/.cache/skillhub/repos`.
+- `git clone` / `git fetch` over HTTPS for repositories you add or track, into `~/.cache/skillhub/repos`.
+- Looking for a new version of Skill Hub: `git ls-remote` on `github.com/nimonht/skillhub` at launch, once a day while the window is open,
+  and when you run `skillhub self-update`. GitHub sees your address, as with any git fetch, and nothing else is sent. *Look for new versions
+  of Skill Hub* in Settings turns it off for the window.
+- Where the program can replace itself: the release's `SHA256SUMS` and its signature while looking, and the new version once you ask for it.
+  These come from GitHub's release files, through the system's `curl` or `wget`.
+
 No telemetry, no accounts, no other endpoints.
+
+## Updating Skill Hub itself
+
+The macOS and Windows programs are not code-signed, and a file the program downloads itself carries no quarantine flag, so the system
+checks nothing. The updater does it instead:
+
+- Every release's `SHA256SUMS` is signed with an Ed25519 key that stays offline with the maintainer and is **not** on GitHub. The public half is
+  built into the program (`data/update-key.pub`). Anyone who takes over the repository or the releases can publish files, but cannot make
+  an installed copy accept them.
+- A release without a good signature is treated as if it did not exist. The file must match the signed list exactly, and its name carries
+  the version, so an old release cannot pass for a new one.
+- It never moves to an older version. A final version never moves to a pre-release.
+- Before replacing anything, the new program must start and name the version that was signed (Linux and macOS; on Windows the installer does the
+  replacing). The old version stays until the next update, or until the next start on macOS.
+- A package below `/usr`, a copy built from source and the portable Windows zip are never touched: they get a notice with what to do.
 
 ## Import files are untrusted
 

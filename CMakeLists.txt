@@ -27,6 +27,7 @@ option(SKILLHUB_GUI "Build the window (skillhub-gui), which needs Qt 6.4 or newe
 option(SKILLHUB_WERROR "Treat compiler warnings as errors (CI)" OFF)
 option(SKILLHUB_SANITIZE "Build with AddressSanitizer and UndefinedBehaviorSanitizer (CI, debugging)" OFF)
 option(SKILLHUB_FUZZ "Build the libFuzzer targets in tests/fuzz (clang only)" OFF)
+option(SKILLHUB_SELF_UPDATE "This build replaces itself with new releases (the release workflow's builds)" OFF)
 if(SKILLHUB_FUZZ)
     add_compile_options(-fsanitize=fuzzer-no-link,address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=undefined)
     add_link_options(-fsanitize=address,undefined)
@@ -88,6 +89,12 @@ add_custom_command(
     COMMENT "Embedding the agent catalog"
     VERBATIM)
 
+# Checks the signature of a new release (sh_selfupdate.c). data/update-key.pub is the public half, written by tools/update-key.sh.
+add_library(skillhub_monocypher STATIC third_party/monocypher/monocypher.c third_party/monocypher/monocypher-ed25519.c)
+target_include_directories(skillhub_monocypher SYSTEM PUBLIC third_party/monocypher)
+file(READ data/update-key.pub SKILLHUB_UPDATE_KEY)
+string(STRIP "${SKILLHUB_UPDATE_KEY}" SKILLHUB_UPDATE_KEY)
+
 add_library(skillhub_core STATIC
     src/core/sh_catalog.c
     src/core/sh_auto.c
@@ -115,6 +122,7 @@ add_library(skillhub_core STATIC
     src/core/sh_path.c src/core/sh_path.h
     src/core/sh_proc.c src/core/sh_proc.h
     src/core/sh_rpc.c src/core/sh_rpc.h
+    src/core/sh_selfupdate.c src/core/sh_selfupdate.h
     src/core/sh_store.c src/core/sh_store.h
     src/core/sh_str.c src/core/sh_str.h
     src/core/sh_thread.c src/core/sh_thread.h
@@ -128,7 +136,7 @@ target_include_directories(skillhub_core SYSTEM PRIVATE third_party/stb)
 target_compile_options(skillhub_core PRIVATE ${SKILLHUB_C_WARNINGS})
 target_compile_definitions(skillhub_core PUBLIC SKILLHUB_VERSION="${SKILLHUB_VERSION}")
 find_package(Threads REQUIRED)
-target_link_libraries(skillhub_core PUBLIC skillhub_yyjson Threads::Threads)
+target_link_libraries(skillhub_core PUBLIC skillhub_yyjson skillhub_monocypher Threads::Threads)
 if(WIN32)
     target_link_libraries(skillhub_core PUBLIC shell32 ole32 uuid user32)
 else()
@@ -152,6 +160,7 @@ endif()
 target_link_libraries(skillhub_serve PUBLIC skillhub_core skillhub::uv)
 
 function(skillhub_cli_target target exe)
+    target_sources(${target} PRIVATE src/cli/update_build.c)
     target_link_libraries(${target} PRIVATE skillhub_serve)
     target_compile_options(${target} PRIVATE ${SKILLHUB_C_WARNINGS})
     set_target_properties(${target} PROPERTIES OUTPUT_NAME ${exe})
@@ -166,11 +175,13 @@ function(skillhub_cli_target target exe)
 endfunction()
 
 add_executable(skillhub_cli src/cli/main.c)
+target_compile_definitions(skillhub_cli PRIVATE SKILLHUB_UPDATE_KEY="${SKILLHUB_UPDATE_KEY}" SKILLHUB_SELF_UPDATE=$<BOOL:${SKILLHUB_SELF_UPDATE}>)
 if(WIN32)
     skillhub_cli_target(skillhub_cli skillhub-cli)
     # The same program without a console window: scheduled tasks and the window's background service run this one,
     # so nothing flashes on screen.
     add_executable(skillhub_cliw WIN32 src/cli/main.c)
+    target_compile_definitions(skillhub_cliw PRIVATE SKILLHUB_UPDATE_KEY="${SKILLHUB_UPDATE_KEY}" SKILLHUB_SELF_UPDATE=$<BOOL:${SKILLHUB_SELF_UPDATE}>)
     skillhub_cli_target(skillhub_cliw skillhubw)
     if(MSVC)
         target_link_options(skillhub_cliw PRIVATE /ENTRY:wmainCRTStartup)
@@ -196,11 +207,16 @@ if(SKILLHUB_TESTS)
     enable_testing()
     add_executable(skillhub_unit_tests tests/unit/test_main.c tests/unit/test.h tests/unit/test_text.c tests/unit/test_paths.c
                                        tests/unit/test_frontmatter.c tests/unit/test_lock.c tests/unit/test_git.c
-                                       tests/unit/test_store.c tests/unit/test_shellstart.c)
+                                       tests/unit/test_store.c tests/unit/test_shellstart.c tests/unit/test_selfupdate.c)
     target_link_libraries(skillhub_unit_tests PRIVATE skillhub_core)
     target_compile_options(skillhub_unit_tests PRIVATE ${SKILLHUB_C_WARNINGS})
     target_compile_definitions(skillhub_unit_tests PRIVATE SKILLHUB_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
     add_test(NAME unit COMMAND skillhub_unit_tests)
+    # tests/selfupdate_smoke.py: an old version that trusts a test key, whose private half is in that file. Never install or ship this.
+    add_executable(skillhub_update_test src/cli/main.c)
+    target_compile_definitions(skillhub_update_test PRIVATE SKILLHUB_UPDATE_VERSION="1.0.0-beta1" SKILLHUB_SELF_UPDATE=1
+                               SKILLHUB_UPDATE_KEY="d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a")
+    skillhub_cli_target(skillhub_update_test skillhub-update-test)
 endif()
 
 # ---- window -------------------------------------------------------------------------------------------------------------

@@ -24,6 +24,10 @@ same data/io.github.nimonht.skillhub.metainfo.xml "$(sed -n 's/.*<release versio
 same CHANGELOG.md "$(sed -n 's/^## \([0-9][0-9A-Za-z.-]*\) .*/\1/p' CHANGELOG.md | head -n 1)" "$V${PRE:+-$PRE}"
 if [ $# -gt 0 ]; then
     same "the tag" "$1" "$V$SUFFIX"
+    if ! grep -Eq '^[0-9a-f]{64}$' data/update-key.pub; then
+        echo "data/update-key.pub holds no key, so this release could not update itself: run tools/update-key.sh once" >&2
+        bad=1
+    fi
     if [ "$SUFFIX" = -dev ]; then
         echo "the version still ends in -dev" >&2
         bad=1

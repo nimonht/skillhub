@@ -15,6 +15,11 @@ Files: third_party/stb/*
 Copyright: 2017 Sean Barrett
 License: Expat
 
+Files: third_party/monocypher/*
+Copyright: 2017-2023 Loup Vaillant and contributors
+License: CC0-1.0
+ On Debian systems the full text is in /usr/share/common-licenses/CC0-1.0.
+
 Files: third_party/yyjson/*
 Copyright: 2020 YaoYuan <ibireme@gmail.com>
 License: Expat

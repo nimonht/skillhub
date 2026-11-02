@@ -178,6 +178,8 @@ Parameters marked `?` are optional. `names` is a list of skill names; an empty o
 | `transfer.export` | `path`, `includeLocal` | `{ "tracked":N, "local":N, "skipped":[...] }` |
 | `transfer.preview` | `path` | `{ "items":[{"name","description","local","source","files","exists","problem","installable"}] }` |
 | `transfer.import` | `path`, `names` | job |
+| `app.checkUpdate` | none | Skill Hub itself: `{ "current", "latest", "available":false, "canInstall":false, "kind":"portable", "page", "advice", "note" }`; `kind` is `source`, `package`, `zip`, `setup`, `app` or `portable`; `latest`, `page`, `advice` and `note` are `""` when there is nothing to say. Fails with `REFUSED` when the repository cannot be reached |
+| `app.update` | none | A job. It downloads and verifies the new version and puts it in place. `event.jobDone` carries `version` and `then`, the program and arguments the window starts once it has stopped: the installer on Windows, the new version elsewhere |
 | `automation.status` | none | `{ "supported":true, "timer":"on", "watcher":"off", "mechanism":"systemd" }`; `mechanism` is `systemd`, `launchd`, `Task Scheduler` or `none` |
 | `automation.set` | `timer?`, `watcher?` (booleans) | `{ ... as automation.status }` |
 | `projects.list` | none | `{ "projects":[ <Project>, ... ], "suggested":[...] }` |

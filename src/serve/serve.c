@@ -19,6 +19,7 @@
 #include "sh_proc.h"
 #include "sh_projects.h"
 #include "sh_sysinfo.h"
+#include "sh_selfupdate.h"
 #include "sh_utf.h"
 
 #ifdef _WIN32
@@ -473,6 +474,7 @@ static void m_initialize(server *s, sh_rpc_msg *m) {
     s->initialized = true;
     sh_store st;
     sh_store_init(&st, NULL, NULL);
+    sh_update_tidy(st.cache);
     yyjson_mut_doc *d = yyjson_mut_doc_new(NULL);
     yyjson_mut_val *r = yyjson_mut_obj(d), *caps = yyjson_mut_obj(d), *paths = yyjson_mut_obj(d);
     yyjson_mut_obj_add_int(d, r, "protocol", PROTOCOL);
@@ -902,6 +904,26 @@ static void automation_result(server *s, sh_rpc_msg *m, sh_store *st) {
     free(watcher);
 }
 
+static void m_app_check(server *s, sh_rpc_msg *m, const slow_call *c) {
+    (void)c;
+    sh_update_build b;
+    sh_update_build_info(&b);
+    char *cache = sh_cache_dir(), *err = NULL;
+    sh_update_info u;
+    if (sh_update_check(&b, cache, &u, &err)) {
+        yyjson_mut_doc *d = yyjson_mut_doc_new(NULL);
+        yyjson_mut_val *r = yyjson_mut_obj(d);
+        sh_update_info_json(d, r, &u);
+        send_result(s, m, d, r);
+        yyjson_mut_doc_free(d);
+    } else {
+        send_error(s, m, SH_RPC_REFUSED, err ? err : "could not look for a new version");
+    }
+    sh_update_info_free(&u);
+    free(err);
+    free(cache);
+}
+
 static void m_automation_status(server *s, sh_rpc_msg *m, const slow_call *c) {
     (void)c;
     sh_store st;
@@ -1009,6 +1031,7 @@ static const struct {
 } SLOW[] = {
     {"fetch.render", m_fetch_render, false},
     {"projects.list", m_projects_list, false},
+    {"app.checkUpdate", m_app_check, false},
     {"automation.status", m_automation_status, false},
     {"automation.set", m_automation_set, true},
 };

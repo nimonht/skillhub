@@ -19,7 +19,9 @@
 #include "sh_json.h"
 #include "sh_palette.h"
 #include "sh_path.h"
+#include "sh_proc.h"
 #include "sh_projects.h"
+#include "sh_selfupdate.h"
 #include "sh_serve.h"
 #include "sh_store.h"
 #include "sh_storage.h"
@@ -152,6 +154,7 @@ static void usage(void) {
         "                                  free space; conflicts, which hold your own edits, go only when named\n"
         "  skillhub uninstall [--dry-run] [--yes] [--keep-cache]\n"
         "                                  remove units, installed files below $HOME and the cache (keeps your skills)\n"
+        "  skillhub self-update [--check] [--json]   update Skill Hub itself, or only see whether a new version is out\n"
         "  skillhub serve --stdio          the window's background service (JSON-RPC on standard input and output)\n");
     fflush(stdout);
 }
@@ -1287,6 +1290,68 @@ static lock_outcome take_mutation_lock(const char *cmd, const args_t *a, int wai
     return watcher ? LOCK_STEP_ASIDE : LOCK_BUSY;
 }
 
+static void update_log(void *user, const char *line) {
+    (void)user;
+    outf("%s\n", line);
+    fflush(stdout);
+}
+
+// Skill Hub itself. `update` is about skills.
+static int cmd_self_update(sh_store *st, const args_t *a) {
+    sh_update_build b;
+    sh_update_build_info(&b);
+    const bool only_check = has(a, "--check"), json = has(a, "--json");
+    sh_update_tidy(st->cache);
+    sh_update_info u;
+    char *err = NULL;
+    if (!sh_update_check(&b, st->cache, &u, &err)) {
+        errf("%s\n", err ? err : "");
+        free(err);
+        sh_update_info_free(&u);
+        return 1;
+    }
+    if (json) {
+        yyjson_mut_doc *d = yyjson_mut_doc_new(NULL);
+        yyjson_mut_val *o = yyjson_mut_obj(d);
+        yyjson_mut_doc_set_root(d, o);
+        sh_update_info_json(d, o, &u);
+        char *text = sh_json_string(d, true);
+        outf("%s\n", text ? text : "{}");
+        free(text);
+        yyjson_mut_doc_free(d);
+    } else if (*u.note) {
+        errf("note: %s\n", u.note);
+    }
+    int rc = 0;
+    if (!u.available) {
+        if (!json) outf("skillhub %s is the newest version\n", u.current);
+    } else {
+        if (!json) outf("skillhub %s is out (this is %s)\n  %s\n", u.latest, u.current, u.page);
+        if (!u.can_install) {
+            if (!json) outf("%s\n", u.advice);
+            rc = only_check ? 0 : 1;
+        } else if (!only_check) {
+            sh_strv then = SH_STRV_INIT;
+            if (!sh_update_install(&b, &u, st->cache, false, update_log, NULL, &then, &err)) {
+                errf("%s\n", err ? err : "");
+                rc = 1;
+            } else if (then.len) {  // Windows: the installer replaces this very program once it has ended
+                sh_strv_take(&then, NULL);  // the end of the arguments
+                const bool started = sh_proc_detach((const char *const *)then.items);
+                if (started) outf("the installer is running in the background and will finish in a moment\n");
+                else errf("could not start the installer\n");
+                rc = started ? 0 : 1;
+            } else {
+                outf("updated to %s\n", u.latest);
+            }
+            sh_strv_free(&then);
+        }
+    }
+    free(err);
+    sh_update_info_free(&u);
+    return rc;
+}
+
 static int run_cli(int argc, char **argv) {
     if (argc > 1 && strcmp(argv[1], "serve") == 0) {  // the window's backend: its own process, no store of the command line's
         if (argc != 3 || strcmp(argv[2], "--stdio") != 0) {
@@ -1412,6 +1477,7 @@ static int run_cli(int argc, char **argv) {
         }
     } else if (strcmp(cmd, "uninstall") == 0) rc = cmd_uninstall(&st, &a);
     else if (strcmp(cmd, "autoupdate") == 0 || strcmp(cmd, "watch") == 0) rc = cmd_automation(&st, cmd, &a);
+    else if (strcmp(cmd, "self-update") == 0) rc = cmd_self_update(&st, &a);
     else {
         usage();
         rc = !*cmd || strcmp(cmd, "help") == 0 || strcmp(cmd, "--help") == 0 ? 0 : 2;

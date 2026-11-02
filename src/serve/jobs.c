@@ -10,6 +10,7 @@
 #include "sh_fs.h"
 #include "sh_history.h"
 #include "sh_path.h"
+#include "sh_selfupdate.h"
 #include "sh_storage.h"
 #include "sh_toggle.h"
 
@@ -553,7 +554,28 @@ typedef struct {
     const char *required[3];  // parameters that must be there
 } job_method;
 
+// Skill Hub itself. The window starts what `then` names once it has stopped: the installer, or the new version.
+static void body_self_update(job *j, sh_store *st) {
+    sh_update_build b;
+    sh_update_build_info(&b);
+    sh_update_info u;
+    sh_strv then = SH_STRV_INIT;
+    char *err = NULL;
+    if (sh_update_check(&b, st->cache, &u, &err) && sh_update_install(&b, &u, st->cache, true, job_log, j, &then, &err)) {
+        yyjson_mut_val *list = yyjson_mut_arr(j->out);
+        for (size_t i = 0; i < then.len; ++i) yyjson_mut_arr_add_strcpy(j->out, list, then.items[i]);
+        yyjson_mut_obj_add_val(j->out, j->extra, "then", list);
+        yyjson_mut_obj_add_strcpy(j->out, j->extra, "version", u.latest);
+    } else {
+        fail(j, err ? err : "could not update Skill Hub");
+    }
+    sh_update_info_free(&u);
+    sh_strv_free(&then);
+    free(err);
+}
+
 static const job_method METHODS[] = {
+    {"app.update", "selfUpdate", false, body_self_update, {NULL}},
     {"skills.check", "check", false, body_check, {NULL}},
     {"skills.update", "update", true, body_update, {NULL}},
     {"skills.install", "install", true, body_install, {"source", "skills", NULL}},
