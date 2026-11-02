@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.0.0-beta2 - 2026-11-02
+
+- **The Windows build starts.** The Windows zip and installer of 2.0.0-beta1 held Debug builds. `skillhub.exe` stopped at once with
+  "Qt6Guid.dll was not found", and `skillhub-cli.exe` needed a debug runtime that only Visual Studio installs. Those two files are gone from
+  the beta1 release. Windows builds from source had the same fault and are now Release builds too, unless you ask for another type.
+- **Terminal numbers.** A new terminal takes the lowest number no open terminal shows, so closing Terminal 1 and opening another gives
+  Terminal 1 again. Open tabs keep their numbers.
+
 ## 2.0.0-beta1 - 2026-11-02
 
 A beta: the first public build of 2.0. Please report what breaks. It installs over 1.x, and the final 2.0.0 installs over it.
