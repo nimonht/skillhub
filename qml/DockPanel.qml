@@ -8,15 +8,32 @@ Rectangle {
     color: Theme.bg1
     clip: true
     property string tab: "activity"
-    property int nextSession: 1
+    property int nextSession: 1   // what tells sessions apart, never used twice; the number on a tab is another thing
     function showTerminal() {
         if (sessions.count === 0) addSession()
         tab = "t" + sessions.get(sessions.count - 1).sid
     }
+    function freeNumber() {   // the lowest one no open terminal shows: tabs that are open keep theirs, and closing them all starts again at 1
+        const taken = []
+        for (let i = 0; i < sessions.count; i++) taken.push(sessions.get(i).num)
+        let n = 1
+        while (taken.includes(n)) n += 1
+        return n
+    }
     function addSession() {
-        sessions.append({ sid: nextSession, name: "Terminal " + nextSession })
+        const num = freeNumber()
+        sessions.append({ sid: nextSession, num: num, name: "Terminal " + num })
         nextSession += 1
         tab = "t" + (nextSession - 1)
+    }
+    function closeSession(index) {
+        sessions.remove(index)
+        tab = sessions.count > 0 ? "t" + sessions.get(sessions.count - 1).sid : "activity"
+    }
+    function sessionNames() {
+        const names = []
+        for (let i = 0; i < sessions.count; i++) names.push(sessions.get(i).name)
+        return names
     }
     function sessionItem() { return stack.count > 0 ? stack.itemAt(stack.count - 1) : null }
     ListModel { id: sessions }
@@ -56,7 +73,7 @@ Rectangle {
                     closable: true
                     on: root.tab === "t" + sid
                     onClicked: root.tab = "t" + sid
-                    onClosed: { sessions.remove(index); root.tab = sessions.count > 0 ? "t" + sessions.get(sessions.count - 1).sid : "activity" }
+                    onClosed: root.closeSession(index)
                 }
             }
             Btn { kind: "ghost"; compact: true; iconName: "plus"; text: ""; Accessible.name: "New terminal"; anchors.verticalCenter: parent.verticalCenter; onClicked: root.addSession() }

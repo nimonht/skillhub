@@ -162,6 +162,12 @@ int main(int argc, char **argv) {
                     QFile dump(opt("--terminal-dump"));
                     if (dump.open(QIODevice::WriteOnly)) dump.write(text.toString().toUtf8());
                 }
+                if (!opt("--terminal-tabs").isEmpty()) {
+                    QVariant names;
+                    QMetaObject::invokeMethod(window, "terminalTabs", Q_RETURN_ARG(QVariant, names));
+                    QFile dump(opt("--terminal-tabs"));
+                    if (dump.open(QIODevice::WriteOnly)) dump.write(names.toString().toUtf8());
+                }
                 window->grabWindow().save(shotFile);
                 tick->stop();
                 app.quit();

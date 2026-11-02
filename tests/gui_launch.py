@@ -135,6 +135,18 @@ try:
         if shell and not re.search(r"Shell\s+%s\s" % shell, screen):   # the banner, naming the shell it runs in
             fail("%s: no banner naming %s in the terminal:\n%s\n--- stdout\n%s\n--- stderr\n%s" % (name, shell, screen, p.stdout, p.stderr))
         print("ok  " + name)
+    # a closed terminal gives its number back, and the tabs that stay open keep theirs
+    tabs = os.path.join(OUT, "terminal-tabs.txt")
+    p = subprocess.run([BIN, "gui", "--shot", os.path.join(OUT, "terminal-tabs.png"), "--theme", "dark", "--size", "1280x800", "--layout", "dock=340", "--mode", "terminal",
+                        "--terminal-tabs", tabs, "--settle", "10"], env=shell_env, capture_output=True, text=True, timeout=240)
+    if p.returncode != 0:
+        fail("terminal tabs: exit %d\n%s" % (p.returncode, p.stderr))
+    with open(tabs, encoding="utf-8") as f:
+        names = f.read().splitlines()
+    wanted = ["Terminal 1, Terminal 2, Terminal 3", "Terminal 1, Terminal 3", "Terminal 1, Terminal 3, Terminal 2", "Terminal 1"]
+    if names != wanted:
+        fail("terminal tabs: wanted %s, got %s\n--- stderr\n%s" % (wanted, names, p.stderr))
+    print("ok  terminal tabs")
     if os.name != "nt":
         # a program that sends terminal queries and reads none of the answers: the window keeps running, whatever the shell does next
         flood = "\"%s\" -c \"import sys; sys.stdout.write((chr(27) + '[c') * 400000)\"" % sys.executable

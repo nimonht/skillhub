@@ -253,6 +253,16 @@ ApplicationWindow {
     // for the test of the terminal
     function typeInTerminal(text) { const s = activity.sessionItem(); if (s) s.typeText(text) }
     function terminalScreen() { const s = activity.sessionItem(); return s ? s.screenText() : "" }
+    function terminalTabs() {   // from one open terminal: the tab names after each step, one line each
+        const steps = []
+        const note = () => steps.push(activity.sessionNames().join(", "))
+        activity.addSession(); activity.addSession(); note()
+        activity.closeSession(1); note()
+        activity.addSession(); note()
+        while (activity.sessionNames().length > 0) activity.closeSession(0)
+        activity.addSession(); note()
+        return steps.join("\n")
+    }
 
     Loader {
         id: tour
