@@ -86,7 +86,7 @@ jobs:
           cache: true
       - name: Build
         run: |
-          cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR" -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64"
+          cmake -B build -DCMAKE_BUILD_TYPE=Release -DSKILLHUB_SELF_UPDATE=ON -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR" -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64"
           cmake --build build -j"$(sysctl -n hw.ncpu)"
           lipo -archs build/skillhub-gui.app/Contents/MacOS/skillhub-gui
           lipo -archs build/skillhub-gui.app/Contents/MacOS/skillhub
@@ -130,7 +130,7 @@ jobs:
       - name: Build
         shell: cmd
         run: |
-          cmake -B build -G "NMake Makefiles" -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="%QT_ROOT_DIR%"
+          cmake -B build -G "NMake Makefiles" -DCMAKE_BUILD_TYPE=Release -DSKILLHUB_SELF_UPDATE=ON -DCMAKE_PREFIX_PATH="%QT_ROOT_DIR%"
           cmake --build build
       - name: Deploy Qt next to the program
         shell: bash
@@ -175,6 +175,23 @@ jobs:
           & "$dir\skillhub-cli.exe" --version
           Start-Process -Wait -FilePath "$dir\unins000.exe" -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES"
           if (Test-Path "$dir\skillhub.exe") { throw "uninstall left the program behind" }
+      - name: Updating over an installed copy brings the window back
+        shell: pwsh
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP "skillhub-updated"
+          $setup = "dist/SkillHub-$env:VERSION-windows-x64-setup.exe"
+          Start-Process -Wait -FilePath $setup -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/DIR=$dir"
+          Start-Process -Wait -FilePath $setup -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/CLOSEAPPLICATIONS","/FORCECLOSEAPPLICATIONS","/RELAUNCH=1"
+          $window = $null
+          foreach ($i in 1..60) {
+            $window = Get-Process skillhub -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$dir*" }
+            if ($window) { break }
+            Start-Sleep -Seconds 1
+          }
+          if (-not $window) { throw "the window did not come back after the update" }
+          & "$dir\skillhub-cli.exe" --version
+          Stop-Process -Name skillhub,skillhubw -Force -ErrorAction SilentlyContinue
+          Start-Process -Wait -FilePath "$dir\unins000.exe" -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES"
       - uses: actions/upload-artifact@v4
         with:
           name: windows
@@ -187,10 +204,57 @@ jobs:
           name: gui-screenshots-windows
           path: ${{ runner.temp }}/screens
 
+  portable:
+    name: Linux portable (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # glibc as old as the build machine is what the tarball asks of a system. Qt's arm64 libraries need Ubuntu 24.04.
+          - { arch: x86_64,  runner: ubuntu-22.04,     host: linux,       qt: linux_gcc_64,    images: "ubuntu:24.04 fedora:43 archlinux:latest" }
+          - { arch: aarch64, runner: ubuntu-24.04-arm, host: linux_arm64, qt: linux_gcc_arm64, images: "ubuntu:24.04 fedora:43" }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jurplel/install-qt-action@v4
+        with:
+          modules: qtshadertools
+          version: ${{ env.QT_VERSION }}
+          host: ${{ matrix.host }}
+          target: desktop
+          arch: ${{ matrix.qt }}
+          cache: true
+      - name: System libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential cmake git pkg-config libgl1-mesa-dev libxkbcommon-dev libegl1 libfontconfig1 libxcb-cursor0
+      - name: Build
+        run: |
+          cmake -B build -DCMAKE_BUILD_TYPE=Release -DSKILLHUB_SELF_UPDATE=ON -DSKILLHUB_SYSTEM_LIBUV=OFF -DSKILLHUB_TESTS=OFF \
+                -DCMAKE_INSTALL_RPATH='$ORIGIN/../lib' -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR"
+          cmake --build build -j"$(nproc)"
+      - name: Tarball
+        id: tarball
+        run: |
+          V=$(sed -n 's/^project(skillhub VERSION \([0-9][0-9.]*\).*/\1/p' CMakeLists.txt)$(sed -n 's/^set(SKILLHUB_VERSION_SUFFIX "\([^"]*\)".*/\1/p' CMakeLists.txt)
+          echo "file=$(python3 packaging/linux/make-tarball.py build "$V" dist | tail -1)" >> "$GITHUB_OUTPUT"
+          ls -la dist/*.tar.gz
+      - name: It installs and starts on systems that never saw Qt
+        run: |
+          for image in ${{ matrix.images }}; do
+            echo "::group::$image"
+            docker run --rm -v "$PWD":/src:ro "$image" sh /src/packaging/container-verify-tarball.sh "/src/${{ steps.tarball.outputs.file }}"
+            echo "::endgroup::"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: portable-${{ matrix.arch }}
+          path: dist/*.tar.gz
+
   publish:
     name: Publish the release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [deb, rpm, macos, windows]
+    needs: [deb, rpm, macos, windows, portable]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -199,7 +263,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
-          pattern: "{deb-*,rpm-*,macos-dmg,windows}"
+          pattern: "{deb-*,rpm-*,macos-dmg,windows,portable-*}"
           merge-multiple: true
       - name: The tag and every file name the same version
         run: sh packaging/check-version.sh "${GITHUB_REF_NAME#v}"
@@ -229,6 +293,7 @@ jobs:
           | macOS 12+ (Apple silicon and Intel) | `SkillHub-*-macos-universal.dmg` |
           | Windows 10/11 (64-bit) | `SkillHub-*-windows-x64-setup.exe` or the portable `.zip` |
           | Arch Linux | the PKGBUILD in `packaging/arch` |
+          | Any Linux, without root; updates itself | `skillhub-*-linux-*.tar.gz` |
 
           The macOS and Windows builds are not code-signed: macOS and Windows SmartScreen ask you to confirm the first start (see the README).
           NOTES

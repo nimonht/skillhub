@@ -45,6 +45,8 @@ Name: "{autodesktop}\Skill Hub"; Filename: "{app}\skillhub.exe"; Tasks: desktopi
 
 [Run]
 Filename: "{app}\skillhub.exe"; Description: "Start Skill Hub"; Flags: nowait postinstall skipifsilent
+; an update from inside the program (src/core/sh_selfupdate.c) runs silently and asks for the window to come back
+Filename: "{app}\skillhub.exe"; Flags: nowait runasoriginaluser; Check: Relaunch
 
 [UninstallRun]
 Filename: "schtasks.exe"; Parameters: "/End /TN ""SkillHub\Stray watcher"""; Flags: runhidden; RunOnceId: "EndWatcher"
@@ -53,6 +55,11 @@ Filename: "schtasks.exe"; Parameters: "/Delete /TN ""SkillHub\Daily update"" /F"
 Filename: "taskkill.exe"; Parameters: "/F /IM skillhubw.exe"; Flags: runhidden; RunOnceId: "StopBackend"
 
 [Code]
+function Relaunch(): Boolean;
+begin
+  Result := ExpandConstant('{param:RELAUNCH|0}') = '1';
+end;
+
 const
   PathKeyUser = 'Environment';
   PathKeyMachine = 'SYSTEM\CurrentControlSet\Control\Session Manager\Environment';

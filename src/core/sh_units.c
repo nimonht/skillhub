@@ -136,6 +136,18 @@ bool sh_store_uninstall(sh_store *st, bool dry_run, bool keep_cache) {
     }
     free(home_slash);
     sh_strv_free(&prefixes);
+
+    // 3. the portable version, which has a folder of its own
+    char *app = sh_path_join(st->home, ".local/share/skillhub/app");
+    if (sh_is_dir(app)) {
+        if (dry_run || sh_remove_tree(app)) {
+            sh_store_log(st, "%s %s", verb, app);
+        } else {
+            sh_store_log(st, "FAILED to remove %s", app);
+            ok = false;
+        }
+    }
+    free(app);
 #else
     // 1. LaunchAgents or scheduled tasks; the application itself goes the way it came
     for (int timer = 1; timer >= 0; --timer) {

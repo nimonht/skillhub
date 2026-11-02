@@ -117,8 +117,14 @@ Packages are attached to every [release](https://github.com/nimonht/skillhub/rel
 | Arch, CachyOS, Manjaro | [`packaging/arch/PKGBUILD`](packaging/arch/PKGBUILD) | `cd packaging/arch && makepkg -si` |
 | macOS 12 and newer (Apple silicon and Intel) | `SkillHub-<version>-macos-universal.dmg` | drag *Skill Hub* to Applications |
 | Windows 10 / 11 (64-bit) | `SkillHub-<version>-windows-x64-setup.exe`, or the portable `.zip` | run the installer (per user, no administrator needed) |
+| Any Linux with glibc 2.35 or newer, without root (x86-64; arm64 needs 2.39) | `skillhub-<version>-linux-<arch>.tar.gz` | `tar xf skillhub-*.tar.gz && sh skillhub-*/install.sh` |
 
 `sha256sums` for every file are in `SHA256SUMS`. Verify with `sha256sum -c SHA256SUMS --ignore-missing`.
+
+**Updating.** The Windows installer, the macOS app and the Linux tarball update themselves: the window shows *Update to X* when a new version
+is out, and one click downloads it, checks its signature and restarts. `skillhub self-update` does the same in a terminal. The `.deb`, `.rpm`
+and PKGBUILD are not in a repository, so `apt` and `dnf` will not find a new version by themselves; those installs, source builds and the
+Windows zip show a notice with what to do. A final version never moves to a beta. See [SECURITY.md](SECURITY.md).
 
 **The macOS and Windows builds are not code-signed** (that needs paid developer accounts), so the system asks you once:
 
@@ -255,6 +261,7 @@ are never touched.
 | `add OWNER/REPO [--skill a,b \| --all]` | install skills from a GitHub repository |
 | `remove NAME` | remove a skill everywhere (a copy is kept in the backup folder) |
 | `track NAME OWNER/REPO [PATH]` | set the upstream of a skill you already have |
+| `self-update [--check] [--json]` | Skill Hub itself, where it can replace itself; otherwise it says what to do. `update` and `autoupdate` are about skills |
 | `autoupdate on\|off\|status` | daily update: systemd user timer, launchd agent, or a scheduled task. Automatic runs leave out skills on hold and updates that add or change scripts |
 | `watch on\|off\|status` | stray-skill watcher: systemd path unit, launchd agent, or a task that starts `skillhub watch --run` at logon |
 | `clean [--cache] [--versions] [--removed] [--conflicts] [--dry-run] [--yes]` | free space; the newest backup of each skill stays, and conflicts, your own edits, go only when named |
@@ -267,8 +274,8 @@ skillhub uninstall --dry-run     # show what would be removed
 skillhub uninstall               # asks first; --yes skips the prompt, --keep-cache keeps ~/.cache/skillhub
 ```
 
-This removes the units, LaunchAgents or scheduled tasks, the files `make install` put below your home directory (binary, launcher, icons) and the
-git cache. It **never** touches your skills: `~/.agents/skills`, the lock file, the agent symlinks, the Antigravity entry
+This removes the units, LaunchAgents or scheduled tasks, the files `make install` put below your home directory (binary, launcher, icons), the portable
+Linux version and the git cache. It **never** touches your skills: `~/.agents/skills`, the lock file, the agent symlinks, the Antigravity entry
 and `~/.agents/.backup` all stay (delete them by hand if you want them gone). For a system-wide install use your package
 manager or `sudo cmake --build build --target uninstall`; both remove only files this project installed.
 
