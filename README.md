@@ -301,11 +301,38 @@ manager or `sudo cmake --build build --target uninstall`; both remove only files
 
 ## Roadmap
 
+What is planned, in order. Nothing here has a date.
+
+**Next: know what a skill does before it runs (2.0.0-beta4)**
+
+- [ ] An offline check of every skill: pipe-to-shell commands, long base64, invisible Unicode, reads of `~/.ssh` or tokens. It uses fixed rules, so
+  the text of a skill cannot talk it out of a result.
+- [ ] Security reports from skills.sh for public GitHub skills, off until you turn them on, because the lookup tells skills.sh what you have installed.
+  Each scanner is shown with its date, never as one "safe" badge: the scanners can disagree, and a report may describe another version.
+- [ ] Those results in Review, next to the script flags, and a worse report holds an update back from automatic runs.
+- [ ] A second opinion from your own coding agent, opened in the built-in terminal with its permission prompts on. Its answer is never stored as a verdict.
+
+**Then: updates that reach everyone**
+
+- [ ] An AUR package, then Copr or an apt repository, so package managers find new versions by themselves.
+- [ ] The Windows portable zip replaces itself, as the installer does.
+- [ ] An optional setting to install new versions without asking, once the updater has proven itself through several releases.
+
+**Before 2.0.0**
+
+- [ ] Code signing, so Windows and macOS stop warning at first start.
+- [ ] A full pass on a real Mac.
+- [ ] Reports from the betas dealt with, and `v2` merged into `main`.
+
+**Done in 2.0 so far**
+
 - [x] Show a diff before applying an update, and one-click rollback in the GUI
 - [x] Per-agent enable/disable for a skill
 - [x] Project-level skills (`.claude/skills` in a repository), not only user-level ones
 - [x] GitLab / arbitrary git URLs and local-path sources
 - [x] Daily update and stray watcher on macOS (launchd) and Windows (Task Scheduler)
+- [x] Skill Hub updates itself, from signed releases
+- [x] A portable Linux tarball that installs without root
 
 ## Contributing
 
