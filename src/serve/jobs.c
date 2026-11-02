@@ -321,6 +321,7 @@ static void body_clean(job *j, sh_store *st) {
     const int what = (param_bool(j->params, "cache", false) ? SH_CLEAN_CACHE : 0) | (param_bool(j->params, "versions", false) ? SH_CLEAN_VERSIONS : 0) |
                      (param_bool(j->params, "removed", false) ? SH_CLEAN_REMOVED : 0) | (param_bool(j->params, "conflicts", false) ? SH_CLEAN_CONFLICTS : 0);
     sum(j, "freed", sh_storage_clean(st, what));
+    j->rescan = true;  // rows count their kept versions
 }
 
 static void body_merge_locks(job *j, sh_store *st) {
@@ -339,6 +340,7 @@ static void body_copy(job *j, sh_store *st) {
     add_result(j, name, ok, err);
     if (!ok) fail(j, err);
     free(err);
+    j->rescan = true;
 }
 
 // `name` with an optional `stamp`, or `names`: each back to its newest kept version (Undo after an update)

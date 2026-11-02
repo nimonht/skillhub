@@ -15,6 +15,11 @@ for f in usr/bin/skillhub usr/bin/skillhub-gui; do
   [ -x "$R/$f" ] || { echo "FAIL: install incomplete: $f" >&2; exit 1; }
 done
 [ -f "$R/usr/share/icons/hicolor/48x48/apps/skillhub.png" ] && [ -f "$R/usr/share/applications/skillhub.desktop" ] || { echo "FAIL: install incomplete" >&2; exit 1; }
+# a desktop session's PATH may not hold the install folder, so the entry names its program in full
+grep -qx 'Exec=/usr/bin/skillhub gui' "$R/usr/share/applications/skillhub.desktop" || { echo "FAIL: the desktop entry must start the installed program by its full path" >&2; exit 1; }
+if command -v desktop-file-validate >/dev/null 2>&1; then
+  desktop-file-validate "$R/usr/share/applications/skillhub.desktop" || { echo "FAIL: the desktop entry is not valid" >&2; exit 1; }
+fi
 DESTDIR="$R" "$CMAKE" --build "$B" --target uninstall >/dev/null
 for f in usr/bin/skillhub usr/bin/skillhub-gui usr/share/applications/skillhub.desktop \
          usr/share/metainfo/io.github.nimonht.skillhub.metainfo.xml usr/share/icons/hicolor/48x48/apps/skillhub.png \

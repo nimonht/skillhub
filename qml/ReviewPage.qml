@@ -67,6 +67,8 @@ Rectangle {
     onReviewsChanged: { leftOut = ({}); open = ({}); pickFirst() }
     Keys.onEscapePressed: app.closeReview()
 
+    InputShield {}
+
     Item {
         id: head
         width: parent.width

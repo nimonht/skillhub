@@ -100,14 +100,14 @@ static void restore_entry(sh_store *st, const char *name, yyjson_doc *sidecar, s
     if (yyjson_is_obj(entry)) {
         sh_source kept = {0};
         sh_source_from_json(entry, &kept);
-        sh_lock_put(st, name, &kept);
+        if (!sh_lock_put(st, name, &kept)) sh_store_log(st, "FAILED to restore the lock entry of %s", name);
         sh_source_free(&kept);
         const char *const trees[] = {sh_json_str(root, "treeSha")};
         sh_trees_put_many(st, names, trees, contents, 1);
     } else if (current) {
         free(current->hash);
         current->hash = sh_strdup("");
-        sh_lock_put(st, name, current);
+        if (!sh_lock_put(st, name, current)) sh_store_log(st, "FAILED to restore the lock entry of %s", name);
         const char *const trees[] = {""};
         sh_trees_put_many(st, names, trees, contents, 1);
     }
@@ -151,7 +151,7 @@ bool sh_history_rollback(sh_store *st, const char *name, const char *stamp, char
         sh_remove_file(side);
         free(side);
         restore_entry(st, name, sidecar, tracked ? &current : NULL);
-        if (tracked) sh_hold_set(st, name, from, NULL);
+        if (tracked && !sh_hold_set(st, name, from, NULL)) sh_store_log(st, "FAILED to hold %s: an automatic update can undo this rollback", name);
         sh_store_relink(st);
         sh_store_log(st, "rolled back %s to %s", name, pick->stamp);
     } else if (err) {

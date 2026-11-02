@@ -59,7 +59,6 @@ QtObject {
     readonly property color markTextDefault: dark ? "#34E0A6" : "#07765A"      // the accent used as text
     readonly property color markLowDefault: dark ? "#12362B" : "#D4EFE5"
     readonly property color focusDefault: dark ? "#34E0A6" : "#0B7F5F"
-    readonly property color inkOkDefault: dark ? "#07765A" : "#34E0A6"
     readonly property color action: accent ? accent.action : actionDefault
     readonly property color actionInk: accent ? accent.actionInk : actionInkDefault
     readonly property color mark: accent ? accent.mark : markDefault
@@ -68,7 +67,6 @@ QtObject {
     function strengthen(c) { return translucent && !dark ? Qt.darker(c, 1.4) : c }   // light surfaces can go dark behind: see alphaFloor
     readonly property color markLow: accent ? accent.markLow : markLowDefault
     readonly property color focus: accent ? accent.focus : focusDefault
-    readonly property color inkOk: accent ? accent.inkOk : inkOkDefault
     readonly property color inkOnMark: dark ? actionInk : "#FFFFFF"               // a knob or a tick on a lit fill
     // semantic roles
     readonly property color notify: dark ? "#FFB224" : "#B26A00"        // update available (graphics)
@@ -83,11 +81,6 @@ QtObject {
     readonly property color dangerTextDefault: dark ? "#FF6A5E" : "#B3241B"
     readonly property color dangerText: strengthen(dangerTextDefault)
     readonly property color dangerLow: dark ? "#3C1917" : "#FBE3E0"
-    // inverted surface for transient things (toast, tooltip): borderless, readable over anything
-    readonly property color inkBg: dark ? "#E8ECF1" : "#11161C"
-    readonly property color inkText: dark ? "#0B0E13" : "#F5F6F7"
-    readonly property color inkWarn: dark ? "#8A5200" : "#FFB224"
-    readonly property color inkDanger: dark ? "#B3241B" : "#FF6A5E"
 
     // type: Barlow Semi Condensed for the interface, Barlow Condensed for numbers and titles (both SIL OFL)
     readonly property FontLoader _f1: FontLoader { source: "qrc:/fonts/BarlowSemiCondensed-Regular.ttf" }

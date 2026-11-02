@@ -58,6 +58,8 @@ jobs:
         run: CMAKE_PREFIX_PATH="$QT_ROOT_DIR" sh tests/install-roundtrip.sh
       - name: GUI renders headless (both themes, three sizes) with no QML errors
         run: sh tests/gui-smoke.sh build/skillhub "$RUNNER_TEMP/screens"
+      - name: One greeting in a new terminal, on real shells
+        run: python3 tests/greeting_smoke.py build/skillhub
       - uses: actions/upload-artifact@v4
         if: always()
         with:

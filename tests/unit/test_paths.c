@@ -1,6 +1,6 @@
 // Path handling ported from Qt (QDir::cleanPath, relativeFilePath) and the file-system helpers.
 #if !defined(_WIN32) && !defined(__APPLE__)
-#define _DEFAULT_SOURCE  // mkfifo, symlink
+#define _DEFAULT_SOURCE  // mkfifo, mkdtemp, symlink
 #endif
 
 #include "test.h"
@@ -244,6 +244,58 @@ static void origins(void) {
     CHECK_STR(sh_origin_cache_dir(&odd, "/c"), "/c/repos/owner__repo");
 }
 
+// what a URL carries as credentials stays out of what gets written down
+static void credentials(void) {
+    sh_origin o;
+    CHECK(sh_origin_parse("https://user:s3cret@git.example.com/org/skills.git", &o, NULL));
+    CHECK_EQ_STR(o.url, "https://git.example.com/org/skills.git");
+    CHECK_EQ_STR(o.source, "https://git.example.com/org/skills.git");
+    sh_origin_free(&o);
+    CHECK(sh_origin_parse("http://token@git.example.com:8080/a/b", &o, NULL));
+    CHECK_EQ_STR(o.url, "http://git.example.com:8080/a/b");
+    sh_origin_free(&o);
+    CHECK(sh_origin_parse("ssh://git@git.example.com/a/b.git", &o, NULL));  // a user name is how ssh works, and no secret
+    CHECK_EQ_STR(o.url, "ssh://git@git.example.com/a/b.git");
+    sh_origin_free(&o);
+}
+
+static void safe_relative_paths(void) {
+    CHECK(sh_path_safe_rel("skills/a/SKILL.md"));
+    CHECK(!sh_path_safe_rel(""));
+    CHECK(!sh_path_safe_rel("/etc/passwd"));
+    CHECK(!sh_path_safe_rel("../x"));
+    CHECK(!sh_path_safe_rel("a/../../x"));
+    CHECK(!sh_path_safe_rel("a//b"));
+    CHECK(!sh_path_safe_rel("a/./b"));
+    CHECK(!sh_path_safe_rel("a\\b"));
+    CHECK(!sh_path_safe_rel(".git/config"));
+    CHECK(!sh_path_safe_rel("x/.GIT/config"));
+}
+
+#ifndef _WIN32
+// a link in a repository can lead to what is no file: a read must neither block on it nor take from it
+static void only_regular_files(void) {
+    char dir[] = "/tmp/skillhub-unit-read-XXXXXX";
+    CHECK(mkdtemp(dir) != NULL);
+    char *fifo = sh_strfmt("%s/fifo", dir), *plain = sh_strfmt("%s/plain", dir);
+    CHECK(mkfifo(fifo, 0600) == 0);
+    sh_buf b = SH_BUF_INIT;
+    CHECK(!sh_read_file(fifo, 0, &b));
+    CHECK(!sh_read_file(dir, 0, &b));
+    CHECK(sh_write_file(plain, "hello", 5));
+    CHECK(sh_read_file(plain, 0, &b));
+    CHECK_EQ_STR(sh_buf_str(&b), "hello");
+    sh_buf_free(&b);
+    sh_remove_tree(dir);
+    free(fifo);
+    free(plain);
+}
+#endif
+
 const sh_test_case sh_tests_paths[] = {
+#ifndef _WIN32
+    {"paths.only_regular_files", only_regular_files},
+#endif
+    {"paths.credentials", credentials}, {"paths.safe_relative_paths", safe_relative_paths},
     {"paths.clean", clean}, {"paths.relative", relative}, {"paths.parts", parts}, {"paths.files", files}, {"paths.odd_entries", odd_entries}, {"paths.origins", origins}, {NULL, NULL},
 };

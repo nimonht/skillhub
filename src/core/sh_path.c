@@ -8,6 +8,7 @@
 #include <string.h>
 
 #include "sh_str.h"
+#include "sh_utf.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -232,6 +233,23 @@ bool sh_path_windows_unsafe(const char *segment) {
         if (same) return true;
     }
     return false;
+}
+
+static bool is_dot_git(const char *s) {  // in any case: disks that ignore case see the same folder
+    return s[0] == '.' && (s[1] == 'g' || s[1] == 'G') && (s[2] == 'i' || s[2] == 'I') && (s[3] == 't' || s[3] == 'T') && !s[4];
+}
+
+bool sh_path_safe_rel(const char *p) {
+    if (!*p || sh_utf16_len(p) > 300 || p[0] == '/' || strchr(p, '\\')) return false;
+    sh_strv seg = SH_STRV_INIT;
+    sh_split(p, strlen(p), '/', false, &seg);
+    bool ok = true;
+    for (size_t i = 0; ok && i < seg.len; ++i) {
+        const char *s = seg.items[i];
+        if (!*s || strcmp(s, ".") == 0 || strcmp(s, "..") == 0 || is_dot_git(s) || sh_path_windows_unsafe(s)) ok = false;
+    }
+    sh_strv_free(&seg);
+    return ok;
 }
 
 #ifndef _WIN32

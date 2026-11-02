@@ -13,6 +13,7 @@ Rectangle {
                                  : app.detailMode === "agent" && app.focusAgent !== "" ? "agent"
                                  : app.selected !== "" ? "skill" : "empty"
 
+    InputShield { visible: root.showClose }   // floating over the list
     Rectangle { visible: root.showClose; anchors.left: parent.left; width: 1; height: parent.height; color: Theme.line }
 
     EmptyDetail { anchors.fill: parent; visible: root.view === "empty" }

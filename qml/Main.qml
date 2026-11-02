@@ -16,6 +16,7 @@ ApplicationWindow {
 
     property bool consoleOpen: false
     property bool settingsOpen: false
+    onSettingsOpenChanged: if (!settingsOpen) list.forceActiveFocus()
     property bool dockChecked: false
     readonly property real centerMin: 140 + 36 + Theme.statusW + app.columnCount * app.portW + Theme.padR
     // docked as long as the center keeps its minimum; otherwise the panel floats over it

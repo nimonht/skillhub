@@ -224,6 +224,22 @@ static void live_links(void) {
     teardown(&st);
 }
 
+// the clock ran back since the newest backup: the next one still sorts after it, so pruning keeps it
+static void backups_keep_order(void) {
+    sh_store st;
+    setup(&st);
+    write_text("skills/one/SKILL.md", "---\nname: one\n---\n");
+    write_text("backup/one/99990101-000000/SKILL.md", "---\nname: one\n---\n");
+    write_text("stage/SKILL.md", "---\nname: one\ndescription: new\n---\n");
+    char *stage = at("stage");
+    CHECK(sh_store_place(&st, "one", stage, NULL));
+    free(stage);
+    char *second = at("backup/one/99990101-000000-2");
+    CHECK(sh_is_dir(second));
+    free(second);
+    teardown(&st);
+}
+
 const sh_test_case sh_tests_store[] = {
-    {"store.recover", recover}, {"store.folder_hash", folder_hash}, {"store.tree_record", tree_record}, {"store.live_links", live_links}, {NULL, NULL},
+    {"store.backups_keep_order", backups_keep_order}, {"store.recover", recover}, {"store.folder_hash", folder_hash}, {"store.tree_record", tree_record}, {"store.live_links", live_links}, {NULL, NULL},
 };

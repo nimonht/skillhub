@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Controls.Basic
-import QtQuick.Window
 import "."
 
 // Action button. Primary/secondary/danger use cut corners (action = machinery); ghost is a plain hit area.
@@ -71,19 +70,11 @@ AbstractButton {
     HoverHandler { cursorShape: root.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor; enabled: !app.noHover }
 
     // icon-only buttons name themselves on hover
-    Timer { id: tipDelay; interval: 450; running: root.hovered && root.text === "" && root.Accessible.name !== ""; onTriggered: tip.shown = true }
-    onHoveredChanged: if (!hovered) tip.shown = false
-    Rectangle {
+    Timer { id: tipDelay; interval: 450; running: root.hovered && root.text === "" && root.Accessible.name !== ""; onTriggered: tip.active = true }
+    onHoveredChanged: if (!hovered) tip.active = false
+    Loader {
         id: tip
-        property bool shown: false
-        visible: shown && root.hovered
-        z: 100
-        y: root.height + 8
-        x: root.width / 2 - width / 2 - Math.max(0, root.mapToItem(null, root.width / 2 + width / 2, 0).x - (root.Window.width - 8))
-        width: tipText.implicitWidth + 18
-        height: 26
-        radius: 4
-        color: Theme.inkBg
-        Text { textFormat: Text.PlainText; id: tipText; anchors.centerIn: parent; text: root.Accessible.name; color: Theme.inkText; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
+        active: false
+        sourceComponent: Tip { parent: root; text: root.Accessible.name; visible: true }
     }
 }

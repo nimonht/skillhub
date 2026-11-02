@@ -22,7 +22,7 @@ Rectangle {
         if (!visible || started || width <= 0) return
         started = true
         // ConPTY clears the screen as it starts, so on Windows the shell itself prints the banner
-        if (Theme.setting("terminal", "banner", true) && Qt.platform.os !== "windows") {
+        if (app.terminalGreeting() === "skillhub" && Qt.platform.os !== "windows") {
             app.requestBanner()
             late.start()
         } else {
@@ -31,8 +31,10 @@ Rectangle {
     }
     Timer { id: late; interval: 2500; onTriggered: if (!term.running) root.go() }   // no banner, then: the shell matters more
     function go() {
-        term.program = app.terminalShell()
-        term.arguments = app.terminalArguments()
+        const start = app.terminalStart()
+        term.program = start.program
+        term.arguments = start.arguments
+        term.environment = start.environment
         term.workingDirectory = app.terminalFolder()
         term.start()
         term.forceActiveFocus()
@@ -60,6 +62,6 @@ Rectangle {
         selectionColor: Theme.markLow
         cursorShape: Theme.setting("terminal", "cursor", "block")
         scrollback: Theme.setting("terminal", "scrollback", 10000)
-        palette: root.look.palette || []
+        colorTable: root.look.palette || []
     }
 }

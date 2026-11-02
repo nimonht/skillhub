@@ -31,4 +31,22 @@ static void cases(void) {
     CHECK_STR(description_of("---\ndescription: \"\n---\n"), "\"");  // one quote is not a quoted value
 }
 
-const sh_test_case sh_tests_frontmatter[] = {{"frontmatter.cases", cases}, {NULL, NULL}};
+// a file made of keys costs no more than a limited search
+static void many_keys(void) {
+    sh_buf text = SH_BUF_INIT;
+    sh_buf_append(&text, "---\ndescription: first\n", 23);
+    for (int i = 0; i < 5000; ++i) {
+        char *line = sh_strfmt("k%d: v\n", i);
+        sh_buf_append(&text, line, strlen(line));
+        free(line);
+    }
+    sh_buf_append(&text, "---\n", 4);
+    sh_frontmatter fm;
+    sh_fm_parse(sh_buf_str(&text), text.len, &fm);
+    CHECK(fm.len <= 256);
+    CHECK_EQ_STR(sh_fm_value(&fm, "description"), "first");
+    sh_fm_free(&fm);
+    sh_buf_free(&text);
+}
+
+const sh_test_case sh_tests_frontmatter[] = {{"frontmatter.cases", cases}, {"frontmatter.many_keys", many_keys}, {NULL, NULL}};

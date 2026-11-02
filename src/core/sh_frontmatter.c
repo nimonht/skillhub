@@ -7,6 +7,8 @@
 #include "sh_str.h"
 #include "sh_utf.h"
 
+#define MAX_KEYS 256
+
 static void put(sh_frontmatter *fm, char *key, char *value) {
     for (size_t i = 0; i < fm->len; ++i) {  // a repeated key keeps the last value, like QMap::insert
         if (strcmp(fm->keys[i], key) == 0) {
@@ -15,6 +17,11 @@ static void put(sh_frontmatter *fm, char *key, char *value) {
             free(key);
             return;
         }
+    }
+    if (fm->len >= MAX_KEYS) {  // only a file made to slow this search down has more
+        free(key);
+        free(value);
+        return;
     }
     fm->keys = sh_xrealloc(fm->keys, (fm->len + 1) * sizeof *fm->keys);
     fm->values = sh_xrealloc(fm->values, (fm->len + 1) * sizeof *fm->values);

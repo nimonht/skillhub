@@ -73,9 +73,10 @@ int main(int argc, char **argv) {
             if (scale.isValid() && scale.toDouble() > 0 && !qEnvironmentVariableIsSet("QT_SCALE_FACTOR")) qputenv("QT_SCALE_FACTOR", scale.toByteArray());
         }
         QGuiApplication app(argc, argv);
-#ifdef Q_OS_WIN
-        qputenv("PATH", (QDir::toNativeSeparators(QCoreApplication::applicationDirPath()) + QLatin1Char(';') + qEnvironmentVariable("PATH")).toLocal8Bit());  // shells started from here find skillhub-cli
-#endif
+        {   // shells started from here find the command line, whatever PATH the desktop gave this window
+            const QString own = QDir::toNativeSeparators(QCoreApplication::applicationDirPath()), path = qEnvironmentVariable("PATH");
+            if (!path.split(QDir::listSeparator(), Qt::SkipEmptyParts).contains(own)) qputenv("PATH", (own + QDir::listSeparator() + path).toLocal8Bit());
+        }
         app.setApplicationName(QStringLiteral("skillhub"));
         app.setOrganizationName(QStringLiteral("skillhub"));
         app.setDesktopFileName(QStringLiteral("skillhub"));

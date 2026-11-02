@@ -15,7 +15,6 @@ typedef struct {
     char mark_low[8];               // a quiet fill
     char focus[8];
     char selected[8];               // the selected row
-    char ink_ok[8];                 // the accent on the inverted surface of toasts
     const char *clash;              // "", or the semantic colour the seed sits close to: "amber", "red", "lime"
 } sh_palette;
 

@@ -30,11 +30,24 @@
 #define MAX_SKILLS 600
 #define MAX_FILES 800
 
+// `name` in `v`, the way this machine's folders see names: on a case-insensitive disk, Foo and foo are one skill
+static bool name_listed(const sh_strv *v, const char *name);
+
 static int name_cmp(const char *a, const char *b) {
 #ifdef _WIN32
     return _stricmp(a, b);
 #else
     return strcasecmp(a, b);
+#endif
+}
+
+static bool name_listed(const sh_strv *v, const char *name) {
+#if defined(_WIN32) || defined(__APPLE__)
+    for (size_t i = 0; i < v->len; ++i)
+        if (name_cmp(v->items[i], name) == 0) return true;
+    return false;
+#else
+    return sh_strv_contains(v, name);
 #endif
 }
 
@@ -77,22 +90,6 @@ static bool valid_name(const char *n) {
         if (!(alnum || (i > 0 && (c == '.' || c == '_' || c == '-')))) return false;
     }
     return true;
-}
-
-// a relative path made of plain segments that is safe on every system (docs/formats.md, section 9)
-static bool valid_rel(const char *p) {
-    if (!*p || sh_utf16_len(p) > 300 || p[0] == '/' || strchr(p, '\\')) return false;
-    sh_strv seg = SH_STRV_INIT;
-    sh_split(p, strlen(p), '/', false, &seg);
-    bool ok = true;
-    for (size_t i = 0; ok && i < seg.len; ++i) {
-        const char *s = seg.items[i];
-        const size_t n = strlen(s);
-        if (n == 0 || strcmp(s, ".") == 0 || strcmp(s, "..") == 0 || name_cmp(s, ".git") == 0) ok = false;
-        else if (sh_path_windows_unsafe(s)) ok = false;
-    }
-    sh_strv_free(&seg);
-    return ok;
 }
 
 // the first value of `key` in a SKILL.md's front matter (the first 16 KB are enough)
@@ -171,7 +168,7 @@ bool sh_store_write_export(sh_store *st, const char *path, bool include_local, i
                 bool collides = false;
                 for (size_t k = 0; k < f; ++k)
                     if (name_cmp(c.files.items[k], rel) == 0) collides = true;
-                if (!valid_rel(rel) || collides) {
+                if (!sh_path_safe_rel(rel) || collides) {
                     if (skipped) sh_strv_take(skipped, sh_strfmt("%s/%s (a file name other systems cannot use)", s->name, rel));
                     free(full);
                     continue;
@@ -336,7 +333,7 @@ void sh_store_read_export_data(const sh_store *st, const char *data, size_t n, s
         it->problem = sh_strdup("");
         if (!valid_name(it->name)) {
             set(&it->problem, sh_strdup("not a valid skill name"));
-        } else if (sh_strv_contains(&seen, it->name)) {
+        } else if (name_listed(&seen, it->name)) {
             set(&it->problem, sh_strdup("listed twice"));
         } else if (!it->local) {
             sh_origin origin;
@@ -344,7 +341,7 @@ void sh_store_read_export_data(const sh_store *st, const char *data, size_t n, s
             const char *ref = sh_json_str(o, "ref");
             const char *why = remote_problem(sh_json_str(o, "source"), sh_json_str(o, "sourceType"), &origin);
             if (!why && !sh_origin_ref_ok(ref)) why = "unsafe branch or tag";
-            if (!why && (!valid_rel(p) || !(strcmp(p, "SKILL.md") == 0 || sh_ends_with(p, "/SKILL.md")))) why = "unsafe path inside the repository";
+            if (!why && (!sh_path_safe_rel(p) || !(strcmp(p, "SKILL.md") == 0 || sh_ends_with(p, "/SKILL.md")))) why = "unsafe path inside the repository";
             if (why) {
                 set(&it->problem, sh_strdup(why));
             } else {
@@ -366,7 +363,7 @@ void sh_store_read_export_data(const sh_store *st, const char *data, size_t n, s
             yyjson_arr_foreach(files, fi, fmax, fv) {
                 if (*it->problem) break;
                 const char *fpath = sh_json_str(fv, "path");
-                if (!valid_rel(fpath)) {
+                if (!sh_path_safe_rel(fpath)) {
                     set(&it->problem, unsafe_path(fpath));
                     break;
                 }
@@ -459,7 +456,7 @@ static bool remote_ok(const sh_import_item *it) {
     sh_origin o;
     const char *why = remote_problem(it->source, sh_starts_with(it->source, "https://") ? "git" : "github", &o);
     if (!why) sh_origin_free(&o);
-    return !why && valid_rel(it->skill_path);
+    return !why && sh_path_safe_rel(it->skill_path);
 }
 
 void sh_store_import_items(sh_store *st, const sh_import_item *const *items, size_t n, int *ok, int *failed) {
@@ -472,7 +469,7 @@ void sh_store_import_items(sh_store *st, const sh_import_item *const *items, siz
         char *dest = sh_store_skill_dir(st, it->name);
         bool go;
         if (*it->problem || !valid_name(it->name)) go = fail(st, it, sh_strdup(*it->problem ? it->problem : "invalid skill"));
-        else if (sh_exists(dest) || sh_strv_contains(&taken, it->name)) go = fail(st, it, sh_strdup("already installed (not overwritten)"));
+        else if (sh_exists(dest) || name_listed(&taken, it->name)) go = fail(st, it, sh_strdup("already installed (not overwritten)"));
         else if (!it->local && !remote_ok(it)) go = fail(st, it, sh_strdup("unsafe source"));
         else go = true;
         free(dest);

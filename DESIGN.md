@@ -118,7 +118,7 @@ Rail (216) | centre | detail (380) under a 64px top bar and a 34px status bar, w
 
 ## Elevation & Depth
 
-Flat by default. Depth is tone: each surface is one step lighter (dark) or whiter (light) than the one below, and controls are tone fills with no outline. The only floating things are the toast and tooltips; they use an inverted surface (`inkBg`) so they need neither border nor shadow.
+Flat by default. Depth is tone: each surface is one step lighter (dark) or whiter (light) than the one below, and controls are tone fills with no outline. The only floating things are the toast and tooltips; they use the raised surface (`bg3`) of the current theme and a 1px quiet line, so they need no shadow.
 
 **Materials.** Solid is the default and always correct. Blur and Liquid Glass let the desktop show through the panels, down to a tint floor: the lowest alpha at which every text colour still reaches 4.5:1 over pure black and pure white (`alphaFloor`, checked by the gate). In those materials `text3` gives way to `text2`, and light mode darkens its coloured text, because there is no contrast to spare. Glass is for floating surfaces, never for reading surfaces, and it falls back to a plain tint wherever its shader cannot run. Keyboard focus is the one place an outline appears: a 2px ring in `focus`, drawn outside the shape so nothing clips it.
 

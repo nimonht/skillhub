@@ -108,20 +108,38 @@ sh_pty *sh_pty_spawn(const char *program, const char *const *argv, const char *c
         quote(line, &at, w);
         free(w);
     }
-    for (size_t i = 0; env && env[i]; ++i) {
+    // the child inherits these, and only for this start: what this process runs later must not seem to run inside the terminal
+    size_t vars = 0;
+    while (env && env[vars]) ++vars;
+    wchar_t **names = need(calloc(vars + 1, sizeof *names)), **kept = need(calloc(vars + 1, sizeof *kept));
+    for (size_t i = 0; i < vars; ++i) {
         const char *eq = strchr(env[i], '=');
         if (!eq) continue;
         char *name = need(_strdup(env[i]));
         name[eq - env[i]] = 0;
-        wchar_t *wn = wide(name), *wv = wide(eq + 1);
-        SetEnvironmentVariableW(wn, wv);  // inherited by the child; this process has no use for the difference
-        free(wn);
-        free(wv);
+        names[i] = wide(name);
         free(name);
+        const DWORD len = GetEnvironmentVariableW(names[i], NULL, 0);
+        if (len > 0) {
+            kept[i] = need(malloc(len * sizeof **kept));
+            GetEnvironmentVariableW(names[i], kept[i], len);
+        }
+        wchar_t *value = wide(eq + 1);
+        SetEnvironmentVariableW(names[i], value);
+        free(value);
     }
     wchar_t *wprog = wide(program), *wcwd = cwd && *cwd ? wide(cwd) : NULL;
     PROCESS_INFORMATION pi;
     const BOOL ok = CreateProcessW(wprog, line, NULL, NULL, FALSE, EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT, NULL, wcwd, &si.StartupInfo, &pi);
+    const DWORD failure = GetLastError();
+    for (size_t i = 0; i < vars; ++i) {
+        if (names[i]) SetEnvironmentVariableW(names[i], kept[i]);  // NULL: it was not set
+        free(names[i]);
+        free(kept[i]);
+    }
+    free(names);
+    free(kept);
+    SetLastError(failure);
     free(line);
     free(wprog);
     free(wcwd);
@@ -166,6 +184,8 @@ void sh_pty_hangup(sh_pty *p) {
         p->console = NULL;
     }
 }
+
+void sh_pty_kill(sh_pty *p) { TerminateProcess(p->process, 1); }
 
 void sh_pty_free(sh_pty *p) {
     if (!p) return;

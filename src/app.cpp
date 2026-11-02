@@ -3,6 +3,7 @@
 #include "gui/terminal/term_look.h"
 #include "gui/window_effects.h"
 #include "sh_palette.h"
+#include "sh_shellstart.h"
 
 #ifdef SKILLHUB_HAVE_DBUS
 #include <QDBusArgument>
@@ -383,15 +384,83 @@ QString AppController::terminalShell() const {
 #endif
 }
 
-static QStringList bannerArguments(const QString &shell);
+namespace {
+struct QuietStart {
+    QStringList env, args;   // both empty: the shell starts as usual
+};
+}
 
-QStringList AppController::terminalArguments() const {
-#ifdef Q_OS_WIN
-    return setting(QStringLiteral("terminal"), QStringLiteral("banner"), true).toBool() ? bannerArguments(terminalShell()) : QStringList{};
-#else
-    const QString name = terminalShell().section(QLatin1Char('/'), -1);
+static QStringList bannerCommand(const QString &shell, const QuietStart &quiet);
+
+static QStringList loginArguments(const QString &shell) {
+    const QString name = shell.section(QLatin1Char('/'), -1);
     return name == QLatin1String("sh") || name == QLatin1String("dash") ? QStringList{} : QStringList{QStringLiteral("-l")};
+}
+
+static QString shellFetchTool(const QString &shell) {
+#ifdef Q_OS_WIN
+    Q_UNUSED(shell)
+    return {};
+#else
+    char *tool = sh_shell_fetch_tool(shell.toUtf8().constData(), QDir::homePath().toUtf8().constData());
+    const QString name = QString::fromUtf8(tool);
+    free(tool);
+    return name;
 #endif
+}
+
+static QStringList fromStrv(const sh_strv &v) {
+    QStringList out;
+    for (size_t i = 0; i < v.len; ++i) out << QString::fromUtf8(v.items[i]);
+    return out;
+}
+
+// with a Skill Hub greeting, the shell's own fetch tool has to stay quiet, and nothing else changes
+static QuietStart quietStart(const QString &shell) {
+    QuietStart out;
+    if (shellFetchTool(shell).isEmpty()) return out;
+    QString base = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation);
+    if (base.isEmpty()) base = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+    sh_shell_quiet q = SH_SHELL_QUIET_INIT;
+    if (sh_shell_quiet_start(shell.toUtf8().constData(), (base + QLatin1String("/skillhub-shell")).toUtf8().constData(), &q)) {
+        out.env = fromStrv(q.env);
+        out.args = fromStrv(q.args);
+    }
+    sh_shell_quiet_free(&q);
+    return out;
+}
+
+QString AppController::terminalGreeting() const {
+    const QString chosen = setting(QStringLiteral("terminal"), QStringLiteral("greeting"), QString()).toString();
+    if (chosen == QLatin1String("skillhub") || chosen == QLatin1String("shell")) return chosen;
+    if (chosen.isEmpty() && !setting(QStringLiteral("terminal"), QStringLiteral("banner"), true).toBool()) return QStringLiteral("shell");   // the older switch
+    return shellFetchTool(terminalShell()).isEmpty() ? QStringLiteral("skillhub") : QStringLiteral("shell");
+}
+
+QString AppController::terminalGreetingNote() const {
+    const QString shell = terminalShell(), tool = shellFetchTool(shell), name = shell.section(QLatin1Char('/'), -1).section(QLatin1Char('\\'), -1);
+    if (terminalGreeting() == QLatin1String("shell"))
+        return tool.isEmpty() ? tr("New terminals start with whatever %1 prints.").arg(name) : tr("New terminals show %1, which your %2 startup files run.").arg(tool, name);
+    if (tool.isEmpty()) return tr("New terminals show the Skill Hub banner.");
+    if (sh_shell_can_quiet(shell.toUtf8().constData())) return tr("New terminals show the Skill Hub banner. %1 stays quiet while the shell starts; your startup files stay as they are.").arg(tool);
+    return tr("New terminals show the Skill Hub banner, and %1 still runs from your %2 startup files. To see only the banner, skip that line when SKILLHUB_TERMINAL is set.").arg(tool, name);
+}
+
+QVariantMap AppController::terminalStart() const {
+    const QString shell = terminalShell();
+    const bool banner = terminalGreeting() == QLatin1String("skillhub");
+    QStringList args, env;
+#ifdef Q_OS_WIN
+    if (banner) args = bannerCommand(shell, {}).mid(1);
+#else
+    args = loginArguments(shell);
+    if (banner) {
+        const QuietStart quiet = quietStart(shell);
+        env = quiet.env;
+        if (!quiet.args.isEmpty()) args = quiet.args;
+    }
+#endif
+    return {{QStringLiteral("program"), shell}, {QStringLiteral("arguments"), args}, {QStringLiteral("environment"), env}};
 }
 
 QString AppController::terminalFolder() const {
@@ -427,24 +496,36 @@ QVariantList AppController::externalTerminals() const {
     return out;
 }
 
-// what a shell runs to show the banner and stay open
-static QStringList bannerArguments(const QString &shell) {
+static QString shellQuoted(QString s) { return QLatin1Char('\'') + s.replace(QLatin1Char('\''), QLatin1String("'\\''")) + QLatin1Char('\''); }
+
+// how a shell shows the banner and stays open
+static QStringList bannerCommand(const QString &shell, const QuietStart &quiet) {
     const QString name = shell.section(QLatin1Char('/'), -1).section(QLatin1Char('\\'), -1).toLower();
 #ifdef Q_OS_WIN
     const QString fetch = QStringLiteral("skillhub-cli fetch");  // on PATH, see main(): no shell agrees on how to quote a path
 #else
     const QString fetch = QStringLiteral("skillhub fetch");
 #endif
-    if (name.startsWith(QLatin1String("fish"))) return {QStringLiteral("-C"), fetch};
-    if (name.startsWith(QLatin1String("nu"))) return {QStringLiteral("-e"), fetch};
-    if (name.startsWith(QLatin1String("pwsh")) || name.startsWith(QLatin1String("powershell"))) return {QStringLiteral("-NoExit"), QStringLiteral("-Command"), fetch};
-    if (name.startsWith(QLatin1String("cmd"))) return {QStringLiteral("/K"), fetch};
-    return {QStringLiteral("-c"), fetch + QStringLiteral("; exec ") + shell + QStringLiteral(" -l")};
+    if (name.startsWith(QLatin1String("fish"))) {   // the same process greets and stays, so what it needs goes around it
+        const QStringList around = quiet.env.isEmpty() ? QStringList{} : QStringList{QStringLiteral("env")} + quiet.env;
+        return around + QStringList{shell, QStringLiteral("-C"), fetch};
+    }
+    if (name.startsWith(QLatin1String("nu"))) return {shell, QStringLiteral("-e"), fetch};
+    if (name.startsWith(QLatin1String("pwsh")) || name.startsWith(QLatin1String("powershell"))) return {shell, QStringLiteral("-NoExit"), QStringLiteral("-Command"), fetch};
+    if (name.startsWith(QLatin1String("cmd"))) return {shell, QStringLiteral("/K"), fetch};
+    // the shell that stays is a second one: the first reads zsh's .zshenv too, so it must not be started with the quiet settings
+    QStringList next;
+    if (!quiet.env.isEmpty()) next << QStringLiteral("env");
+    for (const QString &e : quiet.env) next << shellQuoted(e);
+    next << shellQuoted(shell);
+    for (const QString &a : quiet.args.isEmpty() ? loginArguments(shell) : quiet.args) next << shellQuoted(a);
+    return {shell, QStringLiteral("-c"), fetch + QStringLiteral("; exec ") + next.join(QLatin1Char(' '))};
 }
 
 void AppController::openExternalTerminal(const QString &id) {
     const QString shell = terminalShell(), dir = terminalFolder();
-    const QStringList run = QStringList{shell} + bannerArguments(shell);
+    const bool banner = terminalGreeting() == QLatin1String("skillhub");
+    const QStringList run = banner ? bannerCommand(shell, quietStart(shell)) : QStringList{shell} + loginArguments(shell);
     const QString custom = setting(QStringLiteral("terminal"), QStringLiteral("externalTemplate"), QString()).toString();
     QString program;
     QStringList args;
@@ -780,8 +861,7 @@ QVariantMap AppController::derivePalette(const QString &seed, bool dark) const {
     return {{QStringLiteral("action"), QString::fromLatin1(p.action)},       {QStringLiteral("actionInk"), QString::fromLatin1(p.action_ink)},
             {QStringLiteral("mark"), QString::fromLatin1(p.mark)},           {QStringLiteral("markText"), QString::fromLatin1(p.mark_text)},
             {QStringLiteral("markLow"), QString::fromLatin1(p.mark_low)},    {QStringLiteral("focus"), QString::fromLatin1(p.focus)},
-            {QStringLiteral("selected"), QString::fromLatin1(p.selected)},   {QStringLiteral("inkOk"), QString::fromLatin1(p.ink_ok)},
-            {QStringLiteral("clash"), QString::fromLatin1(p.clash)}};
+            {QStringLiteral("selected"), QString::fromLatin1(p.selected)},   {QStringLiteral("clash"), QString::fromLatin1(p.clash)}};
 }
 
 QVariant AppController::layoutState(const QString &key) const {

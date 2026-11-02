@@ -217,7 +217,16 @@ static bool update_clone(sh_repo *r, const char *url, const char *ref, sh_limite
         ok = !failed(&g, err) && read_heads(r, err);
         sh_git_result_free(&g);
     } else if (!read_heads(r, err)) {
+        // a clone cut off half way has a .git and no commit, and would fail like this for good: it goes, and comes back whole
+        sh_remove_tree(r->dir);
         ok = false;
+        if (!sh_repo_cloned(r->dir)) {
+            if (err) {
+                free(*err);
+                *err = NULL;
+            }
+            ok = update_clone(r, url, ref, fetches, err);
+        }
     } else {
         char *remote = remote_head(r, ref, err);
         ok = remote != NULL;

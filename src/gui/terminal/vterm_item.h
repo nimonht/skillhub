@@ -2,12 +2,15 @@
 #pragma once
 
 #include <QColor>
+#include <QAtomicInt>
 #include <QFont>
+#include <QMutex>
 #include <QPointer>
 #include <QQuickPaintedItem>
 #include <QSemaphore>
 #include <QThread>
 #include <QVector>
+#include <QWaitCondition>
 
 extern "C" {
 #include <vterm.h>
@@ -20,6 +23,11 @@ class PtyReader : public QThread {
 public:
     explicit PtyReader(sh_pty *pty) : pty_(pty) {}
     void consumed() { room_.release(); }  // one more buffer may be read: the window took the last one
+    // From here on what the shell says is thrown away, up to its end: a closing ConPTY waits for its output to be read.
+    void stop() {
+        stopping_.storeRelaxed(1);
+        room_.release();
+    }
 signals:
     void received(const QByteArray &data);
     void ended();
@@ -28,6 +36,24 @@ protected:
 private:
     sh_pty *pty_;
     QSemaphore room_{32};  // buffers on their way to the window: `yes` must not fill the memory faster than it draws
+    QAtomicInt stopping_;
+};
+
+// Everything for the shell goes through here, never from the interface thread. A shell that is not reading fills the terminal's
+// input queue and the write blocks; the shell may in turn be waiting for its output to be read, which only the interface thread lets happen.
+class PtyWriter : public QThread {
+public:
+    explicit PtyWriter(sh_pty *pty) : pty_(pty) {}
+    void send(const QByteArray &data);
+    void stop();
+protected:
+    void run() override;
+private:
+    sh_pty *pty_;
+    QMutex lock_;
+    QWaitCondition more_;
+    QByteArray queue_;
+    bool stopping_ = false;
 };
 
 class VTermItem : public QQuickPaintedItem {
@@ -35,6 +61,7 @@ class VTermItem : public QQuickPaintedItem {
     Q_PROPERTY(QString program MEMBER program_ NOTIFY settingsChanged)
     Q_PROPERTY(QStringList arguments MEMBER arguments_ NOTIFY settingsChanged)
     Q_PROPERTY(QString workingDirectory MEMBER workingDirectory_ NOTIFY settingsChanged)
+    Q_PROPERTY(QStringList environment MEMBER environment_ NOTIFY settingsChanged)   // NAME=value, on top of what the terminal itself sets
     Q_PROPERTY(QString fontFamily READ fontFamily WRITE setFontFamily NOTIFY settingsChanged)
     Q_PROPERTY(int fontSize READ fontSize WRITE setFontSize NOTIFY settingsChanged)
     Q_PROPERTY(QColor foreground READ foreground WRITE setForeground NOTIFY settingsChanged)
@@ -43,7 +70,7 @@ class VTermItem : public QQuickPaintedItem {
     Q_PROPERTY(QColor selectionColor MEMBER selectionColor_ NOTIFY settingsChanged)
     Q_PROPERTY(QString cursorShape MEMBER cursorShape_ NOTIFY settingsChanged)   // block, bar or underline
     Q_PROPERTY(int scrollback MEMBER scrollbackMax_ NOTIFY settingsChanged)
-    Q_PROPERTY(QVariantList palette WRITE setPalette READ paletteList NOTIFY settingsChanged)  // 16 colours, empty: libvterm's own
+    Q_PROPERTY(QVariantList colorTable WRITE setPalette READ paletteList NOTIFY settingsChanged)  // 16 colours, empty: libvterm's own
     Q_PROPERTY(QString title READ title NOTIFY titleChanged)
     Q_PROPERTY(QString currentDirectory READ currentDirectory NOTIFY titleChanged)
     Q_PROPERTY(bool running READ running NOTIFY runningChanged)
@@ -120,6 +147,7 @@ private:
     VTermState *state_ = nullptr;
     sh_pty *pty_ = nullptr;
     PtyReader *reader_ = nullptr;
+    PtyWriter *writer_ = nullptr;
     int cols_ = 80, rows_ = 24;
     qreal cellW_ = 8, cellH_ = 16, ascent_ = 12;
     QFont font_;
@@ -128,6 +156,7 @@ private:
     QVector<QColor> palette_;
     QString program_, workingDirectory_, title_, cwd_, error_;
     QStringList arguments_;
+    QStringList environment_;
     QByteArray osc_;
     int scrollbackMax_ = 10000, scrolled_ = 0;
     QVector<Line> scrollback_;

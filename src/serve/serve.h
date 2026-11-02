@@ -29,6 +29,7 @@ typedef enum {
     EV_PROGRESS,     // a job's progress (a done, b total, text current)
     EV_JOB_DONE,     // a job ended
     EV_SCAN_DONE,    // a scan finished (data: a scan_result)
+    EV_SLOW_DONE,    // a slow call has answered (data: its slow_call)
 } event_kind;
 
 typedef struct event {
@@ -165,6 +166,7 @@ struct server {
     check_map checks;
     sh_strv just_updated;
     bool scan_running, scan_again, resync_pending;
+    int slow_running;      // calls working away from the loop
     sh_thread *scanner;
     waiting *waiting;      // requests answered after the next scan
 

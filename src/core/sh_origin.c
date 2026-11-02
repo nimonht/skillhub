@@ -192,6 +192,8 @@ static bool parse_remote(const char *s, sh_origin *o) {
     }
     const bool https = sh_starts_with(s, "https://");
     const bool web = https || sh_starts_with(s, "http://");
+    // a password or token in a URL would end up in the lock file, which projects commit, and in logs and messages; git's credential helpers keep those
+    char *plain = web ? sh_strfmt("%.*s://%s/%s", (int)(scheme_end - s), s, host_port, path_start) : sh_strdup(s);
     char *repo = NULL, *ref = sh_strdup(""), *subpath = sh_strdup("");
     if (strcmp(host, "github.com") == 0 || strcmp(host, "www.github.com") == 0) {
         split_tree(path_start, "/tree/", &repo, &ref, &subpath);
@@ -201,15 +203,16 @@ static bool parse_remote(const char *s, sh_origin *o) {
         if (owner_repo) {
             set(o, SH_ORIGIN_GITHUB, sh_strdup(repo), web ? sh_strfmt("https://github.com/%s.git", repo) : sh_strdup(s), "github.com");
         } else {
-            set(o, SH_ORIGIN_GIT, sh_strdup(s), sh_strdup(s), host);
+            set(o, SH_ORIGIN_GIT, sh_strdup(plain), sh_strdup(plain), host);
         }
     } else if (strstr(path_start, "/-/tree/") || strcmp(host, "gitlab.com") == 0 || strstr(host, "gitlab")) {
         split_tree(path_start, "/-/tree/", &repo, &ref, &subpath);
         char *url = web ? sh_strfmt("%s://%s/%s.git", https ? "https" : "http", host_port, repo) : sh_strdup(s);
         set(o, SH_ORIGIN_GITLAB, sh_strdup(url), url, host);
     } else {
-        set(o, SH_ORIGIN_GIT, sh_strdup(s), sh_strdup(s), host);
+        set(o, SH_ORIGIN_GIT, sh_strdup(plain), sh_strdup(plain), host);
     }
+    free(plain);
     free(o->ref);
     free(o->subpath);
     o->ref = ref;

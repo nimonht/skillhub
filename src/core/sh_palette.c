@@ -7,7 +7,6 @@
 // the neutrals of qml/Theme.qml that accent roles have to read on; tests/contrast.py fails if they drift apart
 static const char *const DARK_BG[] = {"#10141A", "#141920", "#1B212A", "#222A35"};
 static const char *const LIGHT_BG[] = {"#E8EBEE", "#F5F6F7", "#FFFFFF"};
-#define DARK_INK_BG "#E8ECF1"
 #define LIGHT_INK_BG "#11161C"
 #define STEP 0.004
 
@@ -114,8 +113,6 @@ bool sh_palette_derive(const char *seed, bool dark, sh_palette *p) {
         const char *const on_action[] = {ink};
         solve(fmax(l, 0.7), c, h, 1, on_action, 1, 4.5, p->action);  // ink stays dark, so the fill gets lighter if it must
         memcpy(p->focus, p->mark, 8);
-        const char *const ink_bg[] = {DARK_INK_BG};
-        solve(0.55, c, h, -1, ink_bg, 1, 3.0, p->ink_ok);
     } else {
         memcpy(p->action, LIGHT_INK_BG, 8);
         memcpy(p->action_ink, "#FFFFFF", 8);
@@ -126,8 +123,6 @@ bool sh_palette_derive(const char *seed, bool dark, sh_palette *p) {
         const char *const text_on[] = {LIGHT_BG[0], LIGHT_BG[1], p->selected, p->mark_low};
         solve(fmin(l, 0.55), c, h, -1, text_on, 4, 4.5, p->mark_text);
         memcpy(p->focus, p->mark, 8);
-        const char *const ink_bg[] = {LIGHT_INK_BG};
-        solve(0.7, c, h, 1, ink_bg, 1, 3.0, p->ink_ok);
     }
     return true;
 }

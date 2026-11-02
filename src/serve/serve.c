@@ -224,6 +224,19 @@ static void send_progress_and_logs(server *s) {
     }
 }
 
+// A delta was dropped while the window was not reading: it takes a fresh snapshot, as soon as it can take anything.
+static void resync_when_room(server *s) {
+    if (!s->resync_pending) return;
+    if (output_queued(s) >= BACKPRESSURE / 8) {
+        arm_flush(s);
+        return;
+    }
+    yyjson_mut_doc *d = yyjson_mut_doc_new(NULL);
+    send_notification(s, d, "state.resync", yyjson_mut_obj(d));
+    yyjson_mut_doc_free(d);
+    s->resync_pending = false;
+}
+
 // on the timer: when the window is not reading, progress and log lines keep merging instead of piling up
 static void flush_when_reading(server *s) {
     if (output_queued(s) > BACKPRESSURE) {
@@ -231,6 +244,7 @@ static void flush_when_reading(server *s) {
         return;
     }
     send_progress_and_logs(s);
+    resync_when_room(s);
 }
 
 void flush_pending(server *s) { send_progress_and_logs(s); }
@@ -245,6 +259,7 @@ void loop_log(void *user, const char *line) {
 
 struct waiting {
     sh_rpc_msg *msg;
+    bool after_next;  // it needs what is on disk now, and the running scan may already have read past that
     waiting *next;
 };
 
@@ -319,20 +334,21 @@ static void scan_done(server *s, scan_result *r) {
     }
     scan_result_free(s->state);
     s->state = r;
-    if (s->resync_pending && output_queued(s) < BACKPRESSURE / 8) {
-        yyjson_mut_doc *d = yyjson_mut_doc_new(NULL);
-        send_notification(s, d, "state.resync", yyjson_mut_obj(d));
-        yyjson_mut_doc_free(d);
-        s->resync_pending = false;
-    }
+    resync_when_room(s);
     watch_sync(s, &r->watch_dirs, &r->watch_files);
     waiting *w = s->waiting;  // answered in the order they came
     s->waiting = NULL;
     waiting *rev = NULL;
     while (w) {
         waiting *next = w->next;
-        w->next = rev;
-        rev = w;
+        if (w->after_next) {  // for the scan that follows this one
+            w->after_next = false;
+            w->next = s->waiting;
+            s->waiting = w;
+        } else {
+            w->next = rev;
+            rev = w;
+        }
         w = next;
     }
     while (rev) {
@@ -373,6 +389,39 @@ static bool may_write(server *s, sh_rpc_msg *m, sh_flock **lock) {
         return false;
     }
     return true;
+}
+
+// ---- calls that can take long ----
+
+// Reading every skill, or a service manager that does not answer, must not hold up the loop: progress, cancel and shutdown go through
+// it. These run on a thread of their own and answer from there, so they touch nothing of the server but its output.
+typedef struct slow_call slow_call;
+struct slow_call {
+    server *s;
+    sh_rpc_msg *msg;
+    void (*fn)(server *s, sh_rpc_msg *m, const slow_call *c);
+    char *project;   // the scope, as it was when the call came
+    sh_flock *lock;  // held for a call that changes things; the call releases it
+    sh_thread *thread;
+};
+
+static void slow_main(void *arg) {
+    slow_call *c = arg;
+    c->fn(c->s, c->msg, c);
+    post_event(c->s, EV_SLOW_DONE, NULL, NULL, 0, 0, 0, c);
+}
+
+static void slow_free(slow_call *c) {
+    sh_rpc_msg_free(c->msg);
+    free(c->msg);
+    free(c->project);
+    free(c);
+}
+
+// a log line from such a thread
+static void slow_log(void *user, const char *line) {
+    char *json = log_line_json(line);
+    post_event(user, EV_LOG, NULL, json, strlen(json), 0, 0, NULL);
 }
 
 // ---- settings ----
@@ -470,6 +519,10 @@ static void reply_shutdown(server *s, const char *cancelled_job) {
 }
 
 static bool m_shutdown(server *s, sh_rpc_msg *m) {
+    if (s->shutdown_msg) {  // the first request gets the answer, once the job has stopped
+        send_error(s, m, SH_RPC_REFUSED, "the backend is already shutting down");
+        return false;
+    }
     s->shutting_down = true;
     s->shutdown_msg = m;
     if (!s->job) {
@@ -519,7 +572,9 @@ static bool m_from_state(server *s, sh_rpc_msg *m) {
         answer(s, m);
         return false;
     }
+    const bool behind = fresh && s->scan_running;
     wait_for_scan(s, m);
+    s->waiting->after_next = behind;
     if (fresh) request_scan(s);  // else the first scan is still running
     return true;
 }
@@ -543,6 +598,7 @@ static void m_scope_set(server *s, sh_rpc_msg *m) {
     s->project = user ? NULL : sh_strdup(st.project);
     check_map_free(&s->checks);
     memset(&s->checks, 0, sizeof s->checks);
+    sh_strv_clear(&s->just_updated);  // those were other skills, however alike the names
     yyjson_mut_doc *d = yyjson_mut_doc_new(NULL);
     yyjson_mut_val *r = yyjson_mut_obj(d);
     yyjson_mut_obj_add_strcpy(d, r, "scope", st.scope);
@@ -553,7 +609,8 @@ static void m_scope_set(server *s, sh_rpc_msg *m) {
     request_scan(s);
 }
 
-static void m_projects_list(server *s, sh_rpc_msg *m) {
+static void m_projects_list(server *s, sh_rpc_msg *m, const slow_call *c) {
+    (void)c;
     sh_projects p;
     char *err = NULL;
     if (!sh_projects_load(&p, &err)) {
@@ -603,9 +660,9 @@ static void m_projects_change(server *s, sh_rpc_msg *m) {
     free(err);
 }
 
-static void m_fetch_render(server *s, sh_rpc_msg *m) {
+static void m_fetch_render(server *s, sh_rpc_msg *m, const slow_call *c) {
     sh_store st;
-    scope_store(s->project, &st, NULL, NULL);
+    scope_store(c->project, &st, NULL, NULL);
     const char *icons = param_str(m->params, "icons");
     const sh_fetch_opts o = {strcmp(param_str(m->params, "colors"), "256") == 0 ? SH_COLOR_256 : SH_COLOR_TRUE,
                              strcmp(icons, "nerd") == 0 ? SH_ICONS_NERD : strcmp(icons, "none") == 0 ? SH_ICONS_NONE : SH_ICONS_UNICODE,
@@ -845,18 +902,17 @@ static void automation_result(server *s, sh_rpc_msg *m, sh_store *st) {
     free(watcher);
 }
 
-static void m_automation_status(server *s, sh_rpc_msg *m) {
+static void m_automation_status(server *s, sh_rpc_msg *m, const slow_call *c) {
+    (void)c;
     sh_store st;
     sh_store_init(&st, NULL, NULL);
     automation_result(s, m, &st);
     sh_store_free(&st);
 }
 
-static void m_automation_set(server *s, sh_rpc_msg *m) {
-    sh_flock *lock = NULL;
-    if (!may_write(s, m, &lock)) return;
+static void m_automation_set(server *s, sh_rpc_msg *m, const slow_call *c) {
     sh_store st;
-    sh_store_init(&st, loop_log, s);
+    sh_store_init(&st, slow_log, s);
     char *err = NULL;
     bool ok = true;
     static const char *const keys[] = {"timer", "watcher"};
@@ -870,7 +926,7 @@ static void m_automation_set(server *s, sh_rpc_msg *m) {
     else send_error(s, m, SH_RPC_REFUSED, err ? err : "could not change the automation");
     free(err);
     sh_store_free(&st);
-    sh_flock_release(lock);
+    sh_flock_release(c->lock);
 }
 
 static void m_settings_get(server *s, sh_rpc_msg *m) {
@@ -932,10 +988,8 @@ typedef struct {
 static const immediate IMMEDIATE[] = {
     {"skills.read", m_read},
     {"skills.history", m_history},
-    {"fetch.render", m_fetch_render},
     {"system.info", m_system_info},
     {"scope.set", m_scope_set},
-    {"projects.list", m_projects_list},
     {"projects.add", m_projects_change},
     {"projects.remove", m_projects_change},
     {"projects.setAuto", m_projects_change},
@@ -943,12 +997,43 @@ static const immediate IMMEDIATE[] = {
     {"providers.removeCustom", m_providers_remove},
     {"transfer.export", m_export},
     {"transfer.preview", m_preview},
-    {"automation.status", m_automation_status},
-    {"automation.set", m_automation_set},
     {"settings.get", m_settings_get},
     {"settings.set", m_settings_set},
     {"jobs.cancel", m_cancel},
 };
+
+static const struct {
+    const char *method;
+    void (*fn)(server *s, sh_rpc_msg *m, const slow_call *c);
+    bool writes;
+} SLOW[] = {
+    {"fetch.render", m_fetch_render, false},
+    {"projects.list", m_projects_list, false},
+    {"automation.status", m_automation_status, false},
+    {"automation.set", m_automation_set, true},
+};
+
+// returns true when it keeps `m`, until the call has answered
+static bool start_slow(server *s, sh_rpc_msg *m, size_t which) {
+    slow_call *c = sh_xcalloc(1, sizeof *c);
+    if (SLOW[which].writes && !may_write(s, m, &c->lock)) {
+        free(c);
+        return false;
+    }
+    c->s = s;
+    c->msg = m;
+    c->fn = SLOW[which].fn;
+    c->project = s->project ? sh_strdup(s->project) : NULL;
+    c->thread = sh_thread_start(slow_main, c);
+    if (c->thread) {
+        ++s->slow_running;
+        return true;
+    }
+    c->fn(s, m, c);  // no thread to be had: it runs here, as it would have to anyway
+    free(c->project);
+    free(c);
+    return false;
+}
 
 // returns true when it keeps `m` to answer later
 static bool dispatch(server *s, sh_rpc_msg *m) {
@@ -973,6 +1058,8 @@ static bool dispatch(server *s, sh_rpc_msg *m) {
             return false;
         }
     }
+    for (size_t i = 0; i < sizeof SLOW / sizeof SLOW[0]; ++i)
+        if (strcmp(SLOW[i].method, m->method) == 0) return start_slow(s, m, i);
     bool mutating;
     job_body body;
     const char *kind = job_method_kind(m->method, &mutating, &body);
@@ -1007,7 +1094,7 @@ static void handle_line(server *s, char *text, size_t len, bool fits) {
 // ---- the loop ----
 
 static void maybe_stop(server *s) {
-    if (s->input_closed && !s->job && !s->scan_running) uv_stop(s->loop);
+    if (s->input_closed && !s->job && !s->scan_running && !s->slow_running) uv_stop(s->loop);
 }
 
 static void handle_event(server *s, event *ev) {
@@ -1048,6 +1135,13 @@ static void handle_event(server *s, event *ev) {
     case EV_SCAN_DONE:
         scan_done(s, ev->data);
         break;
+    case EV_SLOW_DONE: {
+        slow_call *c = ev->data;
+        sh_thread_join(c->thread);
+        slow_free(c);
+        --s->slow_running;
+        break;
+    }
     }
 }
 

@@ -31,6 +31,7 @@ void sh_sha1_final(sh_sha1 *c, unsigned char out[20]);
 
 void sh_sha256_init(sh_sha256 *c);
 void sh_sha256_update(sh_sha256 *c, const void *data, size_t n);
+void sh_sha256_add_file(sh_sha256 *c, const char *path);  // nothing for a file that cannot be read
 void sh_sha256_final(sh_sha256 *c, unsigned char out[32]);
 
 // Lowercase hex of `n` bytes into `out` (2n + 1 bytes).

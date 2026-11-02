@@ -31,11 +31,10 @@ checks.append(("actionInk", "action", TEXT))
 for fg in ("mark", "notify", "danger", "focus", "lineInput"):
     checks += [(fg, bg, GRAPHIC) for bg in ("bg2", "bg3")]
 checks += [("mark", "bg4", GRAPHIC), ("focus", "bg4", GRAPHIC)]
-checks.append(("inkText", "inkBg", TEXT))
 checks.append(("text2", "trackOff", GRAPHIC))   # switch knob on its off track
 checks.append(("text3", "field", TEXT))       # placeholder text on the input fill
 checks.append(("text", "field", TEXT))
-checks += [(fg, "inkBg", GRAPHIC) for fg in ("inkOk", "inkWarn", "inkDanger")]
+checks += [(fg, "bg3", TEXT) for fg in ("markText", "notifyText", "dangerText")]   # the toast
 
 bad = 0
 for mode, name in ((0, "dark"), (1, "light")):
@@ -94,7 +93,7 @@ if len(sys.argv) > 1:
         m = 0 if p["mode"] == "dark" else 1
         t = {k: v[m] for k, v in tok.items()}
         t.update({"action": p["action"], "actionInk": p["actionInk"], "mark": p["mark"], "markText": p["markText"], "markLow": p["markLow"],
-                  "focus": p["focus"], "bg4": p["selected"], "inkOk": p["inkOk"]})
+                  "focus": p["focus"], "bg4": p["selected"]})
         for fg, bg, need in checks:
             r = ratio(t[fg], t[bg])
             if r < need:

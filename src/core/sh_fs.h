@@ -12,7 +12,9 @@
 extern "C" {
 #endif
 
-bool sh_read_file(const char *path, size_t max, sh_buf *out);  // at most `max` bytes (0: no limit)
+bool sh_read_file(const char *path, size_t max, sh_buf *out);  // at most `max` bytes (0: no limit); regular files only
+typedef void (*sh_piece_fn)(void *user, const void *data, size_t n);
+bool sh_read_pieces(const char *path, sh_piece_fn fn, void *user);  // the same, a piece at a time, for files of any size
 bool sh_write_file(const char *path, const void *data, size_t n);
 // Temporary file in the same folder, flushed to disk, then renamed over `path`. A symlinked `path` is resolved first, so
 // the link survives. Parent folders are created.

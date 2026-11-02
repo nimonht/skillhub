@@ -2,7 +2,7 @@ import QtQuick
 import QtQuick.Controls.Basic
 import "."
 
-// Transient confirmation on an inverted surface: no outline, readable over anything. Level = icon + words.
+// Transient confirmation on the raised surface of the current theme, with a quiet line to lift it off the list. Level = icon + words.
 Rectangle {
     id: root
     property string level: "ok"
@@ -29,13 +29,15 @@ Rectangle {
     Accessible.role: Accessible.AlertMessage
     Accessible.name: message
 
-    Glass { anchors.fill: parent; behind: root.behind; radius: root.radius; tint: Theme.inkBg }
+    InputShield {}
+    Glass { anchors.fill: parent; behind: root.behind; radius: root.radius; tint: Theme.bg3; tintAlpha: Theme.alphaFloor }
+    Rectangle { anchors.fill: parent; radius: root.radius; color: "transparent"; border.color: Theme.line; border.width: 1 }
     Row {
         id: row
         anchors.centerIn: parent
         spacing: 9
-        Icon { name: root.level === "ok" ? "check" : "alert"; size: 16; weight: 2.4; color: root.level === "error" ? Theme.inkDanger : root.level === "warn" ? Theme.inkWarn : Theme.inkOk; anchors.verticalCenter: parent.verticalCenter }
-        Text { textFormat: Text.PlainText; text: root.message; color: Theme.inkText; font.family: Theme.ui; font.pixelSize: Theme.fsBody; font.weight: Font.Medium; anchors.verticalCenter: parent.verticalCenter }
+        Icon { name: root.level === "ok" ? "check" : "alert"; size: 16; weight: 2.4; color: root.level === "error" ? Theme.dangerText : root.level === "warn" ? Theme.notifyText : Theme.markText; anchors.verticalCenter: parent.verticalCenter }
+        Text { textFormat: Text.PlainText; text: root.message; color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsBody; font.weight: Font.Medium; anchors.verticalCenter: parent.verticalCenter }
         AbstractButton {
             id: act
             visible: root.action !== ""
@@ -50,10 +52,10 @@ Rectangle {
             contentItem: Item {}
             background: Rectangle {
                 radius: 3
-                color: act.hovered ? Qt.alpha(Theme.inkText, 0.14) : "transparent"
-                border.color: Theme.inkOk
+                color: act.hovered ? Theme.bg4 : "transparent"
+                border.color: Theme.focus
                 border.width: act.visualFocus ? 2 : 0
-                Text { textFormat: Text.PlainText; id: actText; anchors.centerIn: parent; text: root.action; color: Theme.inkOk; font.family: Theme.ui; font.pixelSize: Theme.fsBody; font.weight: Font.Bold }
+                Text { textFormat: Text.PlainText; id: actText; anchors.centerIn: parent; text: root.action; color: Theme.markText; font.family: Theme.ui; font.pixelSize: Theme.fsBody; font.weight: Font.Bold }
             }
         }
     }

@@ -150,7 +150,9 @@ bool sh_store_uninstall(sh_store *st, bool dry_run, bool keep_cache) {
 #endif
 
     // 3. the cache of cloned upstream repositories
-    if (!keep_cache && strcmp(sh_path_name(st->cache), "skillhub") == 0 && sh_exists(st->cache)) {
+    const bool chosen = sh_env_is_set("SKILLHUB_CACHE");  // a folder someone named can hold more than this program's files
+    if (chosen && !keep_cache) sh_store_log(st, "kept %s: SKILLHUB_CACHE chose it, so it is yours to remove", st->cache);
+    if (!keep_cache && !chosen && strcmp(sh_path_name(st->cache), "skillhub") == 0 && sh_exists(st->cache)) {
         if (dry_run) {
             sh_store_log(st, "%s %s", verb, st->cache);
         } else if (sh_remove_tree(st->cache)) {

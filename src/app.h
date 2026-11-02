@@ -285,7 +285,9 @@ public:
     Q_INVOKABLE void tourDone();
     bool tourNeeded() const;
     Q_INVOKABLE QString terminalShell() const;
-    Q_INVOKABLE QStringList terminalArguments() const;
+    Q_INVOKABLE QVariantMap terminalStart() const;   // program, arguments, environment
+    Q_INVOKABLE QString terminalGreeting() const;    // who greets in a new terminal: "skillhub" or "shell"
+    Q_INVOKABLE QString terminalGreetingNote() const;
     Q_INVOKABLE QString terminalFolder() const;
     Q_INVOKABLE QVariantMap terminalLook() const;
     Q_INVOKABLE void requestBanner();

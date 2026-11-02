@@ -127,6 +127,10 @@ void sh_pty_hangup(sh_pty *p) {
     if (p->pid > 0) kill(-p->pid, SIGHUP);
 }
 
+void sh_pty_kill(sh_pty *p) {
+    if (p->pid > 0) kill(-p->pid, SIGKILL);
+}
+
 void sh_pty_free(sh_pty *p) {
     if (!p) return;
     close(p->fd);

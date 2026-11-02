@@ -125,6 +125,15 @@ def main():
     run(env, "update", "--all", "--project", hostile, expect=None)
     check("private notes" not in read(hostile + "/.agents/skills/stolen/SKILL.md"), "a project lock read a folder outside the project")
     check(not any("pwned" in f for _, _, fs in os.walk(ROOT) for f in fs), "a project lock ran a command")
+    # a folder inside the project, and a path that leaves it again: written out, and through a link
+    os.makedirs(hostile + "/vendor", exist_ok=True)
+    if os.name != "nt":
+        os.symlink(secret + "/stolen", hostile + "/vendor/leak")
+    for how, path in (("written out", "../../secret/stolen/SKILL.md"), ("through a link", "leak/SKILL.md")):
+        write(hostile + "/skills-lock.json", json.dumps({"version": 1, "skills": {
+            "stolen": {"source": hostile + "/vendor", "sourceType": "local", "skillPath": path, "computedHash": "0"}}}))
+        run(env, "update", "--all", "--project", hostile, expect=None)
+        check("private notes" not in read(hostile + "/.agents/skills/stolen/SKILL.md"), "a skillPath in a project lock left the project, " + how)
     # the declared type proves nothing: where a source leads is what counts
     private = make_upstream("github/me/private.git")
     skill(private + "/leak", "leak", "private notes")

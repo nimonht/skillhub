@@ -83,30 +83,52 @@ static DWORD attributes(const char *path) {
 #define FOPEN_CLOEXEC ""
 #endif
 
-bool sh_read_file(const char *path, size_t max, sh_buf *out) {
+// Files only: a link in a repository can lead to a FIFO or a terminal, which block, or to /dev/stdin, which is the protocol's own stream.
+static FILE *open_for_reading(const char *path) {
 #ifdef _WIN32
     wchar_t *w = sh_wide_path(path);
     FILE *f = _wfopen(w, L"rb");
     free(w);
+    return f;
 #else
-    FILE *f = fopen(path, "rb" FOPEN_CLOEXEC);
+    const int fd = open(path, O_RDONLY | O_CLOEXEC | O_NONBLOCK);
+    if (fd < 0) return NULL;
+    struct stat st;
+    FILE *f = fstat(fd, &st) == 0 && S_ISREG(st.st_mode) ? fdopen(fd, "rb") : NULL;
+    if (!f) close(fd);
+    return f;
 #endif
-    if (!f) return false;
+}
+
+static bool read_pieces(FILE *f, size_t max, sh_piece_fn fn, void *user) {
     char chunk[65536];
     size_t total = 0;
-    if (!out->data) sh_buf_append(out, "", 0);
     for (;;) {
         size_t want = sizeof chunk;
         if (max && max - total < want) want = max - total;
         if (want == 0) break;
         const size_t n = fread(chunk, 1, want, f);
         if (n == 0) break;
-        sh_buf_append(out, chunk, n);
+        fn(user, chunk, n);
         total += n;
     }
     const bool ok = !ferror(f);
     fclose(f);
     return ok;
+}
+
+static void append_piece(void *out, const void *data, size_t n) { sh_buf_append(out, data, n); }
+
+bool sh_read_file(const char *path, size_t max, sh_buf *out) {
+    FILE *f = open_for_reading(path);
+    if (!f) return false;
+    if (!out->data) sh_buf_append(out, "", 0);
+    return read_pieces(f, max, append_piece, out);
+}
+
+bool sh_read_pieces(const char *path, sh_piece_fn fn, void *user) {
+    FILE *f = open_for_reading(path);
+    return f && read_pieces(f, 0, fn, user);
 }
 
 bool sh_write_file(const char *path, const void *data, size_t n) {
@@ -490,7 +512,18 @@ bool sh_move_dir(const char *from, const char *to) {
     const bool copied = copy_tree(from, partial, true) && sh_rename(partial, to);
     if (!copied) sh_remove_tree(partial);
     free(partial);
-    return copied && sh_remove_tree(from);
+    if (!copied) return false;
+    // The source steps aside before it is deleted: a file that cannot go must not leave half a folder under the real name, reported
+    // as a move that never happened. What remains is a partial copy, and those are cleared.
+    char *from_dir = sh_path_parent(from);
+    char *gone = sh_strfmt("%s/" SH_PARTIAL_PREFIX "%s", from_dir, sh_path_name(from));
+    free(from_dir);
+    sh_remove_tree(gone);
+    const bool moved = sh_rename(from, gone);
+    if (moved) sh_remove_tree(gone);
+    else sh_remove_tree(to);  // it stays where it was, whole
+    free(gone);
+    return moved;
 }
 
 bool sh_copy_file(const char *from, const char *to) {

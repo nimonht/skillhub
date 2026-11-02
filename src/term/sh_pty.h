@@ -16,6 +16,7 @@ long sh_pty_read(sh_pty *p, char *buf, size_t n);          // blocks; 0 when the
 long sh_pty_write(sh_pty *p, const char *buf, size_t n);
 void sh_pty_resize(sh_pty *p, int cols, int rows);
 void sh_pty_hangup(sh_pty *p);                             // the shell goes; a blocked read returns
+void sh_pty_kill(sh_pty *p);                               // for a shell that does not go: ends it and what it started, now
 void sh_pty_free(sh_pty *p);                               // after the read has returned
 
 #ifdef __cplusplus

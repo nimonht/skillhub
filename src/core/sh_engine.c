@@ -190,7 +190,13 @@ static bool project_source_ok(const sh_store *st, const sh_source *src, sh_origi
     if (o->type == SH_ORIGIN_LOCAL) {
         char *real = sh_canonical(o->url);
         char *inside = sh_strfmt("%s/", st->project);
-        const bool ok = declared == SH_ORIGIN_LOCAL && real && sh_path_within(real, inside);
+        bool ok = declared == SH_ORIGIN_LOCAL && real && sh_path_within(real, inside);
+        if (ok && src->skill_path && *src->skill_path) {  // the same goes for the path inside it, written or through a link
+            char *md = sh_path_join(o->url, src->skill_path), *real_md = sh_canonical(md);
+            ok = sh_path_safe_rel(src->skill_path) && (!real_md || sh_path_within(real_md, inside));
+            free(real_md);
+            free(md);
+        }
         free(inside);
         free(real);
         return ok;
@@ -348,7 +354,7 @@ static void fm_end(void *user, size_t i) {
     sh_frontmatter fm;
     sh_fm_parse(sh_buf_str(&r->text), r->text.len, &fm);
     r->files[i].name = sh_strdup(sh_fm_value(&fm, "name"));
-    r->files[i].description = sh_strdup(sh_fm_value(&fm, "description"));
+    r->files[i].description = sh_left_utf16(sh_fm_value(&fm, "description"), 600);  // a repository can hold thousands of these
     sh_fm_free(&fm);
 }
 
@@ -1331,7 +1337,7 @@ bool sh_engine_copy_to_project(sh_engine *e, const char *name, const char *proje
         char *content = sh_folder_hash(to);
         free(src.hash);
         src.hash = sh_strdup(content);
-        sh_lock_put(&p, name, &src);
+        if (!sh_lock_put(&p, name, &src)) sh_store_log(e->st, "FAILED to record %s in the project's lock file", name);
         const char *const names[] = {name};
         const char *const trees[] = {tree};
         const char *const contents[] = {content};

@@ -27,6 +27,7 @@ EmptyDetail 1.0 EmptyDetail.qml
 Field 1.0 Field.qml
 FileDialogs 1.0 FileDialogs.qml
 Icon 1.0 Icon.qml
+InputShield 1.0 InputShield.qml
 ListHeader 1.0 ListHeader.qml
 Logo 1.0 Logo.qml
 PortDot 1.0 PortDot.qml
@@ -39,6 +40,7 @@ SkillRow 1.0 SkillRow.qml
 Spinner 1.0 Spinner.qml
 StatusBar 1.0 StatusBar.qml
 Tag 1.0 Tag.qml
+Tip 1.0 Tip.qml
 Toast 1.0 Toast.qml
 Toggle 1.0 Toggle.qml
 TopBar 1.0 TopBar.qml

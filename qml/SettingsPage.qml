@@ -6,6 +6,7 @@ import "."
 Rectangle {
     id: root
     color: Theme.bg1
+    focus: visible
     signal closeRequested()
     signal resetLayout()
     property string section: "appearance"
@@ -33,6 +34,8 @@ Rectangle {
         Column { id: inner; width: parent.width; spacing: 8 }
     }
     component Line: Text { textFormat: Text.PlainText; width: parent ? parent.width : 400; wrapMode: Text.Wrap; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall; lineHeight: 1.2 }
+
+    InputShield {}
 
     Item {
         id: nav
@@ -316,8 +319,14 @@ Rectangle {
                     Range { width: Math.min(parent.width, 420); label: "Lines kept above the screen"; from: 1000; to: 100000; stepSize: 1000; value: Theme.setting("terminal", "scrollback", 10000); shown: Math.round(value); onMoved: (v) => app.setSetting("terminal", "scrollback", Math.round(v)) }
                 }
                 Group {
-                    title: "Banner"
-                    Toggle { width: Math.min(parent.width, 420); text: "Show the banner in new terminals"; checked: Theme.setting("terminal", "banner", true); onToggled: app.setSetting("terminal", "banner", checked) }
+                    title: "Greeting"
+                    note: { void app.settingsRev; return app.terminalGreetingNote() }
+                    Segmented {
+                        width: Math.min(parent.width, 340)
+                        options: [ { value: "auto", label: "Automatic" }, { value: "skillhub", label: "Skill Hub" }, { value: "shell", label: "My shell" } ]
+                        current: Theme.setting("terminal", "greeting", Theme.setting("terminal", "banner", true) ? "auto" : "shell")
+                        onPicked: (v) => app.setSetting("terminal", "greeting", v)
+                    }
                     Segmented {
                         width: Math.min(parent.width, 340)
                         options: [ { value: "unicode", label: "Plain" }, { value: "nerd", label: "Nerd icons" }, { value: "none", label: "No dots" } ]

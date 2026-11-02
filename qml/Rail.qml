@@ -70,9 +70,13 @@ Rectangle {
             }
         }
         HoverHandler { cursorShape: Qt.PointingHandCursor; enabled: !app.noHover }
-        ToolTip.visible: root.compact && item.hovered
-        ToolTip.text: item.hideCount ? item.text : item.text + "  " + item.count
-        ToolTip.delay: 300
+        Timer { id: tipDelay; interval: 300; running: root.compact && item.hovered; onTriggered: tip.active = true }
+        onHoveredChanged: if (!hovered) tip.active = false
+        Loader {
+            id: tip
+            active: false
+            sourceComponent: Tip { parent: item; side: "right"; text: item.hideCount ? item.text : item.text + "  " + item.count; visible: true }
+        }
     }
 
     Flickable {   // short windows scroll the rail instead of overlapping it; the appearance block stays pinned when there is room

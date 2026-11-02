@@ -444,9 +444,7 @@ static char *dir_digest(const char *root) {
     for (size_t i = 0; i < files.len; ++i) {
         sh_sha256_update(&h, files.items[i], strlen(files.items[i]));
         char *full = sh_path_join(root, files.items[i]);
-        sh_buf b = SH_BUF_INIT;
-        if (sh_read_file(full, 0, &b)) sh_sha256_update(&h, b.data ? b.data : "", b.len);
-        sh_buf_free(&b);
+        sh_sha256_add_file(&h, full);
         free(full);
     }
     sh_strv_free(&files);
@@ -523,6 +521,7 @@ static int sync_copy(sh_store *st, const sh_agent *a, const sh_skill *s, const c
     }
     if (!sh_copy_tree(s->path, copy)) {
         sh_store_log(st, "FAILED to copy %s", copy);
+        sh_remove_tree(copy);  // half a copy would read as the user's drift next time
         return 0;
     }
     sh_store_log(st, "copied %s -> %s", s->name, copy);
@@ -640,10 +639,23 @@ static char *unused_backup(char *base) {
     return bk;
 }
 
+// The name orders the backups, and pruning keeps the last ones. Stamps are local time, which can run back: the end of summer time, a
+// flight west. A new backup then takes the newest stamp with a higher count, and never sorts below an older one.
 static char *backup_dir_for(const sh_store *st, const char *name) {
+    enum { STAMP_LEN = 15 };  // YYYYMMDD-HHMMSS
+    char *dir = sh_path_join(st->backup, name);
+    sh_strv kept = SH_STRV_INIT;
+    sh_list_dir(dir, SH_LIST_DIRS | SH_SORT_NAME, &kept);
     char *stamp = sh_stamp();
-    char *bk = unused_backup(sh_strfmt("%s/%s/%s", st->backup, name, stamp));
+    const char *newest = kept.len ? kept.items[kept.len - 1] : "";
+    if (strlen(newest) >= STAMP_LEN && strncmp(newest, stamp, STAMP_LEN) > 0) {
+        free(stamp);
+        stamp = sh_strndup(newest, STAMP_LEN);
+    }
+    char *bk = unused_backup(sh_strfmt("%s/%s", dir, stamp));
     free(stamp);
+    sh_strv_free(&kept);
+    free(dir);
     return bk;
 }
 
@@ -954,7 +966,7 @@ bool sh_store_remove_skill(sh_store *st, const char *name) {
     free(bk);
     free(stamp);
     if (!gone) return false;
-    sh_lock_put(st, name, NULL);
+    if (!sh_lock_put(st, name, NULL)) sh_store_log(st, "FAILED to take %s out of the lock file", name);
     if (!st->project) sh_toggles_forget(name);
     if (live) sh_store_log(st, "removed the link %s", name);
     else sh_store_log(st, "removed %s (backup in %s/_removed)", name, st->backup);

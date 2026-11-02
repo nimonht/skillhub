@@ -21,6 +21,7 @@ python3 tests/storage_smoke.py build/skillhub # clones that do not grow, the cac
 sh tests/install-roundtrip.sh                 # cmake --install / uninstall into a fake root; shared dirs must survive
 python3 tests/contrast.py build/skillhub      # WCAG gate on qml/Theme.qml, 72 hues of accent, tint floors of the materials
 sh tests/gui-smoke.sh build/skillhub out      # headless render of every page, the tour and the terminal; fails on QML errors
+python3 tests/greeting_smoke.py build/skillhub # one greeting in a new terminal, on the real zsh, bash and fish
 ```
 
 The C core also builds with sanitizers (`CC=clang cmake -B build-asan -DSKILLHUB_GUI=OFF -DSKILLHUB_SANITIZE=ON`; ThreadSanitizer

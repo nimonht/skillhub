@@ -49,6 +49,22 @@ Going back to 1.x: run `skillhub enable --all-parked` first, because 1.x knows n
   only, so a hostile file cannot reach a local folder or use your SSH keys.
 - A private repository now says what to set up (a credential helper or an SSH key) instead of only git's message.
 - Two removals of the same skill within a second no longer fail.
+- The application menu entry starts the installed program by its full path, so Skill Hub opens from KDE Plasma's launcher even when
+  `~/.local/bin` is not on the session's PATH. Shells started from the window find `skillhub` either way.
+- New terminals have one greeting. Settings → Terminal chooses Skill Hub's banner, your shell's own, or Automatic, which leaves it to
+  the shell when its startup files run fastfetch or the like. With Skill Hub's banner, zsh, bash and fish start with that tool quiet,
+  and your startup files stay as they are. Outside terminals follow the same choice.
+- Tooltips draw above every panel and stay inside the window. Toasts and tooltips follow the theme instead of an inverted surface.
+- Settings, Review and the floating detail panel keep hover, clicks and the wheel from reaching what lies below them.
+- A program in the built-in terminal can no longer freeze the window. Writing to a shell that was not reading could stop the whole
+  interface for good, for example when printing a file full of terminal queries or pasting a lot of text.
+- A password or token inside an `https://` URL is no longer kept: it would have reached the lock file, which projects commit, and the
+  logs. Use a git credential helper or an SSH key.
+- A clone cut off half way (a timeout, a power loss) is cloned again instead of failing until the cache was cleared by hand.
+- A `skillPath` in a project's lock file can no longer lead out of the project for a local source, and a link to a FIFO or a terminal
+  no longer blocks a scan.
+- `skillhub uninstall` keeps a folder chosen with `SKILLHUB_CACHE`, which may hold more than this program's files. Backups stay in
+  order when the clock runs back, and a failed write of the lock file or a hold is now logged instead of passing in silence.
 
 ## 1.0.1 - 2026-10-24
 

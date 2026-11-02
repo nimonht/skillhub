@@ -1,5 +1,7 @@
 #include "sh_hash.h"
 
+#include "sh_fs.h"
+
 #include <string.h>
 
 #define ROL(x, n) (((x) << (n)) | ((x) >> (32 - (n))))
@@ -111,6 +113,10 @@ void sh_sha256_update(sh_sha256 *c, const void *data, size_t n) {
         if (c->used == 64) { sha256_block(c->h, c->buf); c->used = 0; }
     }
 }
+
+static void hash_piece(void *c, const void *data, size_t n) { sh_sha256_update(c, data, n); }
+
+void sh_sha256_add_file(sh_sha256 *c, const char *path) { sh_read_pieces(path, hash_piece, c); }
 
 void sh_sha256_final(sh_sha256 *c, unsigned char out[32]) {
     const uint64_t bits = c->len * 8;

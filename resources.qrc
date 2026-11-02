@@ -31,6 +31,7 @@
         <file alias="Field.qml">qml/Field.qml</file>
         <file alias="FileDialogs.qml">qml/FileDialogs.qml</file>
         <file alias="Icon.qml">qml/Icon.qml</file>
+        <file alias="InputShield.qml">qml/InputShield.qml</file>
         <file alias="ListHeader.qml">qml/ListHeader.qml</file>
         <file alias="Logo.qml">qml/Logo.qml</file>
         <file alias="Main.qml">qml/Main.qml</file>
@@ -55,6 +56,7 @@
         <file alias="Spinner.qml">qml/Spinner.qml</file>
         <file alias="StatusBar.qml">qml/StatusBar.qml</file>
         <file alias="Tag.qml">qml/Tag.qml</file>
+        <file alias="Tip.qml">qml/Tip.qml</file>
         <file alias="Theme.qml">qml/Theme.qml</file>
         <file alias="Toast.qml">qml/Toast.qml</file>
         <file alias="Toggle.qml">qml/Toggle.qml</file>

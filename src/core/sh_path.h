@@ -17,6 +17,7 @@ char *sh_path_parent(const char *path);                  // everything before th
 const char *sh_path_name(const char *path);              // after the last '/'
 // one path segment Windows cannot keep as written: a device name (CON, COM1), a stream (":"), or trailing dots or spaces
 bool sh_path_windows_unsafe(const char *segment);
+bool sh_path_safe_rel(const char *p);  // stays below where it is joined on: relative, no "." or ".." or empty segment, no .git, safe on Windows
 bool sh_path_is_absolute(const char *path);
 bool sh_path_is_root(const char *path);                  // "/", "C:/", "//server/share"
 // QDir(dir).relativeFilePath(path) for two absolute paths: "../../x" style, or `path` itself when there is no common root.

@@ -60,6 +60,7 @@ class BackendIo : public QObject {
     Q_OBJECT
 public:
     void start(const QString &program, const QString &log) {
+        if (proc_) proc_->disconnect(this);   // its end must not read as the end of the backend that starts now
         delete proc_;
         buf_.clear();
         proc_ = new QProcess(this);
@@ -233,6 +234,8 @@ void CoreClient::stop() {
 // A clean stop, and the new backend starts from onEnded, once the old one is really gone. Nothing to stop while it is
 // starting or waiting for its next try.
 void CoreClient::restart() {
+    gaveUp_ = false;   // the user asked for another try
+    restarts_ = 0;
     if (!ready_) {
         restart_.stop();
         start();

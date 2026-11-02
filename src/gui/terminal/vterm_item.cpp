@@ -18,16 +18,45 @@ static QString charOf(uint32_t c) {
 }
 
 static constexpr int OSC_MAX = 4096;  // a title or a folder: whatever a program sends beyond this is noise
+static constexpr qsizetype WRITE_MAX = 64 * 1024 * 1024;  // answers to a flood of queries that nothing reads: past this they are dropped
 
 void PtyReader::run() {
     char buf[65536];
     for (;;) {
         room_.acquire();
+        if (stopping_.loadRelaxed()) break;
         const long n = sh_pty_read(pty_, buf, sizeof buf);
         if (n <= 0) break;
         emit received(QByteArray(buf, int(n)));
     }
+    while (stopping_.loadRelaxed() && sh_pty_read(pty_, buf, sizeof buf) > 0) {}
     emit ended();
+}
+
+void PtyWriter::send(const QByteArray &data) {
+    const QMutexLocker locker(&lock_);
+    if (queue_.size() + data.size() > WRITE_MAX) return;
+    queue_ += data;
+    more_.wakeOne();
+}
+
+void PtyWriter::stop() {
+    const QMutexLocker locker(&lock_);
+    stopping_ = true;
+    more_.wakeOne();
+}
+
+void PtyWriter::run() {
+    for (;;) {
+        QByteArray chunk;
+        {
+            QMutexLocker locker(&lock_);
+            while (queue_.isEmpty() && !stopping_) more_.wait(&lock_);
+            if (stopping_) return;
+            chunk.swap(queue_);
+        }
+        sh_pty_write(pty_, chunk.constData(), size_t(chunk.size()));  // fails only when the shell has gone
+    }
 }
 
 VTermItem::VTermItem(QQuickItem *parent) : QQuickPaintedItem(parent) {
@@ -56,14 +85,24 @@ VTermItem::VTermItem(QQuickItem *parent) : QQuickPaintedItem(parent) {
 
 VTermItem::~VTermItem() {
     if (pty_) {
-        sh_pty_hangup(pty_);
         if (reader_) {
             reader_->disconnect(this);
-            reader_->consumed();  // it may be waiting for room, not on the terminal
-            if (!reader_->wait(1000)) reader_->terminate();
-            reader_->wait();
-            delete reader_;
+            reader_->stop();  // first: it may be waiting for room, and the hangup may be waiting for it
         }
+        if (writer_) writer_->stop();
+        sh_pty_hangup(pty_);
+        const auto finished = [this](int ms) { return (!reader_ || reader_->wait(ms)) && (!writer_ || writer_->wait(ms)); };
+        if (!finished(1000)) {   // a shell that ignores the hangup
+            sh_pty_kill(pty_);
+            if (!finished(1000)) {   // a program that left the session still holds the terminal
+                if (reader_) reader_->terminate();
+                if (writer_) writer_->terminate();
+            }
+        }
+        if (reader_) reader_->wait();
+        if (writer_) writer_->wait();
+        delete reader_;
+        delete writer_;
         sh_pty_free(pty_);
     }
     vterm_free(vt_);
@@ -152,10 +191,14 @@ void VTermItem::start() {
     QVector<const char *> argv;
     for (const QByteArray &a : args) argv << a.constData();
     argv << nullptr;
-    const char *const env[] = {"TERM=xterm-256color", "COLORTERM=truecolor", "SKILLHUB_TERMINAL=1", nullptr};
+    QVector<QByteArray> vars{"TERM=xterm-256color", "COLORTERM=truecolor", "SKILLHUB_TERMINAL=1"};
+    for (const QString &e : environment_) vars << e.toUtf8();
+    QVector<const char *> env;
+    for (const QByteArray &v : vars) env << v.constData();
+    env << nullptr;
     char *err = nullptr;
     const QByteArray program = program_.toUtf8(), cwd = workingDirectory_.toUtf8();
-    pty_ = sh_pty_spawn(program.constData(), argv.constData(), cwd.constData(), env, cols_, rows_, &err);
+    pty_ = sh_pty_spawn(program.constData(), argv.constData(), cwd.constData(), env.constData(), cols_, rows_, &err);
     if (!pty_) {
         error_ = QString::fromUtf8(err ? err : "");
         free(err);
@@ -167,6 +210,8 @@ void VTermItem::start() {
     connect(reader_, &PtyReader::received, this, &VTermItem::received, Qt::QueuedConnection);
     connect(reader_, &PtyReader::ended, this, &VTermItem::ended, Qt::QueuedConnection);
     reader_->start();
+    writer_ = new PtyWriter(pty_);
+    writer_->start();
     emit runningChanged();
 }
 
@@ -180,6 +225,10 @@ void VTermItem::ended() {
     reader_->wait();
     delete reader_;
     reader_ = nullptr;
+    writer_->stop();
+    writer_->wait();
+    delete writer_;
+    writer_ = nullptr;
     sh_pty_free(pty_);
     pty_ = nullptr;
     emit runningChanged();
@@ -194,7 +243,7 @@ void VTermItem::feed(const QString &text) {
 void VTermItem::type(const QString &text) { send(text.toUtf8()); }
 
 void VTermItem::send(const QByteArray &data) {
-    if (pty_) sh_pty_write(pty_, data.constData(), size_t(data.size()));
+    if (writer_) writer_->send(data);
 }
 
 void VTermItem::onOutput(const char *s, size_t len, void *user) {

@@ -307,7 +307,7 @@ Everything that both the command line and the window need. Missing keys mean the
     "importLook": "",
     "cursor": "block",
     "scrollback": 10000,
-    "banner": true,
+    "greeting": "auto",
     "logo": "builtin",
     "icons": "unicode"
   },
@@ -331,6 +331,10 @@ Everything that both the command line and the window need. Missing keys mean the
   `updates.parallelChecksPerHost` limits the lightweight `ls-remote` checks, which are bound by network round trips.
 - `terminal.shell` and `terminal.external` are empty for "detect". `importLook` is `kitty`, `ghostty`, `alacritty` or
   empty. `logo` is `builtin`, `none` or a file path. `icons` is `unicode`, `nerd` or `none`.
+  `greeting` says who greets in a new terminal, inside the window and in an outside one: `skillhub` (the banner), `shell` (only what
+  the shell prints), or `auto` (the shell when its startup files run a tool such as fastfetch, the banner otherwise). With `skillhub`,
+  zsh, bash and fish start through private files that keep such a tool quiet; the user's files are not changed. A `banner: false`
+  from before this setting reads as `shell`.
 - Older versions kept the theme and reduce-motion choice in `QSettings`; the window moves them here on its first start.
 
 ### `toggles.json`

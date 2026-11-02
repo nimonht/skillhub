@@ -303,7 +303,26 @@ static void lock_batch(void) {
     teardown();
 }
 
+// a first clone that was killed: a .git, and no commit
+static void broken_clone(void) {
+    setup();
+    build_upstream();
+    up_ok((const char *[]){"commit", "-q", "-m", "first", NULL});
+    char *dir = at("cache/repos/up");
+    sh_mkpath(dir);
+    sh_git_result g = sh_git_run((const char *[]){"init", "--quiet", NULL}, dir, 0);
+    sh_git_result_free(&g);
+    CHECK(sh_repo_cloned(dir));
+    free(dir);
+    sh_repo r;
+    open_repo(&r);
+    CHECK(sh_repo_find(&r, "skills/a/SKILL.md") != NULL);
+    sh_repo_free(&r);
+    teardown();
+}
+
 const sh_test_case sh_tests_git[] = {{"git.tree_listing", tree_listing}, {"git.extract", extract},
                                      {"git.read_objects", read_objects}, {"git.fast_path", fast_path},
                                      {"git.lock_files", lock_files},     {"git.json_index", json_index},
-                                     {"git.lock_batch", lock_batch},     {NULL, NULL}};
+                                     {"git.lock_batch", lock_batch},     {"git.broken_clone", broken_clone},
+                                     {NULL, NULL}};

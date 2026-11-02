@@ -121,9 +121,7 @@ char *sh_folder_hash(const char *dir) {
     for (size_t i = 0; i < files.len; ++i) {
         sh_sha256_update(&h, files.items[i], strlen(files.items[i]));
         char *full = sh_path_join(dir, files.items[i]);
-        sh_buf b = SH_BUF_INIT;
-        if (sh_read_file(full, 0, &b)) sh_sha256_update(&h, b.data ? b.data : "", b.len);
-        sh_buf_free(&b);
+        sh_sha256_add_file(&h, full);
         free(full);
     }
     sh_strv_free(&files);

@@ -1139,7 +1139,6 @@ static int cmd_palette(const args_t *a) {
             yyjson_mut_obj_add_strcpy(d, o, "markLow", p.mark_low);
             yyjson_mut_obj_add_strcpy(d, o, "focus", p.focus);
             yyjson_mut_obj_add_strcpy(d, o, "selected", p.selected);
-            yyjson_mut_obj_add_strcpy(d, o, "inkOk", p.ink_ok);
             yyjson_mut_obj_add_str(d, o, "clash", p.clash);
             yyjson_mut_arr_append(arr, o);
         }

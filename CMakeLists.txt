@@ -98,6 +98,7 @@ add_library(skillhub_core STATIC
     src/core/sh_exe.c src/core/sh_exe.h
     src/core/sh_frontmatter.c src/core/sh_frontmatter.h
     src/core/sh_fetch.c src/core/sh_fetch.h
+    src/core/sh_shellstart.c src/core/sh_shellstart.h
     src/core/sh_sysinfo.c src/core/sh_sysinfo.h
     src/core/sh_fs.c src/core/sh_fs.h
     src/core/sh_git.c src/core/sh_git.h
@@ -192,7 +193,7 @@ if(SKILLHUB_TESTS)
     enable_testing()
     add_executable(skillhub_unit_tests tests/unit/test_main.c tests/unit/test.h tests/unit/test_text.c tests/unit/test_paths.c
                                        tests/unit/test_frontmatter.c tests/unit/test_lock.c tests/unit/test_git.c
-                                       tests/unit/test_store.c)
+                                       tests/unit/test_store.c tests/unit/test_shellstart.c)
     target_link_libraries(skillhub_unit_tests PRIVATE skillhub_core)
     target_compile_options(skillhub_unit_tests PRIVATE ${SKILLHUB_C_WARNINGS})
     target_compile_definitions(skillhub_unit_tests PRIVATE SKILLHUB_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
@@ -212,14 +213,13 @@ if(SKILLHUB_GUI)
         src/gui/window_effects.cpp src/gui/window_effects.h
         src/gui/terminal/vterm_item.cpp src/gui/terminal/vterm_item.h
         src/gui/terminal/term_look.cpp src/gui/terminal/term_look.h
-        src/core/sh_palette.c
         resources.qrc)
     # the window runs the command line as its backend: build it too, so a fresh build starts
     add_dependencies(skillhub_gui skillhub_cli)
     if(WIN32)
         add_dependencies(skillhub_gui skillhub_cliw)
     endif()
-    target_link_libraries(skillhub_gui PRIVATE Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2)
+    target_link_libraries(skillhub_gui PRIVATE skillhub_core Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2)
     target_include_directories(skillhub_gui PRIVATE src src/core src/term)
     # the built-in terminal: libvterm (MIT, vendored) and a pseudo terminal, for the window only
     file(GLOB SKILLHUB_VTERM_SOURCES third_party/libvterm/src/*.c)
@@ -288,7 +288,9 @@ if(SKILLHUB_GUI)
 
     if(UNIX AND NOT APPLE)
         install(TARGETS skillhub_gui RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
-        install(FILES data/skillhub.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
+        # Exec is a full path: a desktop session's PATH often lacks ~/.local/bin, and Plasma then refuses to start the entry
+        configure_file(data/skillhub.desktop.in skillhub.desktop @ONLY)
+        install(FILES ${CMAKE_CURRENT_BINARY_DIR}/skillhub.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
         install(FILES data/io.github.nimonht.skillhub.metainfo.xml DESTINATION ${CMAKE_INSTALL_DATADIR}/metainfo)
         # one rule per icon file: uninstall then removes only these files, never the shared hicolor directories
         foreach(size 16 24 32 48 64 128 256 512)

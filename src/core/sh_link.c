@@ -51,7 +51,7 @@ char *sh_link_target(const char *path) {
                            FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS, NULL);
     free(w);
     if (h == INVALID_HANDLE_VALUE) return NULL;
-    static _Alignas(8) char buf[16 * 1024];
+    _Alignas(8) char buf[16 * 1024];  // per call: the scanner and a job can both be here
     DWORD got = 0;
     const BOOL ok = DeviceIoControl(h, FSCTL_GET_REPARSE_POINT, NULL, 0, buf, sizeof buf, &got, NULL);
     CloseHandle(h);

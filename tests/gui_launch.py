@@ -135,6 +135,17 @@ try:
         if shell and not re.search(r"Shell\s+%s\s" % shell, screen):   # the banner, naming the shell it runs in
             fail("%s: no banner naming %s in the terminal:\n%s\n--- stdout\n%s\n--- stderr\n%s" % (name, shell, screen, p.stdout, p.stderr))
         print("ok  " + name)
+    if os.name != "nt":
+        # a program that sends terminal queries and reads none of the answers: the window keeps running, whatever the shell does next
+        flood = "\"%s\" -c \"import sys; sys.stdout.write((chr(27) + '[c') * 400000)\"" % sys.executable
+        try:
+            p = subprocess.run([BIN, "gui", "--shot", os.path.join(OUT, "flood.png"), "--theme", "dark", "--size", "1280x800", "--layout", "dock=340", "--mode", "terminal",
+                                "--terminal-run", flood, "--settle", "10"], env=shell_env, capture_output=True, text=True, timeout=90)
+        except subprocess.TimeoutExpired:
+            fail("the window hung when a program flooded the terminal with queries")
+        if p.returncode != 0:
+            fail("terminal flood: exit %d\n%s" % (p.returncode, p.stderr))
+        print("ok  terminal flood")
     hostile_text()
     print("gui launch test passed (screenshots in %s)" % OUT)
 finally:
