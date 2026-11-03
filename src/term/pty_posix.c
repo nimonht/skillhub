@@ -177,10 +177,21 @@ void sh_pty_kill(sh_pty *p) {
     if (p->pid > 0) kill_session(p->pid);
 }
 
+// how many besides the shell are still in the session (a zombie counts until it is reaped)
+static int others_in_session(pid_t sid) { return signal_session(sid, 0) - (kill(sid, 0) == 0); }
+
 void sh_pty_free(sh_pty *p) {
     if (!p) return;
     close(p->fd);
     if (p->pid > 0) {
+        // A terminal's programs end with it; one that should outlive it leaves the session (setsid). The hangup alone is not enough:
+        // macOS revokes the terminal when the shell exits, so a program that ignores the hangup no longer even holds it.
+        if (others_in_session(p->pid) > 0) {
+            signal_session(p->pid, SIGTERM);
+            signal_session(p->pid, SIGCONT);
+            for (int i = 0; i < 50 && others_in_session(p->pid) > 0; ++i) usleep(10000);
+            kill_session(p->pid);
+        }
         int status;
         if (waitpid(p->pid, &status, WNOHANG) == 0) {
             kill_session(p->pid);  // before the shell is reaped: until then its number cannot go to another session

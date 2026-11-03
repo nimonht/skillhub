@@ -66,9 +66,26 @@ static pid_t read_pid(const char *file, int ms) {
     return 0;
 }
 
-static int gone(pid_t pid, int ms) {  // ended and reaped by whoever inherited it
+static int zombie(pid_t pid) {  // ended, but nobody reaped it: a container's PID 1 often does not
+#ifdef __linux__
+    char path[64], buf[512];
+    snprintf(path, sizeof path, "/proc/%d/stat", (int)pid);
+    FILE *f = fopen(path, "r");
+    if (!f) return 0;
+    const size_t n = fread(buf, 1, sizeof buf - 1, f);
+    fclose(f);
+    buf[n] = 0;
+    const char *close = strrchr(buf, ')');
+    return close && close[1] == ' ' && close[2] == 'Z';
+#else
+    (void)pid;
+    return 0;
+#endif
+}
+
+static int gone(pid_t pid, int ms) {
     for (int i = 0; i < ms / 10; ++i) {
-        if (kill(pid, 0) != 0 && errno == ESRCH) return 1;
+        if ((kill(pid, 0) != 0 && errno == ESRCH) || zombie(pid)) return 1;
         usleep(10000);
     }
     return 0;
