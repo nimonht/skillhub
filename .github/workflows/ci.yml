@@ -34,6 +34,8 @@ jobs:
         run: ./build/skillhub --version
       - name: C unit tests
         run: ctest --test-dir build --output-on-failure
+      - name: QML components (the settings sliders save what they show)
+        run: QT_QPA_PLATFORM=offscreen "$QT_ROOT_DIR/bin/qmltestrunner" -input tests/qml
       - name: Design token contrast (WCAG)
         run: python3 tests/contrast.py build/skillhub
       - name: Smoke test (offline, throw-away HOME)

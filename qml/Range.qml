@@ -25,8 +25,14 @@ Item {
         anchors.bottom: parent.bottom
         height: 26
         padding: 0
-        live: false
-        onMoved: root.moved(value)
+        // Saved once a drag or a key press ends, with the value the knob shows: every save is a trip to the backend and a restyle.
+        // (With live: false, moved() carried the value from before the drag, so nothing was saved and the knob fell back later.)
+        property real before: 0
+        onPressedChanged: {
+            if (pressed) before = value
+            else if (value !== before) root.moved(value)
+        }
+        onMoved: if (!pressed) root.moved(value)   // the wheel
         Accessible.name: root.label
         background: Rectangle {
             x: s.leftPadding
