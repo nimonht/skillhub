@@ -136,6 +136,9 @@ int main(int argc, char **argv) {
 
     if (stubborn_pid && !gone(stubborn_pid, 3000)) {
         fprintf(stderr, "a program that ignores the hangup outlived its terminal\n");
+        char ps[160];   // what it is now: its parent, group, session and state
+        snprintf(ps, sizeof ps, "ps -o pid,ppid,pgid,sess,stat,comm -p %d 1>&2", (int)stubborn_pid);
+        if (system(ps) != 0) fprintf(stderr, "(no ps)\n");
         kill(stubborn_pid, SIGKILL);
         ++failures;
     }
