@@ -16,7 +16,7 @@
 #include <unistd.h>
 
 #ifdef __APPLE__
-#include <libproc.h>
+#include <sys/sysctl.h>
 #endif
 
 #include "sh_pty.h"
@@ -149,14 +149,21 @@ static int signal_session(pid_t sid, int sig) {
         return hit;
     }
 #elif defined(__APPLE__)
-    const int count = proc_listallpids(NULL, 0);
-    pid_t *pids = count > 0 ? calloc((size_t)count + 64, sizeof *pids) : NULL;  // room for some started since
-    if (pids) {
-        const int n = proc_listallpids(pids, (int)(((size_t)count + 64) * sizeof *pids));
-        for (int i = 0; i < n; ++i)
-            if (pids[i] > 1 && pids[i] != self && getsid(pids[i]) == sid && kill(pids[i], sig) == 0) ++hit;
-        free(pids);
-        return hit;
+    // the kernel lists a session's processes itself; getsid() may refuse one in another session
+    int mib[4] = {CTL_KERN, KERN_PROC, KERN_PROC_SESSION, sid};
+    size_t len = 0;
+    if (sysctl(mib, 4, NULL, &len, NULL, 0) == 0) {
+        len += 32 * sizeof(struct kinfo_proc);  // room for some started since
+        struct kinfo_proc *list = malloc(len);
+        if (list && sysctl(mib, 4, list, &len, NULL, 0) == 0) {
+            for (size_t i = 0; i < len / sizeof *list; ++i) {
+                const pid_t pid = list[i].kp_proc.p_pid;
+                if (pid > 1 && pid != self && kill(pid, sig) == 0) ++hit;
+            }
+            free(list);
+            return hit;
+        }
+        free(list);
     }
 #endif
     return kill(-sid, sig) == 0;  // no list of processes: the shell's own group, at least
