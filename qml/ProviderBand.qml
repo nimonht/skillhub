@@ -27,7 +27,7 @@ Item {
         height: 64
         activeFocusOnTab: true
         Accessible.role: Accessible.Button
-        Accessible.name: app.skillCount + " skills in " + app.centralPath + ". Open folder"
+        Accessible.name: qsTr("%1 skills in %2. Open folder").arg(app.skillCount).arg(app.centralPath)
         Keys.onReturnPressed: app.openFolder()
         Keys.onSpacePressed: app.openFolder()
         Chamfer { anchors.fill: parent; fill: hubMouse.containsMouse ? Theme.bg4 : Theme.bg3; cutTL: Theme.cut; cutBR: Theme.cut }
@@ -40,7 +40,7 @@ Item {
             Row {
                 spacing: 6
                 NumText { text: app.skillCount; color: Theme.text; font.family: Theme.display; font.pixelSize: Theme.fsHead }
-                Text { textFormat: Text.PlainText; text: app.skillCount === 1 ? "skill" : "skills"; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsBody; anchors.baseline: parent.children[0].baseline }
+                Text { textFormat: Text.PlainText; text: app.skillCount === 1 ? qsTr("skill") : qsTr("skills"); color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsBody; anchors.baseline: parent.children[0].baseline }
             }
             Text { textFormat: Text.PlainText; text: app.centralPath; width: parent.width; elide: Text.ElideMiddle; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
         }
@@ -55,9 +55,9 @@ Item {
         y: 30
         width: Math.max(0, root.width - root.hubW - 20 - 20 - 28)
         spacing: 8
-        Text { textFormat: Text.PlainText; width: parent.width; text: "No coding agent found"; color: Theme.text; font.family: Theme.display; font.pixelSize: Theme.fsTitle; font.weight: Font.Bold; horizontalAlignment: Text.AlignRight }
-        Text { textFormat: Text.PlainText; width: parent.width; text: "Skill Hub looks for the agents it knows. Switch one on, or add your own."; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap; horizontalAlignment: Text.AlignRight }
-        Btn { anchors.right: parent.right; kind: "secondary"; compact: true; iconName: "sliders"; text: "Manage agents"; onClicked: app.detailMode = "providers" }
+        Text { textFormat: Text.PlainText; width: parent.width; text: qsTr("No coding agent found"); color: Theme.text; font.family: Theme.display; font.pixelSize: Theme.fsTitle; font.weight: Font.Bold; horizontalAlignment: Text.AlignRight }
+        Text { textFormat: Text.PlainText; width: parent.width; text: qsTr("Skill Hub looks for the agents it knows. Switch one on, or add your own."); color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap; horizontalAlignment: Text.AlignRight }
+        Btn { anchors.right: parent.right; kind: "secondary"; compact: true; iconName: "sliders"; text: qsTr("Manage agents"); onClicked: app.detailMode = "providers" }
     }
 
     // one column per managed agent (up to five when more are folded into the overflow column)
@@ -74,7 +74,7 @@ Item {
             height: root.height
             activeFocusOnTab: true
             Accessible.role: Accessible.Button
-            Accessible.name: a.label + ": " + a.ok + " of " + a.total + " skills visible" + (a.problems > 0 ? ", " + a.problems + " problems" : "") + (a.detected ? "" : ", not found on this machine")
+            Accessible.name: qsTr("%1: %2 of %3 skills visible").arg(a.label).arg(a.ok).arg(a.total) + (a.problems > 0 ? qsTr(", %1 problems").arg(a.problems) : "") + (a.detected ? "" : qsTr(", not found on this machine"))
             Keys.onReturnPressed: app.focusAgent = a.id
             Keys.onSpacePressed: app.focusAgent = a.id
 
@@ -134,18 +134,18 @@ Item {
         activeFocusOnTab: visible
         readonly property bool issue: app.overflow.health === "issue"
         Accessible.role: Accessible.Button
-        Accessible.name: app.hiddenCount + " more agents: " + app.overflow.names
+        Accessible.name: qsTr("%1 more agents: %2").arg(app.hiddenCount).arg(app.overflow.names)
         Keys.onReturnPressed: app.detailMode = "providers"
         Keys.onSpacePressed: app.detailMode = "providers"
         Rectangle { anchors.fill: parent; anchors.margins: 2; visible: moreMouse.containsMouse; color: Theme.bg3; opacity: 0.55 }
         AgentTile { x: (parent.width - width) / 2; y: 22; text: "+" + app.hiddenCount; tone: more.issue ? "issue" : "ok" }
-        Text { textFormat: Text.PlainText; y: 64; width: parent.width; horizontalAlignment: Text.AlignHCenter; text: "more"; color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
+        Text { textFormat: Text.PlainText; y: 64; width: parent.width; horizontalAlignment: Text.AlignHCenter; text: qsTr("more"); color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
         Text {
             textFormat: Text.PlainText
             y: 82
             width: parent.width
             horizontalAlignment: Text.AlignHCenter
-            text: app.overflow.problems > 0 ? app.overflow.problems + " to fix" : "all ok"
+            text: app.overflow.problems > 0 ? qsTr("%1 to fix").arg(app.overflow.problems) : qsTr("all ok")
             color: more.issue ? Theme.notifyText : Theme.text2
             font.family: Theme.ui
             font.pixelSize: Theme.fsSmall

@@ -29,6 +29,6 @@ Rectangle {
         anchors.top: parent.top; anchors.right: parent.right
         anchors.margins: 10
         onClicked: root.closeRequested()
-        Accessible.name: "Close panel"
+        Accessible.name: qsTr("Close panel")
     }
 }

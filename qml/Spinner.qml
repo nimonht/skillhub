@@ -11,7 +11,7 @@ Item {
     width: size
     height: size
     Accessible.role: Accessible.Indicator
-    Accessible.name: "Working"
+    Accessible.name: qsTr("Working")
 
     CurveShape {
         id: arc

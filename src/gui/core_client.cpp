@@ -68,12 +68,12 @@ public:
         connect(proc_, &QProcess::readyReadStandardOutput, this, &BackendIo::read);
         connect(proc_, &QProcess::started, this, &BackendIo::started);
         connect(proc_, &QProcess::errorOccurred, this, [this](QProcess::ProcessError e) {
-            if (e == QProcess::FailedToStart) emit ended(QStringLiteral("cannot start %1: %2").arg(proc_->program(), proc_->errorString()));
+            if (e == QProcess::FailedToStart) emit ended(tr("cannot start %1: %2").arg(proc_->program(), proc_->errorString()));
         });
         connect(proc_, &QProcess::finished, this, [this](int code, QProcess::ExitStatus status) {
             read();
-            emit ended(status == QProcess::CrashExit ? QStringLiteral("the background service crashed")
-                                                     : QStringLiteral("the background service exited (%1)").arg(code));
+            emit ended(status == QProcess::CrashExit ? tr("the background service crashed")
+                                                     : tr("the background service exited (%1)").arg(code));
         });
         proc_->start(program, {QStringLiteral("serve"), QStringLiteral("--stdio")});
     }

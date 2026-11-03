@@ -17,13 +17,15 @@ Rectangle {
         Behavior on width { NumberAnimation { duration: Theme.dBase; easing.type: Easing.OutCubic } }
     }
 
+    readonly property alias summary: counts.text
     NumText {
+        id: counts
         x: 20
         anchors.verticalCenter: parent.verticalCenter
         width: Math.max(80, parent.width - rightGroup.width - 20 - 24)
         elide: Text.ElideRight
-        text: app.skillCount + (app.skillCount === 1 ? " skill" : " skills") + "   ·   " + app.updateCount + " updates   ·   " + app.problemCount + " link problems"
-              + "   ·   " + app.localCount + " local" + (app.strayCount > 0 ? "   ·   " + app.strayCount + " stray" : "")
+        text: (app.skillCount === 1 ? qsTr("1 skill") : qsTr("%1 skills").arg(app.skillCount)) + "   ·   " + qsTr("%1 updates").arg(app.updateCount) + "   ·   " + qsTr("%1 link problems").arg(app.problemCount)
+              + "   ·   " + qsTr("%1 local").arg(app.localCount) + (app.strayCount > 0 ? "   ·   " + qsTr("%1 stray").arg(app.strayCount) : "")
         color: Theme.text2
         font.family: Theme.ui
         font.pixelSize: Theme.fsSmall
@@ -55,17 +57,17 @@ Rectangle {
             visible: app.appUpdate.available === true
             enabled: !app.busy
             kind: "ghost"; compact: true; iconName: "upgrade"
-            text: can ? "Update to " + app.appUpdate.latest : app.appUpdate.latest + " is out"
+            text: can ? qsTr("Update to %1").arg(app.appUpdate.latest) : qsTr("%1 is out").arg(app.appUpdate.latest)
             onClicked: can ? app.installAppUpdate() : app.showSettings("about")
             anchors.verticalCenter: parent.verticalCenter
-            Accessible.description: can ? "Downloads the new version of Skill Hub and restarts" : "Shows how to get the new version of Skill Hub"
+            Accessible.description: can ? qsTr("Downloads the new version of Skill Hub and restarts") : qsTr("Shows how to get the new version of Skill Hub")
         }
         Btn {
             kind: "ghost"; compact: true; iconName: "terminal"
-            text: "Activity"
+            text: qsTr("Activity")
             onClicked: root.toggleConsole()
             anchors.verticalCenter: parent.verticalCenter
-            Accessible.description: root.consoleOpen ? "Hide the activity log" : "Show the activity log"
+            Accessible.description: root.consoleOpen ? qsTr("Hide the activity log") : qsTr("Show the activity log")
         }
     }
 }

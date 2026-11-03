@@ -9,8 +9,8 @@ Item {
     property string link: "link"      // link | shared | synced | off | missing | copy | foreign | absent
     property string agentLabel: ""
     readonly property bool ok: link === "link" || link === "shared" || link === "synced"
-    readonly property var words: ({ "link": "linked", "shared": "reads the shared folder", "synced": "a copy kept identical", "off": "turned off for this agent", "missing": "missing, not linked",
-                                    "copy": "separate copy, not the shared one", "foreign": "link points elsewhere", "absent": "agent not detected" })
+    readonly property var words: ({ "link": qsTr("linked"), "shared": qsTr("reads the shared folder"), "synced": qsTr("a copy kept identical"), "off": qsTr("turned off for this agent"), "missing": qsTr("missing, not linked"),
+                                    "copy": qsTr("separate copy, not the shared one"), "foreign": qsTr("link points elsewhere"), "absent": qsTr("agent not detected") })
     width: 22
     height: 22
     Accessible.role: Accessible.StaticText

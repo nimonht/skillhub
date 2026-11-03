@@ -87,8 +87,6 @@ QVariantList withIcons(const QJsonArray &list) {
     return out;
 }
 
-QString plural(int n) { return n == 1 ? QString() : QStringLiteral("s"); }
-
 QString cleanUserPath(QString p, const QString &home) {
     p = p.trimmed();
     if (p.startsWith(QLatin1String("file://"))) p = QUrl(p).toLocalFile();
@@ -287,7 +285,7 @@ AppController::AppController(QObject *parent) : QObject(parent) {
     connect(&core_, &CoreClient::notification, this, &AppController::onNotification);
     connect(&core_, &CoreClient::failed, this, [this](const QString &why) {
         setBusy(false);
-        log_.addText(QStringLiteral("FAILED to start the background service: ") + why, QStringLiteral("error"));
+        log_.addText(tr("FAILED to start the background service: %1").arg(why), QStringLiteral("error"));
         emit toast(QStringLiteral("error"), tr("Skill Hub's background service did not start: %1").arg(why));
     });
     core_.start();
@@ -762,6 +760,7 @@ void AppController::applySettings(const QJsonObject &s) {
     settings_ = s;
     const QJsonObject look = s.value(QStringLiteral("appearance")).toObject();
     if (!themeForced_) themeMode_ = look.value(QStringLiteral("theme")).toString(QStringLiteral("system"));
+    const QString language = look.value(QStringLiteral("language")).toString(QStringLiteral("system"));
     reduce_ = look.value(QStringLiteral("reduceMotion")).toBool();
     const QJsonObject accent = look.value(QStringLiteral("accent")).toObject();
     const QString source = accent.value(QStringLiteral("source")).toString(QStringLiteral("default"));
@@ -771,6 +770,10 @@ void AppController::applySettings(const QJsonObject &s) {
     ++settingsRev_;
     emit settingsChanged();
     emit themeChanged();
+    if (!languageForced_ && language != languageChoice_) {   // settings.json changed, here or elsewhere
+        QSettings().setValue(QStringLiteral("ui/language"), language);
+        applyLanguage(language);
+    }
 }
 
 // null counts as unset: 2.0.0-beta4 saved a picked accent as null (see jsonOf), and the window must not stay stuck on that
@@ -798,6 +801,41 @@ void AppController::setSetting(const QString &section, const QString &key, const
 
 void AppController::setThemeMode(const QString &m) { setSetting(QStringLiteral("appearance"), QStringLiteral("theme"), m); }
 
+// ---- language ----
+
+void AppController::setLanguage(const QString &choice) {
+    QSettings().setValue(QStringLiteral("ui/language"), choice);   // read before the window exists, next time
+    qunsetenv("SKILLHUB_LANGUAGE");   // a choice made in the window outranks what the screenshots forced
+    languageForced_ = false;
+    setSetting(QStringLiteral("appearance"), QStringLiteral("language"), choice);
+}
+
+QVariantList AppController::languages() const {
+    QVariantList out{QVariantMap{{QStringLiteral("value"), QStringLiteral("system")}, {QStringLiteral("label"), tr("Match system")}}};
+    static const QHash<QString, QString> names{{QStringLiteral("en"), QStringLiteral("English")}, {QStringLiteral("vi"), QStringLiteral("Tiếng Việt")}};
+    for (const QString &code : JsonTranslator::available()) out << QVariantMap{{QStringLiteral("value"), code}, {QStringLiteral("label"), names.value(code, code)}};
+    return out;
+}
+
+void AppController::applyLanguage(const QString &choice) {
+    const QString forced = qEnvironmentVariable("SKILLHUB_LANGUAGE");   // the screenshots
+    languageForced_ = !forced.isEmpty();
+    languageChoice_ = languageForced_ ? forced : choice.isEmpty() ? QStringLiteral("system") : choice;
+    const QString code = JsonTranslator::resolve(languageChoice_);
+    if (code != translator_.code() || (code != QLatin1String("en")) != translatorInstalled_) {
+        if (translatorInstalled_) QCoreApplication::removeTranslator(&translator_);
+        translatorInstalled_ = translator_.use(code) && QCoreApplication::installTranslator(&translator_);
+    }
+    emit languageChanged();   // QML reads its text again (main connects this to QQmlEngine::retranslate)
+    // and what C++ already put into words
+    rebuildDetail();
+    emit countsChanged();
+    emit agentsChanged();
+    emit focusChanged();
+    emit automationChanged();
+    emit appUpdateChanged();
+    emit safetyChanged();
+}
 
 void AppController::setReduceMotion(bool on) { setSetting(QStringLiteral("appearance"), QStringLiteral("reduceMotion"), on); }
 
@@ -1138,14 +1176,14 @@ void AppController::jobDone(const QJsonObject &done) {
     if (kind == QLatin1String("check") || kind == QLatin1String("check-quiet")) {
         const int avail = sum.value(QStringLiteral("available")).toInt();
         if (avail) {
-            msg = tr("%1 update%2 available").arg(avail).arg(plural(avail));
+            msg = avail == 1 ? tr("1 update available") : tr("%1 updates available").arg(avail);
             level = QStringLiteral("warn");
         } else if (kind == QLatin1String("check")) {
             msg = sum.value(QStringLiteral("checked")).toInt() > 0 ? tr("Every tracked skill is current") : tr("No skill has an update source yet");
         }
     } else if (kind == QLatin1String("update")) {
         const int n = sum.value(QStringLiteral("updated")).toInt();
-        msg = n ? tr("Updated %1 skill%2").arg(n).arg(plural(n)) : tr("Nothing to update");
+        msg = n == 1 ? tr("Updated 1 skill") : n ? tr("Updated %1 skills").arg(n) : tr("Nothing to update");
         if (n && done.value(QStringLiteral("ok")).toBool()) {
             QStringList names;
             for (const QJsonValue &v : results)
@@ -1155,14 +1193,14 @@ void AppController::jobDone(const QJsonObject &done) {
         }
     } else if (kind == QLatin1String("install")) {
         const int n = sum.value(QStringLiteral("installed")).toInt();
-        msg = tr("Installed %1 skill%2").arg(n).arg(plural(n));
+        msg = n == 1 ? tr("Installed 1 skill") : tr("Installed %1 skills").arg(n);
         if (!error.isEmpty()) {
             msg = error;
             level = QStringLiteral("error");
         }
     } else if (kind == QLatin1String("import")) {
         const int ok = sum.value(QStringLiteral("installed")).toInt(), failed = sum.value(QStringLiteral("failed")).toInt();
-        msg = tr("Installed %1 skill%2").arg(ok).arg(plural(ok)) + (failed ? tr(", %1 failed (see Activity)").arg(failed) : QString());
+        msg = (ok == 1 ? tr("Installed 1 skill") : tr("Installed %1 skills").arg(ok)) + (failed ? tr(", %1 failed (see Activity)").arg(failed) : QString());
         level = failed ? QStringLiteral("warn") : QStringLiteral("ok");
         if (!error.isEmpty()) {
             msg = error;
@@ -1251,7 +1289,7 @@ void AppController::jobDone(const QJsonObject &done) {
             if (!failed++) firstNote = o.value(QStringLiteral("name")).toString() + QStringLiteral(": ") + o.value(QStringLiteral("note")).toString();
         }
         if (failed > 0) {
-            msg = (msg.isEmpty() ? QString() : msg + QStringLiteral(". ")) + tr("%1 skill%2 could not be checked (%3)").arg(failed).arg(plural(failed)).arg(firstNote);
+            msg = (msg.isEmpty() ? QString() : msg + QStringLiteral(". ")) + (failed == 1 ? tr("1 skill could not be checked (%1)").arg(firstNote) : tr("%1 skills could not be checked (%2)").arg(failed).arg(firstNote));
             level = QStringLiteral("error");
         }
     }
@@ -1362,7 +1400,7 @@ void AppController::installAppUpdate() { startJob(QStringLiteral("app.update"), 
 
 void AppController::showAppUpdate(const QString &latest, bool canInstall) {
     appUpdate_ = {{QStringLiteral("available"), true}, {QStringLiteral("canInstall"), canInstall}, {QStringLiteral("latest"), latest}, {QStringLiteral("page"), QStringLiteral("https://github.com/nimonht/skillhub/releases")},
-                  {QStringLiteral("advice"), canInstall ? QString() : QStringLiteral("Built from source: pull, rebuild and install again.")}};
+                  {QStringLiteral("advice"), canInstall ? QString() : tr("Built from source: pull, rebuild and install again.")}};
     emit appUpdateChanged();
 }
 
@@ -1592,8 +1630,8 @@ void AppController::exportTo(const QString &pathIn, bool includeLocal) {
         const QJsonObject o = r.result.toObject();
         const int tracked = o.value(QStringLiteral("tracked")).toInt(), local = o.value(QStringLiteral("local")).toInt();
         const QJsonArray skipped = o.value(QStringLiteral("skipped")).toArray();
-        for (const QJsonValue &k : skipped) log_.addText(QStringLiteral("not exported: ") + k.toString());
-        log_.addText(QStringLiteral("exported %1 skills (%2 from GitHub, %3 local) to %4").arg(tracked + local).arg(tracked).arg(local).arg(path));
+        for (const QJsonValue &k : skipped) log_.addText(tr("not exported: %1").arg(k.toString()));
+        log_.addText(tr("exported %1 skills (%2 from GitHub, %3 local) to %4").arg(tracked + local).arg(tracked).arg(local).arg(path));
         emit toast(skipped.isEmpty() ? QStringLiteral("ok") : QStringLiteral("warn"),
                    tr("Exported %1 skills").arg(tracked + local) + (skipped.isEmpty() ? QString() : tr(", %1 skipped (see Activity)").arg(skipped.size())));
     });

@@ -34,6 +34,8 @@ jobs:
         run: ./build/skillhub --version
       - name: C unit tests
         run: ctest --test-dir build --output-on-failure
+      - name: Translations complete, and no English outside qsTr()
+        run: python3 tests/i18n_check.py
       - name: QML components (the settings sliders save what they show)
         run: QT_QPA_PLATFORM=offscreen "$QT_ROOT_DIR/bin/qmltestrunner" -input tests/qml
       - name: Design token contrast (WCAG)

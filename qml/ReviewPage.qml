@@ -82,7 +82,7 @@ Rectangle {
                 textFormat: Text.PlainText
                 width: parent.width
                 elide: Text.ElideRight
-                text: app.reviewLoading ? "Reading what changed" : root.many ? "Review " + root.reviews.length + " updates" : root.reviews.length === 1 ? "Review " + root.reviews[0].name : "Review"
+                text: app.reviewLoading ? qsTr("Reading what changed") : root.many ? qsTr("Review %1 updates").arg(root.reviews.length) : root.reviews.length === 1 ? qsTr("Review %1").arg(root.reviews[0].name) : qsTr("Review")
                 color: Theme.text; font.family: Theme.display; font.pixelSize: Theme.fsHead; font.weight: Font.Bold
             }
             Text {
@@ -90,7 +90,7 @@ Rectangle {
                 visible: !app.reviewLoading && root.reviews.length > 0
                 width: parent.width
                 elide: Text.ElideRight
-                text: root.totals.files + (root.totals.files === 1 ? " file" : " files") + "  ·  +" + root.totals.add + "  ·  −" + root.totals.del
+                text: (root.totals.files === 1 ? qsTr("1 file") : qsTr("%1 files").arg(root.totals.files)) + "  ·  +" + root.totals.add + "  ·  −" + root.totals.del
                 color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall
             }
         }
@@ -104,11 +104,11 @@ Rectangle {
                 kind: "primary"
                 iconName: "upgrade"
                 visible: !app.reviewLoading
-                text: root.chosen.length === 0 ? "Nothing to apply" : "Apply " + root.chosen.length + (root.chosen.length === 1 ? " update" : " updates")
+                text: root.chosen.length === 0 ? qsTr("Nothing to apply") : root.chosen.length === 1 ? qsTr("Apply 1 update") : qsTr("Apply %1 updates").arg(root.chosen.length)
                 enabled: root.chosen.length > 0 && !app.busy
                 onClicked: app.applyReview(root.chosen)
             }
-            Btn { kind: "ghost"; text: "Close"; onClicked: app.closeReview() }
+            Btn { kind: "ghost"; text: qsTr("Close"); onClicked: app.closeReview() }
         }
         Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Theme.line }
     }
@@ -118,7 +118,7 @@ Rectangle {
         anchors.centerIn: parent
         spacing: 12
         Spinner { anchors.horizontalCenter: parent.horizontalCenter }
-        Text { textFormat: Text.PlainText; text: "Comparing upstream with the files on disk"; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsBody }
+        Text { textFormat: Text.PlainText; text: qsTr("Comparing upstream with the files on disk"); color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsBody }
     }
 
     SplitView {
@@ -138,7 +138,7 @@ Rectangle {
             boundsBehavior: Flickable.StopAtBounds
             ScrollBar.vertical: Scroll {}
             Accessible.role: Accessible.List
-            Accessible.name: "Skills and files in this review"
+            Accessible.name: qsTr("Skills and files in this review")
             delegate: Loader {
                 required property var modelData
                 width: ListView.view.width
@@ -161,27 +161,27 @@ Rectangle {
                 Note {
                     visible: notes.r !== null && notes.r.risk
                     icon: "alert"; tone: Theme.notifyText; fill: Theme.notifyLow
-                    text: "Adds or changes scripts. Agents may run them, so read them before you apply."
+                    text: qsTr("Adds or changes scripts. Agents may run them, so read them before you apply.")
                 }
                 Note {
                     readonly property var found: notes.r !== null && notes.r.newFindings ? notes.r.newFindings : []
                     readonly property int high: found.filter(function (f) { return f.level === "high" }).length
                     visible: found.length > 0
                     icon: "alert"; tone: high > 0 ? Theme.dangerText : Theme.notifyText; fill: Theme.notifyLow
-                    text: "The offline check finds " + found.length + " thing" + (found.length === 1 ? "" : "s") + " the installed version does not have"
-                          + (high > 0 ? ", " + high + " of them high" : "") + ": "
+                    text: (found.length === 1 ? qsTr("The offline check finds 1 thing the installed version does not have") : qsTr("The offline check finds %1 things the installed version does not have").arg(found.length))
+                          + (high > 0 ? qsTr(", %1 of them high").arg(high) : "") + ": "
                           + found.slice(0, 3).map(function (f) { return f.title.toLowerCase() + " (" + f.file + ":" + f.line + ")" }).join("; ")
-                          + (found.length > 3 ? "; and more" : "") + "."
+                          + (found.length > 3 ? qsTr("; and more") : "") + "."
                 }
                 Note {
                     visible: notes.r !== null && notes.r.available && notes.r.localEdits
                     icon: "alert"; tone: Theme.notifyText; fill: Theme.notifyLow
-                    text: "Your edits in this skill will be replaced. A backup is kept."
+                    text: qsTr("Your edits in this skill will be replaced. A backup is kept.")
                 }
                 Note {
                     visible: notes.r !== null && !notes.r.available && notes.r.localEdits
                     icon: "info"; tone: Theme.text2; fill: Theme.bg3
-                    text: "No update here: these are your own edits against upstream."
+                    text: qsTr("No update here: these are your own edits against upstream.")
                 }
             }
 
@@ -210,7 +210,7 @@ Rectangle {
                 boundsBehavior: Flickable.StopAtBounds
                 ScrollBar.vertical: Scroll {}
                 Accessible.role: Accessible.List
-                Accessible.name: "Changes in this file"
+                Accessible.name: qsTr("Changes in this file")
                 delegate: Rectangle {
                     id: line
                     required property string modelData
@@ -245,7 +245,7 @@ Rectangle {
                     height: visible ? implicitHeight + 16 : 0
                     topPadding: 8
                     wrapMode: Text.Wrap
-                    text: "This file changes too much to show in full. Everything is applied, also what is not shown."
+                    text: qsTr("This file changes too much to show in full. Everything is applied, also what is not shown.")
                     color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall
                 }
             }
@@ -258,7 +258,7 @@ Rectangle {
                 x: 20
                 width: parent.width - 40
                 wrapMode: Text.Wrap
-                text: root.current === null ? "" : root.current.binary ? "A binary file. Its content cannot be shown." : root.current.cut ? "This file changes too much to show." : "Only the file's permissions change."
+                text: root.current === null ? "" : root.current.binary ? qsTr("A binary file. Its content cannot be shown.") : root.current.cut ? qsTr("This file changes too much to show.") : qsTr("Only the file's permissions change.")
                 color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsBody
             }
 
@@ -266,7 +266,7 @@ Rectangle {
                 textFormat: Text.PlainText
                 visible: root.current === null && root.reviews.length > 0
                 anchors.centerIn: parent
-                text: "Nothing differs"
+                text: qsTr("Nothing differs")
                 color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsBody
             }
         }
@@ -306,7 +306,7 @@ Rectangle {
             focusPolicy: Qt.TabFocus
             onClicked: root.toggleOpen(r.name)
             Accessible.role: Accessible.Button
-            Accessible.name: r.name + (r.error ? ", " + r.error : ", " + r.files.length + " files") + (r.risk ? ", adds or changes scripts" : "")
+            Accessible.name: r.name + (r.error ? ", " + r.error : ", " + qsTr("%1 files").arg(r.files.length)) + (r.risk ? qsTr(", adds or changes scripts") : "")
             background: Rectangle { color: row.hovered ? Theme.bg3 : "transparent"; border.color: Theme.focus; border.width: row.visualFocus ? 2 : 0 }
             contentItem: Item {
                 AbstractButton {   // chosen, or left out of the update
@@ -317,7 +317,7 @@ Rectangle {
                     width: 22; height: 22
                     onClicked: root.toggleChosen(row.r.name)
                     Accessible.role: Accessible.CheckBox
-                    Accessible.name: "Apply " + row.r.name
+                    Accessible.name: qsTr("Apply %1").arg(row.r.name)
                     Accessible.checked: row.on
                     contentItem: Item {}
                     background: Rectangle {
@@ -344,7 +344,7 @@ Rectangle {
                         textFormat: Text.PlainText
                         width: parent.width
                         elide: Text.ElideRight
-                        text: row.r.error ? row.r.error : !row.r.available && row.r.files.length === 0 ? "current, nothing differs" : (row.r.files.length + (row.r.files.length === 1 ? " file" : " files") + (row.r.risk ? "  ·  scripts" : "") + (row.r.localEdits ? "  ·  local edits" : ""))
+                        text: row.r.error ? row.r.error : !row.r.available && row.r.files.length === 0 ? qsTr("current, nothing differs") : ((row.r.files.length === 1 ? qsTr("1 file") : qsTr("%1 files").arg(row.r.files.length)) + (row.r.risk ? "  ·  " + qsTr("scripts") : "") + (row.r.localEdits ? "  ·  " + qsTr("local edits") : ""))
                         color: row.r.error ? Theme.dangerText : row.r.risk ? Theme.notifyText : Theme.text2
                         font.family: Theme.ui; font.pixelSize: Theme.fsSmall
                     }
@@ -365,7 +365,7 @@ Rectangle {
             focusPolicy: Qt.TabFocus
             onClicked: { root.skill = at.s; root.file = at.f }
             Accessible.role: Accessible.Button
-            Accessible.name: f.status + " " + f.path + (f.risk ? ", a script" : "")
+            Accessible.name: f.status + " " + f.path + (f.risk ? qsTr(", a script") : "")
             background: Rectangle { color: row.active ? Theme.bg4 : row.hovered ? Theme.bg3 : "transparent"; border.color: Theme.focus; border.width: row.visualFocus ? 2 : 0 }
             contentItem: Item {
                 Text {
@@ -395,7 +395,7 @@ Rectangle {
                     spacing: 6
                     Icon { visible: row.f.risk; name: "alert"; size: 14; color: Theme.notifyText; anchors.verticalCenter: parent.verticalCenter }
                     NumText {
-                        text: row.f.binary ? "bin" : "+" + row.f.add + " −" + row.f.del
+                        text: row.f.binary ? qsTr("bin") : "+" + row.f.add + " −" + row.f.del
                         color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall
                         anchors.verticalCenter: parent.verticalCenter
                     }

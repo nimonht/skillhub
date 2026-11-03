@@ -14,13 +14,13 @@ FocusScope {
     property int coach: 0
     readonly property int steps: 6
     readonly property var marks: [
-        { key: "filters", title: "Your skills, sorted by what they need", text: "All skills, updates waiting, skills of your own, and links that need a look.", place: "right" },
-        { key: "band", title: "Every agent has a column", text: "Click one to see how it finds skills and which it can see.", place: "below", wait: "agent" },
-        { key: "header", title: "One port per skill, per agent", text: "Lit means that agent sees the skill. A ring means something is worth a look.", place: "below" },
-        { key: "detail", title: "Review before you update", text: "Pick a skill to read it, see what an update would change, and go back to any kept version.", place: "left" },
-        { key: "top", title: "Search and act", text: "Filter with /, add skills from anywhere, and review every update at once.", place: "below" },
-        { key: "status", title: "Activity and a terminal", text: "The dock below shows what ran. Ctrl+` opens a terminal right there.", place: "above" },
-        { key: "settings", title: "Make it yours", text: "Panels resize, and everything else is in Settings.", place: "right" } ]
+        { key: "filters", title: qsTr("Your skills, sorted by what they need"), text: qsTr("All skills, updates waiting, skills of your own, and links that need a look."), place: "right" },
+        { key: "band", title: qsTr("Every agent has a column"), text: qsTr("Click one to see how it finds skills and which it can see."), place: "below", wait: "agent" },
+        { key: "header", title: qsTr("One port per skill, per agent"), text: qsTr("Lit means that agent sees the skill. A ring means something is worth a look."), place: "below" },
+        { key: "detail", title: qsTr("Review before you update"), text: qsTr("Pick a skill to read it, see what an update would change, and go back to any kept version."), place: "left" },
+        { key: "top", title: qsTr("Search and act"), text: qsTr("Filter with /, add skills from anywhere, and review every update at once."), place: "below" },
+        { key: "status", title: qsTr("Activity and a terminal"), text: qsTr("The dock below shows what ran. Ctrl+` opens a terminal right there."), place: "above" },
+        { key: "settings", title: qsTr("Make it yours"), text: qsTr("Panels resize, and everything else is in Settings."), place: "right" } ]
     readonly property var mark: step === 4 ? marks[coach] : null
     readonly property Item target: mark ? Theme.tourTargets[mark.key] || null : null
     readonly property rect hole: {
@@ -46,7 +46,7 @@ FocusScope {
     Keys.onReturnPressed: next()
     Keys.onEnterPressed: next()
     Accessible.role: Accessible.Dialog
-    Accessible.name: "Welcome to Skill Hub"
+    Accessible.name: qsTr("Welcome to Skill Hub")
 
     // a step that waits for the real thing: clicking an agent's column moves on by itself
     Connections {
@@ -176,11 +176,20 @@ FocusScope {
                 width: parent.width
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.Wrap
-                text: ["One skills folder.\nEvery coding agent.", "Your agents", "Your skills", "Make it yours", "", "Ready"][root.step]
+                text: [qsTr("One skills folder.\nEvery coding agent."), qsTr("Your agents"), qsTr("Your skills"), qsTr("Make it yours"), "", qsTr("Ready")][root.step]
                 color: "#FFFFFF"
                 font.family: Theme.display
                 font.pixelSize: root.step === 0 ? 44 : 34
                 font.weight: Font.Bold
+            }
+
+            Segmented {   // the language first, so the rest of the tour reads in it
+                visible: root.step === 0
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: Math.min(parent.width, 340)
+                options: app.languages
+                current: app.language
+                onPicked: (v) => app.language = v
             }
 
             // your agents, wired to the shared folder
@@ -237,7 +246,7 @@ FocusScope {
                             x: 48
                             anchors.verticalCenter: parent.verticalCenter
                             Text { textFormat: Text.PlainText; text: modelData.label; color: "#FFFFFF"; font.family: Theme.ui; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold }
-                            Text { textFormat: Text.PlainText; text: modelData.detectedBy ? "Found via " + modelData.detectedBy : ""; color: "#C6CEDA"; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
+                            Text { textFormat: Text.PlainText; text: Words.foundVia(modelData.detectedBy); color: "#C6CEDA"; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
                         }
                     }
                 }
@@ -247,7 +256,7 @@ FocusScope {
                     x: 130; anchors.verticalCenter: parent.verticalCenter
                     width: parent.width - 130
                     wrapMode: Text.Wrap
-                    text: "No coding agent found yet. Install one and it shows up here by itself."
+                    text: qsTr("No coding agent found yet. Install one and it shows up here by itself.")
                     color: "#C6CEDA"; font.family: Theme.ui; font.pixelSize: Theme.fsBody
                 }
             }
@@ -261,7 +270,7 @@ FocusScope {
                     anchors.horizontalCenter: parent.horizontalCenter
                     spacing: 40
                     Repeater {
-                        model: [ { n: app.skillCount, t: "skills" }, { n: app.updateCount, t: "updates" }, { n: app.problemCount, t: "link problems" }, { n: app.strayCount, t: "strays" } ]
+                        model: [ { n: app.skillCount, t: qsTr("skills") }, { n: app.updateCount, t: qsTr("updates") }, { n: app.problemCount, t: qsTr("link problems") }, { n: app.strayCount, t: qsTr("strays") } ]
                         delegate: Column {
                             required property var modelData
                             NumText { anchors.horizontalCenter: parent.horizontalCenter; text: modelData.n; color: "#FFFFFF"; font.family: Theme.display; font.pixelSize: 38; font.weight: Font.Bold }
@@ -275,7 +284,7 @@ FocusScope {
                     columnSpacing: 32
                     rowSpacing: 8
                     Repeater {
-                        model: [ { l: "link", t: "linked to this agent" }, { l: "off", t: "turned off, on purpose" }, { l: "missing", t: "not linked yet" }, { l: "copy", t: "its own separate copy" } ]
+                        model: [ { l: "link", t: qsTr("linked to this agent") }, { l: "off", t: qsTr("turned off, on purpose") }, { l: "missing", t: qsTr("not linked yet") }, { l: "copy", t: qsTr("its own separate copy") } ]
                         delegate: Row {
                             required property var modelData
                             spacing: 10
@@ -294,10 +303,10 @@ FocusScope {
                         width: parent.width
                         horizontalAlignment: Text.AlignHCenter
                         wrapMode: Text.Wrap
-                        text: "Some skills sit in an agent's own folder. Adopting moves them into the shared one; identical copies and conflicts are kept in a backup."
+                        text: qsTr("Some skills sit in an agent's own folder. Adopting moves them into the shared one; identical copies and conflicts are kept in a backup.")
                         color: "#C6CEDA"; font.family: Theme.ui; font.pixelSize: Theme.fsBody
                     }
-                    Btn { anchors.horizontalCenter: parent.horizontalCenter; iconName: "tool"; text: "Adopt strays now"; enabled: !app.busy; onClicked: app.adopt() }
+                    Btn { anchors.horizontalCenter: parent.horizontalCenter; iconName: "tool"; text: qsTr("Adopt strays now"); enabled: !app.busy; onClicked: app.adopt() }
                 }
             }
 
@@ -319,7 +328,7 @@ FocusScope {
                         spacing: 12
                         Segmented {
                             width: parent.width
-                            options: [ { value: "system", label: "System", icon: "auto" }, { value: "dark", label: "Dark", icon: "moon" }, { value: "light", label: "Light", icon: "sun" } ]
+                            options: [ { value: "system", label: qsTr("System"), icon: "auto" }, { value: "dark", label: qsTr("Dark"), icon: "moon" }, { value: "light", label: qsTr("Light"), icon: "sun" } ]
                             current: app.themeMode
                             onPicked: (v) => app.themeMode = v
                         }
@@ -334,7 +343,7 @@ FocusScope {
                                     width: 32; height: 32
                                     focusPolicy: Qt.StrongFocus
                                     Accessible.role: Accessible.RadioButton
-                                    Accessible.name: "Accent " + modelData
+                                    Accessible.name: qsTr("Accent %1").arg(modelData)
                                     onClicked: app.setSetting("appearance", "accent", { source: modelData === "#34E0A6" ? "default" : "custom", color: modelData })
                                     background: Rectangle { radius: 4; color: swatch.modelData; border.color: swatch.visualFocus ? Theme.focus : "transparent"; border.width: 2 }
                                 }
@@ -342,7 +351,7 @@ FocusScope {
                         }
                         Segmented {
                             width: parent.width
-                            options: [ { value: "solid", label: "Solid", icon: "all" }, { value: "blur", label: "Blur", icon: "moon" }, { value: "glass", label: "Liquid Glass", icon: "auto" } ]
+                            options: [ { value: "solid", label: qsTr("Solid"), icon: "all" }, { value: "blur", label: qsTr("Blur"), icon: "moon" }, { value: "glass", label: qsTr("Liquid Glass"), icon: "auto" } ]
                             current: Theme.setting("appearance", "material", "solid")
                             onPicked: (v) => app.setSetting("appearance", "material", v)
                         }
@@ -353,7 +362,7 @@ FocusScope {
                     width: parent.width
                     horizontalAlignment: Text.AlignHCenter
                     wrapMode: Text.Wrap
-                    text: "It all applies right away, and all of it stays in Settings."
+                    text: qsTr("It all applies right away, and all of it stays in Settings.")
                     color: "#C6CEDA"; font.family: Theme.ui; font.pixelSize: Theme.fsBody
                 }
             }
@@ -366,7 +375,7 @@ FocusScope {
                 columnSpacing: 16
                 rowSpacing: 8
                 Repeater {
-                    model: [ { k: "/", t: "Filter skills" }, { k: "Ctrl+N", t: "Add skills" }, { k: "Ctrl+U", t: "Check for updates" }, { k: "Ctrl+,", t: "Settings" }, { k: "Ctrl+`", t: "Terminal" }, { k: "F1", t: "This tour again" } ]
+                    model: [ { k: "/", t: qsTr("Filter skills") }, { k: "Ctrl+N", t: qsTr("Add skills") }, { k: "Ctrl+U", t: qsTr("Check for updates") }, { k: "Ctrl+,", t: qsTr("Settings") }, { k: "Ctrl+`", t: qsTr("Terminal") }, { k: "F1", t: qsTr("This tour again") } ]
                     delegate: Row {
                         required property var modelData
                         spacing: 10
@@ -383,10 +392,10 @@ FocusScope {
             Row {
                 anchors.horizontalCenter: parent.horizontalCenter
                 spacing: 10
-                Btn { visible: root.step > 0; kind: "ghost"; text: "Back"; onClicked: root.back() }
-                Btn { kind: "primary"; text: root.step === 0 ? "Start" : root.step === root.steps - 1 ? "Done" : "Next"; onClicked: root.next() }
-                Btn { visible: root.step === root.steps - 1; iconName: "terminal"; text: "Open the terminal"; onClicked: { root.finished(); root.openTerminal() } }
-                Btn { visible: root.step < root.steps - 1; kind: "ghost"; text: "Skip"; onClicked: root.finished() }
+                Btn { visible: root.step > 0; kind: "ghost"; text: qsTr("Back"); onClicked: root.back() }
+                Btn { kind: "primary"; text: root.step === 0 ? qsTr("Start") : root.step === root.steps - 1 ? qsTr("Done") : qsTr("Next"); onClicked: root.next() }
+                Btn { visible: root.step === root.steps - 1; iconName: "terminal"; text: qsTr("Open the terminal"); onClicked: { root.finished(); root.openTerminal() } }
+                Btn { visible: root.step < root.steps - 1; kind: "ghost"; text: qsTr("Skip"); onClicked: root.finished() }
             }
         }
     }
@@ -434,8 +443,8 @@ FocusScope {
                 Row {
                     anchors.right: parent.right
                     spacing: 6
-                    Btn { kind: "ghost"; compact: true; text: "Back"; onClicked: root.back() }
-                    Btn { kind: "primary"; compact: true; text: "Next"; onClicked: root.next() }
+                    Btn { kind: "ghost"; compact: true; text: qsTr("Back"); onClicked: root.back() }
+                    Btn { kind: "primary"; compact: true; text: qsTr("Next"); onClicked: root.next() }
                 }
             }
         }

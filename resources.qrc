@@ -7,6 +7,9 @@
         <file alias="skillhub-128.png">data/icons/hicolor/128x128/apps/skillhub.png</file>
         <file alias="skillhub-256.png">data/icons/hicolor/256x256/apps/skillhub.png</file>
     </qresource>
+    <qresource prefix="/i18n">
+        <file alias="vi.json">i18n/vi.json</file>
+    </qresource>
     <qresource prefix="/data">
         <file alias="providers.json">data/providers.json</file>
         <file alias="provider-icons.json">data/provider-icons.json</file>
@@ -58,6 +61,7 @@
         <file alias="Tag.qml">qml/Tag.qml</file>
         <file alias="Tip.qml">qml/Tip.qml</file>
         <file alias="Theme.qml">qml/Theme.qml</file>
+        <file alias="Words.qml">qml/Words.qml</file>
         <file alias="Toast.qml">qml/Toast.qml</file>
         <file alias="Toggle.qml">qml/Toggle.qml</file>
         <file alias="TopBar.qml">qml/TopBar.qml</file>

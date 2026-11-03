@@ -23,7 +23,7 @@ Item {
         Text {
             textFormat: Text.PlainText
             width: parent.width
-            text: "Pick a skill"
+            text: qsTr("Pick a skill")
             color: Theme.text
             font.family: Theme.display
             font.pixelSize: Theme.fsHead
@@ -33,7 +33,7 @@ Item {
             textFormat: Text.PlainText
             width: parent.width
             wrapMode: Text.Wrap
-            text: "Its SKILL.md, where it came from and which agents can use it show up here. Click an agent above the list to inspect that agent instead."
+            text: qsTr("Its SKILL.md, where it came from and which agents can use it show up here. Click an agent above the list to inspect that agent instead.")
             color: Theme.text2
             font.family: Theme.ui
             font.pixelSize: Theme.fsBody
@@ -41,7 +41,7 @@ Item {
         }
         Item { width: 1; height: 6 }
         Repeater {
-            model: [ { k: "/", t: "Filter skills" }, { k: "Ctrl+N", t: "Add skills" }, { k: "Ctrl+U", t: "Check for updates" }, { k: "Ctrl+Shift+U", t: "Review every update" } ]
+            model: [ { k: "/", t: qsTr("Filter skills") }, { k: "Ctrl+N", t: qsTr("Add skills") }, { k: "Ctrl+U", t: qsTr("Check for updates") }, { k: "Ctrl+Shift+U", t: qsTr("Review every update") } ]
             delegate: Row {
                 required property var modelData
                 spacing: 10

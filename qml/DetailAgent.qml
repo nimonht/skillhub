@@ -35,18 +35,18 @@ Flickable {
             }
             Tag {
                 kind: root.a.detected === false ? "absent" : root.a.health === "ok" ? "healthy" : "attention"
-                label: root.a.detected === false ? "Not found, managed because you switched it on"
-                       : root.a.health === "ok" ? (root.a.ok === root.a.total ? "All skills visible" : (root.a.total - root.a.ok) + " turned off")
-                       : (root.a.problems || 0) > 0 ? root.a.problems + " need repair" : "Not wired up"
+                label: root.a.detected === false ? qsTr("Not found, managed because you switched it on")
+                       : root.a.health === "ok" ? (root.a.ok === root.a.total ? qsTr("All skills visible") : qsTr("%1 turned off").arg(root.a.total - root.a.ok))
+                       : (root.a.problems || 0) > 0 ? qsTr("%1 need repair").arg(root.a.problems) : qsTr("Not wired up")
             }
-            Text { textFormat: Text.PlainText; width: parent.width; wrapMode: Text.Wrap; text: root.a.mechanism || ""; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsBody }
-            Text { textFormat: Text.PlainText; width: parent.width; wrapMode: Text.Wrap; visible: (root.a.detectedBy || "") !== ""; text: "Found via " + (root.a.detectedBy || ""); color: Theme.text3; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
+            Text { textFormat: Text.PlainText; width: parent.width; wrapMode: Text.Wrap; text: Words.mechanism(root.a); color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsBody }
+            Text { textFormat: Text.PlainText; width: parent.width; wrapMode: Text.Wrap; visible: (root.a.detectedBy || "") !== ""; text: Words.foundVia(root.a.detectedBy); color: Theme.text3; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
         }
 
         Row {
             spacing: 6
             NumText { text: root.a.ok; color: Theme.text; font.family: Theme.display; font.pixelSize: Theme.fsBig; font.weight: Font.Bold }
-            Text { textFormat: Text.PlainText; text: "of " + root.a.total + " skills visible"; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsBody; anchors.baseline: parent.children[0].baseline }
+            Text { textFormat: Text.PlainText; text: qsTr("of %1 skills visible").arg(root.a.total); color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsBody; anchors.baseline: parent.children[0].baseline }
         }
 
         Text {
@@ -54,7 +54,7 @@ Flickable {
             visible: root.a.detected === false
             width: parent.width
             wrapMode: Text.Wrap
-            text: "Neither its command nor its folder was found, so nothing proves it is installed. Skills are still linked for it. Stop managing it if that is not what you want."
+            text: qsTr("Neither its command nor its folder was found, so nothing proves it is installed. Skills are still linked for it. Stop managing it if that is not what you want.")
             color: Theme.text2
             font.family: Theme.ui
             font.pixelSize: Theme.fsBody
@@ -65,7 +65,7 @@ Flickable {
             visible: root.a.wired === false
             width: parent.width
             wrapMode: Text.Wrap
-            text: "The shared folder is not listed in " + (root.a.folder || "its config file") + " yet. Repair adds it and keeps the entries that are already there."
+            text: qsTr("The shared folder is not listed in %1 yet. Repair adds it and keeps the entries that are already there.").arg(root.a.folder || qsTr("its config file"))
             color: Theme.notifyText
             font.family: Theme.ui
             font.pixelSize: Theme.fsBody
@@ -74,7 +74,7 @@ Flickable {
 
         Btn {
             visible: root.issues.length > 0 || root.a.wired === false
-            kind: "primary"; iconName: "tool"; text: "Repair links"; enabled: !app.busy
+            kind: "primary"; iconName: "tool"; text: qsTr("Repair links"); enabled: !app.busy
             onClicked: app.adopt()
         }
 
@@ -82,7 +82,7 @@ Flickable {
             visible: root.issues.length > 0
             width: parent.width
             spacing: 2
-            SectionLabel { width: parent.width; text: "Cannot see these skills"; trailing: root.issues.length }
+            SectionLabel { width: parent.width; text: qsTr("Cannot see these skills"); trailing: root.issues.length }
             Repeater {
                 model: root.issues.slice(0, 40)
                 delegate: AbstractButton {
@@ -110,19 +110,19 @@ Flickable {
             visible: root.skills.length > 0
             width: parent.width
             spacing: 6
-            SectionLabel { width: parent.width; text: "Skills"; trailing: root.skills.length }
+            SectionLabel { width: parent.width; text: qsTr("Skills"); trailing: root.skills.length }
             Text {
                 textFormat: Text.PlainText
                 visible: root.readsShared
                 width: parent.width
                 wrapMode: Text.Wrap
-                text: "This agent reads the shared folder, so a switch here applies to every agent that does. A skill turned off moves to the parked folder."
+                text: qsTr("This agent reads the shared folder, so a switch here applies to every agent that does. A skill turned off moves to the parked folder.")
                 color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall; lineHeight: 1.2
             }
             Row {
                 spacing: 6
-                Btn { kind: "ghost"; compact: true; text: "Enable all"; enabled: !app.busy; onClicked: app.setAgentEnabled(root.names(), root.switchKey, true) }
-                Btn { kind: "ghost"; compact: true; text: "Disable all"; enabled: !app.busy; onClicked: app.setAgentEnabled(root.names(), root.switchKey, false) }
+                Btn { kind: "ghost"; compact: true; text: qsTr("Enable all"); enabled: !app.busy; onClicked: app.setAgentEnabled(root.names(), root.switchKey, true) }
+                Btn { kind: "ghost"; compact: true; text: qsTr("Disable all"); enabled: !app.busy; onClicked: app.setAgentEnabled(root.names(), root.switchKey, false) }
             }
             ListView {
                 width: parent.width
@@ -132,7 +132,7 @@ Flickable {
                 boundsBehavior: Flickable.StopAtBounds
                 ScrollBar.vertical: Scroll {}
                 Accessible.role: Accessible.List
-                Accessible.name: "Skills of this agent"
+                Accessible.name: qsTr("Skills of this agent")
                 delegate: Item {
                     required property var modelData
                     width: ListView.view.width - 8
@@ -165,12 +165,12 @@ Flickable {
         Column {
             width: parent.width
             spacing: 4
-            SectionLabel { width: parent.width; text: "Folder" }
+            SectionLabel { width: parent.width; text: qsTr("Folder") }
             Text { textFormat: Text.PlainText; width: parent.width; text: root.a.folder || ""; wrapMode: Text.WrapAnywhere; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
             Row {
                 spacing: 6
-                Btn { kind: "ghost"; compact: true; iconName: "sliders"; text: "Manage agents"; onClicked: app.detailMode = "providers" }
-                Btn { kind: "ghost"; compact: true; iconName: "x"; text: "Stop managing"; enabled: !app.busy; onClicked: app.setProviderManaged(root.a.id, false) }
+                Btn { kind: "ghost"; compact: true; iconName: "sliders"; text: qsTr("Manage agents"); onClicked: app.detailMode = "providers" }
+                Btn { kind: "ghost"; compact: true; iconName: "x"; text: qsTr("Stop managing"); enabled: !app.busy; onClicked: app.setProviderManaged(root.a.id, false) }
             }
         }
     }

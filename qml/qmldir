@@ -1,4 +1,5 @@
 singleton Theme 1.0 Theme.qml
+singleton Words 1.0 Words.qml
 AddSheet 1.0 AddSheet.qml
 AgentTile 1.0 AgentTile.qml
 Btn 1.0 Btn.qml

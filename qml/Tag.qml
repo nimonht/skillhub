@@ -9,15 +9,15 @@ Item {
     property bool iconOnly: false
 
     readonly property var spec: ({
-        "available": { text: "Update",       icon: "upgrade", fg: Theme.notifyText, strong: true },
-        "current":   { text: "Current",      icon: "check",   fg: Theme.text2,      strong: false },
-        "updated":   { text: "Updated",      icon: "check",   fg: Theme.gainText,   strong: true },
-        "error":     { text: "Error",        icon: "alert",   fg: Theme.dangerText, strong: true },
-        "local":     { text: "Local",        icon: "folder",  fg: Theme.text2,      strong: false },
-        "tracked":   { text: "Not checked",  icon: "clock",   fg: Theme.text2,      strong: false },
-        "healthy":   { text: "Healthy",      icon: "check",   fg: Theme.markText,   strong: true },
-        "attention": { text: "Needs repair", icon: "alert",   fg: Theme.notifyText, strong: true },
-        "absent":    { text: "Not found",    icon: "info",    fg: Theme.text2,      strong: false }
+        "available": { text: qsTr("Update"),       icon: "upgrade", fg: Theme.notifyText, strong: true },
+        "current":   { text: qsTr("Current"),      icon: "check",   fg: Theme.text2,      strong: false },
+        "updated":   { text: qsTr("Updated"),      icon: "check",   fg: Theme.gainText,   strong: true },
+        "error":     { text: qsTr("Error"),        icon: "alert",   fg: Theme.dangerText, strong: true },
+        "local":     { text: qsTr("Local"),        icon: "folder",  fg: Theme.text2,      strong: false },
+        "tracked":   { text: qsTr("Not checked"),  icon: "clock",   fg: Theme.text2,      strong: false },
+        "healthy":   { text: qsTr("Healthy"),      icon: "check",   fg: Theme.markText,   strong: true },
+        "attention": { text: qsTr("Needs repair"), icon: "alert",   fg: Theme.notifyText, strong: true },
+        "absent":    { text: qsTr("Not found"),    icon: "info",    fg: Theme.text2,      strong: false }
     })
     readonly property var s: spec[kind] || spec["current"]
 

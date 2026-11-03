@@ -8,7 +8,7 @@ Item {
     property var chosen: ({})
     property bool live: false
     readonly property int chosenCount: Object.keys(chosen).length
-    readonly property string origin: app.candidateType === "local" ? "this machine" : app.candidateHost
+    readonly property string origin: app.candidateType === "local" ? qsTr("this machine") : app.candidateHost
     function toggle(name) {
         var c = Object.assign({}, chosen)
         if (c[name]) delete c[name]; else c[name] = true
@@ -29,27 +29,27 @@ Item {
         x: 24; y: 24
         width: root.width - 48
         spacing: 12
-        Text { textFormat: Text.PlainText; width: parent.width; text: "Add skills"; color: Theme.text; font.family: Theme.display; font.pixelSize: Theme.fsHead; font.weight: Font.Bold }
+        Text { textFormat: Text.PlainText; width: parent.width; text: qsTr("Add skills"); color: Theme.text; font.family: Theme.display; font.pixelSize: Theme.fsHead; font.weight: Font.Bold }
         Text {
             textFormat: Text.PlainText
             width: parent.width
             wrapMode: Text.Wrap
-            text: "Name a repository or a folder. Skill Hub lists every SKILL.md in it; you choose which ones to install into the shared folder."
+            text: qsTr("Name a repository or a folder. Skill Hub lists every SKILL.md in it; you choose which ones to install into the shared folder.")
             color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsBody; lineHeight: 1.2
         }
         Field {
             id: repo
             width: parent.width
             iconName: "branch"
-            placeholderText: "owner/repo, a GitLab or git URL, or a local folder"
+            placeholderText: qsTr("owner/repo, a GitLab or git URL, or a local folder")
             enabled: !app.busy
             onAccepted: if (text.trim() !== "") app.discover(text)
         }
         Row {
             spacing: 8
-            Btn { kind: "primary"; iconName: "search"; text: "Read source"; enabled: repo.text.trim() !== "" && !app.busy; onClicked: app.discover(repo.text) }
-            Btn { visible: dialogs.status === Loader.Ready; kind: "secondary"; iconName: "folder"; text: "Choose folder"; enabled: !app.busy; onClicked: dialogs.item.openFolder() }
-            Btn { kind: "ghost"; text: "Close"; onClicked: app.closeAdd() }
+            Btn { kind: "primary"; iconName: "search"; text: qsTr("Read source"); enabled: repo.text.trim() !== "" && !app.busy; onClicked: app.discover(repo.text) }
+            Btn { visible: dialogs.status === Loader.Ready; kind: "secondary"; iconName: "folder"; text: qsTr("Choose folder"); enabled: !app.busy; onClicked: dialogs.item.openFolder() }
+            Btn { kind: "ghost"; text: qsTr("Close"); onClicked: app.closeAdd() }
         }
         Text {
             textFormat: Text.PlainText
@@ -93,7 +93,7 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
 
-        SectionLabel { id: lbl; x: 24; width: parent.width - 48; text: "Skills in " + app.candidateRepo + (root.origin !== "" ? " · " + root.origin : ""); trailing: app.candidates.length }
+        SectionLabel { id: lbl; x: 24; width: parent.width - 48; text: root.origin !== "" ? qsTr("Skills in %1 · %2").arg(app.candidateRepo).arg(root.origin) : qsTr("Skills in %1").arg(app.candidateRepo); trailing: app.candidates.length }
         Toggle {
             id: liveToggle
             visible: app.candidateType === "local" && !app.inProject
@@ -101,8 +101,8 @@ Item {
             anchors.topMargin: 8
             x: 24
             width: parent.width - 48
-            text: "Live link"
-            hint: "Edits in the folder reach every agent at once. Off: a copy, updated when you choose"
+            text: qsTr("Live link")
+            hint: qsTr("Edits in the folder reach every agent at once. Off: a copy, updated when you choose")
             checked: root.live
             onToggled: root.live = checked
         }
@@ -151,7 +151,7 @@ Item {
                         Text { textFormat: Text.PlainText; width: parent.width; text: cand.modelData.name; elide: Text.ElideRight; color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold }
                         Text { textFormat: Text.PlainText; width: parent.width; text: cand.modelData.description; elide: Text.ElideRight; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
                     }
-                    Tag { id: installed; visible: cand.modelData.installed; kind: "current"; label: "Installed"; anchors.right: parent.right; anchors.rightMargin: 24; anchors.verticalCenter: parent.verticalCenter }
+                    Tag { id: installed; visible: cand.modelData.installed; kind: "current"; label: qsTr("Installed"); anchors.right: parent.right; anchors.rightMargin: 24; anchors.verticalCenter: parent.verticalCenter }
                 }
                 HoverHandler { cursorShape: Qt.PointingHandCursor }
             }
@@ -169,13 +169,13 @@ Item {
                 Btn {
                     kind: "primary"
                     iconName: "download"
-                    text: root.chosenCount > 0 ? "Install " + root.chosenCount + (root.chosenCount === 1 ? " skill" : " skills") : "Install"
+                    text: root.chosenCount === 0 ? qsTr("Install") : root.chosenCount === 1 ? qsTr("Install 1 skill") : qsTr("Install %1 skills").arg(root.chosenCount)
                     enabled: root.chosenCount > 0 && !app.busy
                     onClicked: app.installChosen(Object.keys(root.chosen), root.live)
                 }
                 Btn {
                     kind: "ghost"
-                    text: root.chosenCount === app.candidates.length ? "Clear" : "Select all"
+                    text: root.chosenCount === app.candidates.length ? qsTr("Clear", "selection") : qsTr("Select all")
                     onClicked: {
                         var c = {}
                         if (root.chosenCount !== app.candidates.length) for (var i = 0; i < app.candidates.length; ++i) c[app.candidates[i].name] = true

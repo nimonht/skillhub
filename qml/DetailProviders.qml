@@ -25,19 +25,19 @@ Flickable {
         width: parent ? parent.width : 300
         height: 52
         Accessible.role: Accessible.ListItem
-        Accessible.name: p.label + (p.managed ? ", managed" : ", not managed")
+        Accessible.name: p.label + (p.managed ? qsTr(", managed") : qsTr(", not managed"))
         AgentTile { x: 0; anchors.verticalCenter: parent.verticalCenter; size: 32; text: p.monogram; icon: p.icon; tone: p.managed ? (p.detected ? "ok" : "issue") : "off" }
         Column {
             x: 44
             anchors.verticalCenter: parent.verticalCenter
             width: parent.width - 44 - (p.custom ? 110 : 76)
             spacing: 1
-            Text { textFormat: Text.PlainText; width: parent.width; text: p.label + (p.custom ? "  (yours)" : ""); elide: Text.ElideRight; color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold }
+            Text { textFormat: Text.PlainText; width: parent.width; text: p.label + (p.custom ? "  " + qsTr("(yours)") : ""); elide: Text.ElideRight; color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold }
             Text {
                 textFormat: Text.PlainText
                 width: parent.width
                 elide: Text.ElideRight
-                text: p.managed ? p.mechanism : p.detected ? "Found via " + p.detectedBy + ", switched off" : "Not found on this machine"
+                text: p.managed ? Words.mechanism(p) : p.detected ? qsTr("%1, switched off").arg(Words.foundVia(p.detectedBy)) : qsTr("Not found on this machine")
                 color: Theme.text2
                 font.family: Theme.ui
                 font.pixelSize: Theme.fsSmall
@@ -49,7 +49,7 @@ Flickable {
             anchors.rightMargin: 4
             anchors.verticalCenter: parent.verticalCenter
             kind: "ghost"; compact: true; iconName: "trash"
-            Accessible.name: "Remove " + p.label
+            Accessible.name: qsTr("Remove %1").arg(p.label)
             enabled: !app.busy
             onClicked: app.removeCustomProvider(p.id)
         }
@@ -62,7 +62,7 @@ Flickable {
             checked: p.managed
             enabled: !app.busy
             onToggled: app.setProviderManaged(p.id, checked)
-            Accessible.name: "Manage " + p.label
+            Accessible.name: qsTr("Manage %1").arg(p.label)
         }
         Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Theme.line }
     }
@@ -77,19 +77,19 @@ Flickable {
         Column {
             width: parent.width
             spacing: 10
-            Text { textFormat: Text.PlainText; width: parent.width; text: "Agents"; color: Theme.text; font.family: Theme.display; font.pixelSize: Theme.fsHead; font.weight: Font.Bold }
+            Text { textFormat: Text.PlainText; width: parent.width; text: qsTr("Agents"); color: Theme.text; font.family: Theme.display; font.pixelSize: Theme.fsHead; font.weight: Font.Bold }
             Text {
                 textFormat: Text.PlainText
                 width: parent.width
                 wrapMode: Text.Wrap
-                text: "Skill Hub manages the coding agents it finds on this machine (" + app.agents.length + " now). Switch one on to link skills into it anyway, off to leave it alone, or add your own."
+                text: qsTr("Skill Hub manages the coding agents it finds on this machine (%1 now). Switch one on to link skills into it anyway, off to leave it alone, or add your own.").arg(app.agents.length)
                 color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsBody; lineHeight: 1.2
             }
             Row {
                 spacing: 8
-                Btn { iconName: "refresh"; text: "Look again"; enabled: !app.busy; onClicked: app.rescanProviders() }
-                Btn { iconName: "plus"; text: "Add your own"; onClicked: root.adding = !root.adding }
-                Btn { kind: "ghost"; text: "Close"; onClicked: app.dismiss() }
+                Btn { iconName: "refresh"; text: qsTr("Look again"); enabled: !app.busy; onClicked: app.rescanProviders() }
+                Btn { iconName: "plus"; text: qsTr("Add your own"); onClicked: root.adding = !root.adding }
+                Btn { kind: "ghost"; text: qsTr("Close"); onClicked: app.dismiss() }
             }
         }
 
@@ -101,43 +101,43 @@ Flickable {
                 target: app
                 function onCustomProviderAdded(error) { if (error === "") { cName.clear(); cDir.clear(); root.adding = false } }
             }
-            SectionLabel { width: parent.width; text: "Your agent" }
-            Field { id: cName; width: parent.width; placeholderText: "Name, for example My Agent" }
-            Field { id: cDir; width: parent.width; iconName: "folder"; placeholderText: "Its skills folder, for example ~/.myagent/skills" }
-            Toggle { id: cShared; width: parent.width; text: "It reads the shared folder itself"; hint: "No links are made; its own folder is only scanned for strays" }
+            SectionLabel { width: parent.width; text: qsTr("Your agent") }
+            Field { id: cName; width: parent.width; placeholderText: qsTr("Name, for example My Agent") }
+            Field { id: cDir; width: parent.width; iconName: "folder"; placeholderText: qsTr("Its skills folder, for example ~/.myagent/skills") }
+            Toggle { id: cShared; width: parent.width; text: qsTr("It reads the shared folder itself"); hint: qsTr("No links are made; its own folder is only scanned for strays") }
             Row {
                 spacing: 8
                 Btn {
-                    kind: "primary"; text: "Add agent"
+                    kind: "primary"; text: qsTr("Add agent")
                     enabled: cName.text.trim() !== "" && cDir.text.trim() !== "" && !app.busy
                     onClicked: app.addCustomProvider(cName.text, cDir.text, cShared.checked)
                 }
-                Btn { kind: "ghost"; text: "Cancel"; onClicked: root.adding = false }
+                Btn { kind: "ghost"; text: qsTr("Cancel"); onClicked: root.adding = false }
             }
         }
 
-        Field { id: search; width: parent.width; iconName: "search"; placeholderText: "Search " + app.knownCount + " known agents" }
+        Field { id: search; width: parent.width; iconName: "search"; placeholderText: qsTr("Search %1 known agents").arg(app.knownCount) }
 
         Column {
             width: parent.width
             visible: root.managed.length > 0
-            SectionLabel { width: parent.width; text: "Managed"; trailing: root.managed.length }
+            SectionLabel { width: parent.width; text: qsTr("Managed"); trailing: root.managed.length }
             Repeater { model: root.managed; delegate: AgentRow { required property var modelData; p: modelData } }
         }
         Column {
             width: parent.width
             visible: root.foundOff.length > 0
-            SectionLabel { width: parent.width; text: "Found but off"; trailing: root.foundOff.length }
+            SectionLabel { width: parent.width; text: qsTr("Found but off"); trailing: root.foundOff.length }
             Repeater { model: root.foundOff; delegate: AgentRow { required property var modelData; p: modelData } }
         }
         Column {
             width: parent.width
             visible: root.rest.length > 0
-            SectionLabel { width: parent.width; text: "Not found on this machine"; trailing: root.rest.length }
+            SectionLabel { width: parent.width; text: qsTr("Not found on this machine"); trailing: root.rest.length }
             Btn {
                 kind: "ghost"; compact: true
                 iconName: root.showAll || root.needle !== "" ? "up" : "down"
-                text: root.showAll || root.needle !== "" ? "Hide" : "Show " + root.rest.length + " more"
+                text: root.showAll || root.needle !== "" ? qsTr("Hide") : qsTr("Show %1 more").arg(root.rest.length)
                 onClicked: root.showAll = !root.showAll
             }
             Repeater { model: root.showAll || root.needle !== "" ? root.rest : []; delegate: AgentRow { required property var modelData; p: modelData } }
@@ -146,14 +146,14 @@ Flickable {
             textFormat: Text.PlainText
             visible: root.managed.length + root.foundOff.length + root.rest.length === 0
             width: parent.width
-            text: "No agent matches that search."
+            text: qsTr("No agent matches that search.")
             color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsBody
         }
         Text {
             textFormat: Text.PlainText
             width: parent.width
             wrapMode: Text.Wrap
-            text: "The list of agents and where each keeps skills comes from the open-source registry of the skills CLI (vercel-labs/skills, MIT)."
+            text: qsTr("The list of agents and where each keeps skills comes from the open-source registry of the skills CLI (vercel-labs/skills, MIT).")
             color: Theme.text3; font.family: Theme.ui; font.pixelSize: Theme.fsMicro
         }
     }

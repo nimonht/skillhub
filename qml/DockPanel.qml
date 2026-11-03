@@ -22,7 +22,7 @@ Rectangle {
     }
     function addSession(folder, command) {   // both optional: a folder to start in, and a command typed but not run
         const num = freeNumber()
-        sessions.append({ sid: nextSession, num: num, name: "Terminal " + num, folder: folder || "", command: command || "" })
+        sessions.append({ sid: nextSession, num: num, name: qsTr("Terminal %1").arg(num), folder: folder || "", command: command || "" })
         nextSession += 1
         tab = "t" + (nextSession - 1)
     }
@@ -62,7 +62,7 @@ Rectangle {
         }
         Row {
             height: parent.height
-            Tab { text: "Activity"; on: root.tab === "activity"; onClicked: root.tab = "activity" }
+            Tab { text: qsTr("Activity"); on: root.tab === "activity"; onClicked: root.tab = "activity" }
             Repeater {
                 model: sessions
                 delegate: Tab {
@@ -76,7 +76,7 @@ Rectangle {
                     onClosed: root.closeSession(index)
                 }
             }
-            Btn { kind: "ghost"; compact: true; iconName: "plus"; text: ""; Accessible.name: "New terminal"; anchors.verticalCenter: parent.verticalCenter; onClicked: root.addSession() }
+            Btn { kind: "ghost"; compact: true; iconName: "plus"; text: ""; Accessible.name: qsTr("New terminal"); anchors.verticalCenter: parent.verticalCenter; onClicked: root.addSession() }
         }
         Row {
             anchors.right: parent.right
@@ -85,7 +85,7 @@ Rectangle {
             spacing: 4
             Repeater {
                 model: root.tab !== "activity" ? app.externalTerminals.slice(0, 3) : []
-                delegate: Btn { required property var modelData; kind: "ghost"; compact: true; text: "Open in " + modelData.label; onClicked: app.openExternalTerminal(modelData.id) }
+                delegate: Btn { required property var modelData; kind: "ghost"; compact: true; text: qsTr("Open in %1").arg(modelData.label); onClicked: app.openExternalTerminal(modelData.id) }
             }
         }
     }

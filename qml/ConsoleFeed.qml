@@ -13,8 +13,8 @@ Rectangle {
         y: 1
         width: parent.width
         height: 32
-        SectionLabel { x: 20; width: 160; anchors.verticalCenter: parent.verticalCenter; text: "Activity"; trailing: list.count > 0 ? list.count : "" }
-        Btn { anchors.right: parent.right; anchors.rightMargin: 12; anchors.verticalCenter: parent.verticalCenter; kind: "ghost"; compact: true; iconName: "trash"; text: "Clear"; onClicked: app.log.clear() }
+        SectionLabel { x: 20; width: 160; anchors.verticalCenter: parent.verticalCenter; text: qsTr("Activity"); trailing: list.count > 0 ? list.count : "" }
+        Btn { anchors.right: parent.right; anchors.rightMargin: 12; anchors.verticalCenter: parent.verticalCenter; kind: "ghost"; compact: true; iconName: "trash"; text: qsTr("Clear"); onClicked: app.log.clear() }
     }
     ListView {
         id: list
@@ -54,7 +54,7 @@ Rectangle {
             textFormat: Text.PlainText
             visible: list.count === 0
             anchors.centerIn: parent
-            text: "Nothing has run yet. Clones, links and updates will be listed here."
+            text: qsTr("Nothing has run yet. Clones, links and updates will be listed here.")
             color: Theme.text3
             font.family: Theme.ui
             font.pixelSize: Theme.fsSmall

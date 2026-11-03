@@ -18,6 +18,7 @@
 
 #include "gui/core_client.h"
 #include "gui/skill_row.h"
+#include "gui/translator.h"
 
 // The skills, keyed by name: snapshot pages are appended, deltas change rows in place (one ranged dataChanged for all
 // of them) and insert or remove only what came or went. The model is never reset except for a fresh snapshot.
@@ -171,6 +172,8 @@ class AppController : public QObject {
     Q_PROPERTY(QVariantMap safety READ safety NOTIFY safetyChanged)        // the offline check and reports of the selected skill
     Q_PROPERTY(QVariantList reviewAgents READ reviewAgents CONSTANT)        // coding agents here that can give a second opinion  // a new version of Skill Hub itself, docs/protocol.md
     Q_PROPERTY(QString themeMode READ themeMode WRITE setThemeMode NOTIFY themeChanged)  // system | dark | light
+    Q_PROPERTY(QString language READ language WRITE setLanguage NOTIFY languageChanged)  // the choice: system, en, vi
+    Q_PROPERTY(QVariantList languages READ languages NOTIFY languageChanged)              // [{value, label}], each named in its own language
     Q_PROPERTY(bool reduceMotion READ reduceMotion WRITE setReduceMotion NOTIFY themeChanged)  // the user's setting
     Q_PROPERTY(bool stillMotion READ stillMotion NOTIFY themeChanged)                          // setting or forced (tests)
     Q_PROPERTY(bool loaded READ loaded NOTIFY countsChanged)
@@ -239,6 +242,10 @@ public:
     QVariantList reviewAgents() const;
     QString themeMode() const { return themeMode_; }
     void setThemeMode(const QString &m);
+    QString language() const { return languageChoice_; }
+    void setLanguage(const QString &choice);
+    QVariantList languages() const;
+    void applyLanguage(const QString &choice);   // main() calls it before the window loads, from QSettings, so it never starts in English
     bool reduceMotion() const { return reduce_; }
     bool accentOn() const { return !paletteDark_.isEmpty(); }
     int settingsRev() const { return settingsRev_; }
@@ -375,6 +382,7 @@ signals:
     void reviewChanged();
     void versionsChanged();
     void customProviderAdded(const QString &error);  // "" when it worked
+    void languageChanged();
 
 private:
     void onReady(bool restarted);
@@ -426,6 +434,9 @@ private:
     QString selected_, preview_, focus_, mode_ = QStringLiteral("skill");
     QString busyText_, candidateRepo_, candidateError_, candidateType_, candidateHost_, timer_ = QStringLiteral("off"), watch_ = QStringLiteral("off");
     QString themeMode_ = QStringLiteral("system");
+    QString languageChoice_ = QStringLiteral("system");
+    JsonTranslator translator_;
+    bool translatorInstalled_ = false, languageForced_ = false;
     double progress_ = -1;
     bool busy_ = false, discovering_ = false, reduce_ = false, forcedStill_ = false, noHover_ = false, loaded_ = false;
     bool automationSupported_ = false, themeForced_ = false;

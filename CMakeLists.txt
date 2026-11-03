@@ -233,6 +233,7 @@ if(SKILLHUB_GUI)
         src/main.cpp src/app.cpp src/app.h
         src/gui/core_client.cpp src/gui/core_client.h src/gui/skill_row.h
         src/gui/window_effects.cpp src/gui/window_effects.h
+        src/gui/translator.cpp src/gui/translator.h
         src/gui/terminal/vterm_item.cpp src/gui/terminal/vterm_item.h
         src/gui/terminal/term_look.cpp src/gui/terminal/term_look.h
         resources.qrc)

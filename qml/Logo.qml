@@ -9,7 +9,7 @@ Item {
     width: size
     height: size
     Accessible.role: Accessible.Graphic
-    Accessible.name: "Skill Hub"
+    Accessible.name: "Skill Hub"   // i18n-ok
 
     Rectangle { x: 36 * root.k; y: 32 * root.k; width: 44 * root.k; height: 192 * root.k; radius: width / 2; color: Theme.dark ? "#FFFFFF" : "#0E1624" }
     Rectangle { x: 176 * root.k; y: 32 * root.k; width: 44 * root.k; height: 192 * root.k; radius: width / 2; color: Theme.dark ? "#FFFFFF" : "#0E1624" }

@@ -20,7 +20,7 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         width: Math.max(160, Math.min(380, root.width - 20 - actions.width - 40))
         iconName: "search"
-        placeholderText: "Filter skills   /"
+        placeholderText: qsTr("Filter skills   /")
         text: app.filter.text
         onTextChanged: app.filter.text = text
         Keys.onEscapePressed: { text = ""; root.escaped() }
@@ -35,18 +35,18 @@ Item {
         Btn {
             visible: root.attention > 0
             iconName: "tool"
-            text: root.wide ? "Repair  " + root.attention : ""
-            Accessible.name: "Repair " + root.attention + " link problems"
+            text: root.wide ? qsTr("Repair  %1").arg(root.attention) : ""
+            Accessible.name: qsTr("Repair %1 link problems").arg(root.attention)
             enabled: !app.busy
             onClicked: { app.focusAgent = ""; app.adopt() }
         }
-        Btn { iconName: "plus"; text: root.wide ? "Add skill" : ""; Accessible.name: "Add skill from GitHub"; onClicked: app.detailMode = "add" }
-        Btn { iconName: "refresh"; text: root.wide ? "Check" : ""; Accessible.name: "Check for updates"; enabled: !app.busy; onClicked: app.checkUpdates() }
+        Btn { iconName: "plus"; text: root.wide ? qsTr("Add skill") : ""; Accessible.name: qsTr("Add skill from GitHub"); onClicked: app.detailMode = "add" }
+        Btn { iconName: "refresh"; text: root.wide ? qsTr("Check") : ""; Accessible.name: qsTr("Check for updates"); enabled: !app.busy; onClicked: app.checkUpdates() }
         Btn {
             kind: "primary"
             iconName: app.updateCount > 0 ? "upgrade" : "check"
-            text: root.wide ? (app.updateCount > 0 ? "Update all  " + app.updateCount : "Up to date") : (app.updateCount > 0 ? "" + app.updateCount : "")
-            Accessible.name: app.updateCount > 0 ? "Update all " + app.updateCount + " skills" : "Everything is up to date"
+            text: root.wide ? (app.updateCount > 0 ? qsTr("Update all  %1").arg(app.updateCount) : qsTr("Up to date")) : (app.updateCount > 0 ? "" + app.updateCount : "")
+            Accessible.name: app.updateCount > 0 ? qsTr("Update all %1 skills").arg(app.updateCount) : qsTr("Everything is up to date")
             enabled: app.updateCount > 0 && !app.busy
             onClicked: app.setting("updates", "reviewBeforeUpdate", true) ? app.reviewAll() : app.updateAll()
         }

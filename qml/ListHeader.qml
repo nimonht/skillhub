@@ -22,7 +22,7 @@ Item {
         hoverEnabled: true
         focusPolicy: Qt.StrongFocus
         Accessible.role: Accessible.Button
-        Accessible.name: "Sort by " + text
+        Accessible.name: qsTr("Sort by %1").arg(text)
         onClicked: {
             if (app.filter.sortKey === sortKey) app.filter.ascending = !app.filter.ascending
             else { app.filter.sortKey = sortKey; app.filter.ascending = true }
@@ -54,9 +54,9 @@ Item {
         HoverHandler { cursorShape: Qt.PointingHandCursor; enabled: !app.noHover }
     }
 
-    Cell { text: "Skill"; sortKey: "name"; x: 12; width: Math.max(80, root.statusX - 12 - 8) }
+    Cell { text: qsTr("Skill"); sortKey: "name"; x: 12; width: Math.max(80, root.statusX - 12 - 8) }
     Rectangle { x: root.statusX - 1; y: 8; width: 1; height: root.height - 16; color: Theme.line }
-    Cell { text: root.tight ? "" : "Status"; sortKey: "status"; x: root.statusX; width: root.tight ? 40 : Theme.statusW; Accessible.name: "Sort by status" }
+    Cell { text: root.tight ? "" : qsTr("Status"); sortKey: "status"; x: root.statusX; width: root.tight ? 40 : Theme.statusW; Accessible.name: qsTr("Sort by status") }
     Rectangle { visible: app.columnCount > 0; x: root.portsX - 1; y: 8; width: 1; height: root.height - 16; color: Theme.line }
     Text {
         textFormat: Text.PlainText
@@ -66,7 +66,7 @@ Item {
         height: root.height
         verticalAlignment: Text.AlignVCenter
         horizontalAlignment: Text.AlignHCenter
-        text: "Visible to"
+        text: qsTr("Visible to")
         color: Theme.text2
         font.family: Theme.ui
         font.pixelSize: Theme.fsMicro

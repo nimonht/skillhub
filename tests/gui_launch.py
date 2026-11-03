@@ -113,6 +113,24 @@ def accent():
     print("ok  accent")
 
 
+def language():
+    """Vietnamese, chosen while the window is open, reaches text that was made before the switch (QQmlEngine::retranslate)."""
+    for name, args, want in (("english", [], "Appearance"), ("vietnamese", ["--action", "language", "--switch-to", "vi"], "Giao diện")):
+        dump = os.path.join(OUT, "language-%s.txt" % name)
+        p = subprocess.run([BIN, "gui", "--shot", os.path.join(OUT, "language-%s.png" % name), "--theme", "dark", "--size", "1280x800", "--mode", "settings",
+                            "--text-dump", dump, "--settle", "6", *args], env=env, capture_output=True, text=True, timeout=240)
+        if p.returncode != 0:
+            fail("language %s: exit %d\n%s" % (name, p.returncode, p.stderr))
+        qml_errors("language " + name, p)
+        with open(dump, encoding="utf-8") as f:
+            shown = f.read()
+        if want not in shown:
+            fail("language %s: wanted %r among the labels, got:\n%s" % (name, want, shown))
+    if os.path.exists(config_file()):
+        os.remove(config_file())
+    print("ok  language")
+
+
 def alive(pid):
     if os.name == "nt":   # os.kill would end it: ask whether it has exited instead
         import ctypes
@@ -289,6 +307,7 @@ try:
             fail("terminal flood: exit %d\n%s" % (p.returncode, p.stderr))
         print("ok  terminal flood")
     accent()
+    language()
     terminal_close(shell_env)
     hostile_text()
     print("gui launch test passed (screenshots in %s)" % OUT)

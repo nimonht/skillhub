@@ -9,7 +9,7 @@ ApplicationWindow {
     height: typeof startSize !== "undefined" ? startSize.height : 800
     minimumWidth: 820
     minimumHeight: 560
-    title: "Skill Hub"
+    title: "Skill Hub"   // i18n-ok
     color: Theme.bg0
     font.family: Theme.ui
     font.pixelSize: Theme.fsBody
@@ -93,10 +93,10 @@ ApplicationWindow {
                             width: parent.width - x - mergeButton.width - 32
                             anchors.verticalCenter: parent.verticalCenter
                             elide: Text.ElideRight
-                            text: "Your skills are recorded in two lock files" + (app.lockSplit > 0 ? ", " + app.lockSplit + " only in the older one." : ".") + " Merging keeps a backup of both."
+                            text: (app.lockSplit > 0 ? qsTr("Your skills are recorded in two lock files, %1 only in the older one.").arg(app.lockSplit) : qsTr("Your skills are recorded in two lock files.")) + " " + qsTr("Merging keeps a backup of both.")
                             color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsSmall
                         }
-                        Btn { id: mergeButton; anchors.right: parent.right; anchors.rightMargin: 12; anchors.verticalCenter: parent.verticalCenter; kind: "ghost"; compact: true; text: "Merge"; enabled: !app.busy; onClicked: app.mergeLocks() }
+                        Btn { id: mergeButton; anchors.right: parent.right; anchors.rightMargin: 12; anchors.verticalCenter: parent.verticalCenter; kind: "ghost"; compact: true; text: qsTr("Merge"); enabled: !app.busy; onClicked: app.mergeLocks() }
                     }
                     ProviderBand { id: band; anchors.top: splitBanner.bottom; width: parent.width; height: win.bandCompact ? compactHeight : implicitHeight; TourTarget { key: "band" } }
                     MouseArea {   // the band's lower edge: drag it and the band snaps between full height and tiles only
@@ -124,7 +124,7 @@ ApplicationWindow {
                         boundsBehavior: Flickable.StopAtBounds
                         ScrollBar.vertical: Scroll {}
                         Accessible.role: Accessible.List
-                        Accessible.name: "Skills"
+                        Accessible.name: qsTr("Skills")
                         delegate: SkillRow {
                             onActivated: (i) => { list.currentIndex = i; list.forceActiveFocus(); app.select(app.filter.nameAt(i)) }
                         }
@@ -163,22 +163,22 @@ ApplicationWindow {
                             Text {
                                 textFormat: Text.PlainText
                                 width: parent.width; horizontalAlignment: Text.AlignHCenter
-                                text: parent.none ? "The shared folder is empty" : parent.good ? "Everything is current" : "No skill matches"
+                                text: parent.none ? qsTr("The shared folder is empty") : parent.good ? qsTr("Everything is current") : qsTr("No skill matches")
                                 color: Theme.text; font.family: Theme.display; font.pixelSize: Theme.fsHead; font.weight: Font.Bold
                             }
                             Text {
                                 textFormat: Text.PlainText
                                 width: parent.width; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.Wrap
-                                text: parent.none ? "Install skills from a repository or a folder, or drop a folder with a SKILL.md into " + app.centralPath + "."
-                                    : parent.good ? "Every tracked skill matches its upstream. Check again any time."
-                                    : "Nothing in this view matches the current filter."
+                                text: parent.none ? qsTr("Install skills from a repository or a folder, or drop a folder with a SKILL.md into %1.").arg(app.centralPath)
+                                    : parent.good ? qsTr("Every tracked skill matches its upstream. Check again any time.")
+                                    : qsTr("Nothing in this view matches the current filter.")
                                 color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsBody; lineHeight: 1.2
                             }
                             Row {
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 spacing: 8
-                                Btn { visible: parent.parent.none; kind: "primary"; iconName: "plus"; text: "Add skills"; onClicked: app.detailMode = "add" }
-                                Btn { visible: !parent.parent.none && (app.filter.mode !== "all" || app.filter.text !== ""); iconName: "x"; text: "Clear filter"; onClicked: { app.filter.mode = "all"; app.filter.text = "" } }
+                                Btn { visible: parent.parent.none; kind: "primary"; iconName: "plus"; text: qsTr("Add skills"); onClicked: app.detailMode = "add" }
+                                Btn { visible: !parent.parent.none && (app.filter.mode !== "all" || app.filter.text !== ""); iconName: "x"; text: qsTr("Clear filter"); onClicked: { app.filter.mode = "all"; app.filter.text = "" } }
                             }
                         }
                     }
@@ -250,6 +250,8 @@ ApplicationWindow {
     readonly property string look: Theme.material + (Theme.dark ? "/dark" : "/light")
     onLookChanged: app.applyMaterial(win, Theme.dark)
 
+    // for the test of the language: labels made once, which a switch must reach without a restart
+    function shownText() { return settings.sections.map(function (s) { return s.label }).join(", ") + "\n" + statusBar.summary }
     // for the test of the accent: through the settings page, which hands the backend a JavaScript object
     function pickAccent(hex) { settings.setAccent("custom", hex) }
     // for the test of the terminal
@@ -340,8 +342,8 @@ ApplicationWindow {
                 anchors.centerIn: parent
                 spacing: 10
                 Icon { anchors.horizontalCenter: parent.horizontalCenter; name: "import"; size: 36; weight: 1.8; color: Theme.markText }
-                Text { textFormat: Text.PlainText; anchors.horizontalCenter: parent.horizontalCenter; text: "Drop a Skill Hub export to import it"; color: Theme.text; font.family: Theme.display; font.pixelSize: Theme.fsHead; font.weight: Font.Bold }
-                Text { textFormat: Text.PlainText; anchors.horizontalCenter: parent.horizontalCenter; text: "You see what is inside before anything is installed"; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsBody }
+                Text { textFormat: Text.PlainText; anchors.horizontalCenter: parent.horizontalCenter; text: qsTr("Drop a Skill Hub export to import it"); color: Theme.text; font.family: Theme.display; font.pixelSize: Theme.fsHead; font.weight: Font.Bold }
+                Text { textFormat: Text.PlainText; anchors.horizontalCenter: parent.horizontalCenter; text: qsTr("You see what is inside before anything is installed"); color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsBody }
             }
         }
     }
@@ -370,7 +372,7 @@ ApplicationWindow {
             if (Theme.setting("layout", "dockAtStart", false)) win.consoleOpen = true
         }
         function onToast(level, text) { toast.show(level, text) }
-        function onUndoOffered(text) { toast.show("ok", text, "Undo") }
+        function onUndoOffered(text) { toast.show("ok", text, qsTr("Undo")) }
     }
 
     Shortcut { sequence: "/"; enabled: !win.typing; onActivated: top.focusSearch() }
@@ -380,7 +382,7 @@ ApplicationWindow {
     Shortcut { sequence: "Ctrl+Shift+A"; onActivated: app.detailMode = "providers" }
     Shortcut { sequence: "Ctrl+U"; onActivated: if (!app.busy) app.checkUpdates() }
     Shortcut { sequence: "Ctrl+Shift+U"; onActivated: if (!app.busy && app.updateCount > 0) app.reviewAll() }
-    Shortcut { sequences: ["F5", "Ctrl+R"]; onActivated: app.refresh() }
+    Shortcut { sequences: ["F5", "Ctrl+R"]; onActivated: app.refresh() }   // i18n-ok
     Shortcut { sequence: "Ctrl+J"; onActivated: { if (win.consoleOpen && activity.tab !== "activity") activity.tab = "activity"; else win.consoleOpen = !win.consoleOpen } }
     Shortcut { sequences: ["Ctrl+`"]; onActivated: { if (win.consoleOpen && activity.tab !== "activity") win.consoleOpen = false; else { win.consoleOpen = true; activity.showTerminal() } } }
     Shortcut { sequence: "Ctrl+Q"; onActivated: Qt.quit() }

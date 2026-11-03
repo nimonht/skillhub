@@ -35,12 +35,12 @@ Flickable {
         Column {
             width: parent.width
             spacing: 10
-            Text { textFormat: Text.PlainText; width: parent.width; text: "Transfer"; color: Theme.text; font.family: Theme.display; font.pixelSize: Theme.fsHead; font.weight: Font.Bold }
+            Text { textFormat: Text.PlainText; width: parent.width; text: qsTr("Transfer"); color: Theme.text; font.family: Theme.display; font.pixelSize: Theme.fsHead; font.weight: Font.Bold }
             Text {
                 textFormat: Text.PlainText
                 width: parent.width
                 wrapMode: Text.Wrap
-                text: "Take your whole skill set to another computer. Export writes one file; import on the other machine installs every skill from it: GitHub skills are downloaded again, local skills come out of the file."
+                text: qsTr("Take your whole skill set to another computer. Export writes one file; import on the other machine installs every skill from it: GitHub skills are downloaded again, local skills come out of the file.")
                 color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsBody; lineHeight: 1.2
             }
         }
@@ -49,33 +49,33 @@ Flickable {
         Column {
             width: parent.width
             spacing: 10
-            SectionLabel { width: parent.width; text: "Export"; trailing: app.exportInfo.tracked + app.exportInfo.local + " skills" }
+            SectionLabel { width: parent.width; text: qsTr("Export"); trailing: qsTr("%1 skills").arg(app.exportInfo.tracked + app.exportInfo.local) }
             Text {
                 textFormat: Text.PlainText
                 width: parent.width
                 wrapMode: Text.Wrap
-                text: app.exportInfo.tracked + " come from GitHub (only their source is saved) and " + app.exportInfo.local + " are local."
+                text: qsTr("%1 come from GitHub (only their source is saved) and %2 are local.").arg(app.exportInfo.tracked).arg(app.exportInfo.local)
                 color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsBody
             }
             Toggle {
                 width: parent.width
-                text: "Include local skills"
-                hint: "Their files are embedded in the export"
+                text: qsTr("Include local skills")
+                hint: qsTr("Their files are embedded in the export")
                 checked: root.includeLocal
                 onToggled: root.includeLocal = checked
             }
-            Field { id: exportPath; width: parent.width; iconName: "export"; placeholderText: "Where to save"; text: app.defaultExportPath }
+            Field { id: exportPath; width: parent.width; iconName: "export"; placeholderText: qsTr("Where to save"); text: app.defaultExportPath }
             Row {
                 spacing: 8
-                Btn { kind: "primary"; iconName: "export"; text: "Export"; enabled: exportPath.text.trim() !== "" && !app.busy; onClicked: app.exportTo(exportPath.text, root.includeLocal) }
-                Btn { visible: root.dialogsOk; kind: "ghost"; iconName: "folder"; text: "Choose location"; onClicked: dialogs.item.saveFile("skillhub-skills.json") }
+                Btn { kind: "primary"; iconName: "export"; text: qsTr("Export"); enabled: exportPath.text.trim() !== "" && !app.busy; onClicked: app.exportTo(exportPath.text, root.includeLocal) }
+                Btn { visible: root.dialogsOk; kind: "ghost"; iconName: "folder"; text: qsTr("Choose location"); onClicked: dialogs.item.saveFile("skillhub-skills.json") }
             }
             Text {
                 textFormat: Text.PlainText
                 visible: root.includeLocal && app.exportInfo.local > 0
                 width: parent.width
                 wrapMode: Text.Wrap
-                text: "Local skills are copied into the file as they are. Share it only with people you trust."
+                text: qsTr("Local skills are copied into the file as they are. Share it only with people you trust.")
                 color: Theme.notifyText; font.family: Theme.ui; font.pixelSize: Theme.fsSmall
             }
         }
@@ -84,19 +84,19 @@ Flickable {
         Column {
             width: parent.width
             spacing: 10
-            SectionLabel { width: parent.width; text: "Import" }
+            SectionLabel { width: parent.width; text: qsTr("Import") }
             Text {
                 textFormat: Text.PlainText
                 width: parent.width
                 wrapMode: Text.Wrap
-                text: "Choose an export file, or drop one on this window. You see what it contains before anything is installed."
+                text: qsTr("Choose an export file, or drop one on this window. You see what it contains before anything is installed.")
                 color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsBody
             }
-            Field { id: importPath; width: parent.width; iconName: "import"; placeholderText: "Path of an export file"; onAccepted: app.importPreview(text) }
+            Field { id: importPath; width: parent.width; iconName: "import"; placeholderText: qsTr("Path of an export file"); onAccepted: app.importPreview(text) }
             Row {
                 spacing: 8
-                Btn { visible: root.dialogsOk; kind: "primary"; iconName: "folder"; text: "Choose file"; onClicked: dialogs.item.openFile() }
-                Btn { kind: root.dialogsOk ? "secondary" : "primary"; iconName: "search"; text: "Read file"; enabled: importPath.text.trim() !== "" && !app.busy; onClicked: app.importPreview(importPath.text) }
+                Btn { visible: root.dialogsOk; kind: "primary"; iconName: "folder"; text: qsTr("Choose file"); onClicked: dialogs.item.openFile() }
+                Btn { kind: root.dialogsOk ? "secondary" : "primary"; iconName: "search"; text: qsTr("Read file"); enabled: importPath.text.trim() !== "" && !app.busy; onClicked: app.importPreview(importPath.text) }
             }
             Text { textFormat: Text.PlainText; visible: app.importError !== ""; width: parent.width; wrapMode: Text.Wrap; text: app.importError; color: Theme.dangerText; font.family: Theme.ui; font.pixelSize: Theme.fsBody }
         }
@@ -115,7 +115,7 @@ Flickable {
                 chosen = c
             }
             Connections { target: app; function onImportChanged() { preview.reset() } }
-            SectionLabel { width: parent.width; text: "In this file"; trailing: app.importItems.length }
+            SectionLabel { width: parent.width; text: qsTr("In this file"); trailing: app.importItems.length }
             Repeater {
                 model: app.importItems
                 delegate: AbstractButton {
@@ -153,10 +153,10 @@ Flickable {
                                 textFormat: Text.PlainText
                                 width: parent.width
                                 elide: Text.ElideRight
-                                text: modelData.problem !== "" ? "Rejected: " + modelData.problem
-                                      : modelData.exists ? "Already installed, kept as it is"
-                                      : modelData.local ? "Local skill, " + modelData.files + " files from the export"
-                                      : "From " + modelData.source
+                                text: modelData.problem !== "" ? qsTr("Rejected: %1").arg(modelData.problem)
+                                      : modelData.exists ? qsTr("Already installed, kept as it is")
+                                      : modelData.local ? qsTr("Local skill, %1 files from the export").arg(modelData.files)
+                                      : qsTr("From %1").arg(modelData.source)
                                 color: modelData.problem !== "" ? Theme.dangerText : Theme.text2
                                 font.family: Theme.ui; font.pixelSize: Theme.fsSmall
                             }
@@ -169,18 +169,18 @@ Flickable {
                 textFormat: Text.PlainText
                 width: parent.width
                 wrapMode: Text.Wrap
-                text: "Skills are instructions your agents follow with your permissions: install only files you trust. GitHub skills arrive at their latest version, not necessarily the one on the other machine."
+                text: qsTr("Skills are instructions your agents follow with your permissions: install only files you trust. GitHub skills arrive at their latest version, not necessarily the one on the other machine.")
                 color: Theme.text3; font.family: Theme.ui; font.pixelSize: Theme.fsSmall
             }
             Row {
                 spacing: 8
                 Btn {
                     kind: "primary"; iconName: "download"
-                    text: preview.chosenCount > 0 ? "Install " + preview.chosenCount + (preview.chosenCount === 1 ? " skill" : " skills") : "Install"
+                    text: preview.chosenCount === 0 ? qsTr("Install") : preview.chosenCount === 1 ? qsTr("Install 1 skill") : qsTr("Install %1 skills").arg(preview.chosenCount)
                     enabled: preview.chosenCount > 0 && !app.busy
                     onClicked: app.importInstall(Object.keys(preview.chosen))
                 }
-                Btn { kind: "ghost"; text: "Cancel"; onClicked: app.importClear() }
+                Btn { kind: "ghost"; text: qsTr("Cancel"); onClicked: app.importClear() }
             }
         }
     }

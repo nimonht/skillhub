@@ -46,7 +46,7 @@ TextField {
         anchors.rightMargin: 6
         anchors.verticalCenter: parent.verticalCenter
         Accessible.role: Accessible.Button
-        Accessible.name: "Clear"
+        Accessible.name: qsTr("Clear")
         Icon { anchors.centerIn: parent; name: "x"; size: 14; color: ma.containsMouse ? Theme.text : Theme.text2 }
         MouseArea { id: ma; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { root.clear(); root.forceActiveFocus() } }
     }

@@ -104,7 +104,7 @@ Rectangle {
                 visible: !root.compact
                 x: 48
                 anchors.verticalCenter: parent.verticalCenter
-                text: "Skill Hub"
+                text: "Skill Hub"   // i18n-ok
                 color: Theme.text
                 font.family: Theme.display
                 font.pixelSize: Theme.fsTitle + 2
@@ -115,32 +115,32 @@ Rectangle {
         ScopeMenu { width: parent.width; compact: root.compact }
         Item { width: 1; height: 8 }
 
-        SectionLabel { visible: !root.compact; width: parent.width; text: "Skills" }
-        FilterItem { text: "All skills"; mode: "all"; iconName: "all"; count: app.skillCount; TourTarget { key: "filters" } }
-        FilterItem { text: "Updates"; mode: "updates"; iconName: "upgrade"; count: app.updateCount; countColor: Theme.notifyText }
-        FilterItem { text: "Local only"; mode: "local"; iconName: "folder"; count: app.localCount }
-        FilterItem { text: "Link problems"; mode: "problems"; iconName: "alert"; count: app.problemCount; countColor: Theme.dangerText }
+        SectionLabel { visible: !root.compact; width: parent.width; text: qsTr("Skills") }
+        FilterItem { text: qsTr("All skills"); mode: "all"; iconName: "all"; count: app.skillCount; TourTarget { key: "filters" } }
+        FilterItem { text: qsTr("Updates"); mode: "updates"; iconName: "upgrade"; count: app.updateCount; countColor: Theme.notifyText }
+        FilterItem { text: qsTr("Local only"); mode: "local"; iconName: "folder"; count: app.localCount }
+        FilterItem { text: qsTr("Link problems"); mode: "problems"; iconName: "alert"; count: app.problemCount; countColor: Theme.dangerText }
 
         Item { width: 1; height: 10 }
-        SectionLabel { visible: !root.compact; width: parent.width; text: "Tools" }
-        FilterItem { text: "Agents"; mode: "@providers"; iconName: "sliders"; count: app.agents.length; asAction: true; onTriggered: app.detailMode = "providers"; on: app.detailMode === "providers" }
-        FilterItem { visible: !app.inProject; text: "Transfer skills"; mode: "@transfer"; iconName: "export"; count: 0; asAction: true; hideCount: true; onTriggered: app.detailMode = "transfer"; on: app.detailMode === "transfer" }
+        SectionLabel { visible: !root.compact; width: parent.width; text: qsTr("Tools") }
+        FilterItem { text: qsTr("Agents"); mode: "@providers"; iconName: "sliders"; count: app.agents.length; asAction: true; onTriggered: app.detailMode = "providers"; on: app.detailMode === "providers" }
+        FilterItem { visible: !app.inProject; text: qsTr("Transfer skills"); mode: "@transfer"; iconName: "export"; count: 0; asAction: true; hideCount: true; onTriggered: app.detailMode = "transfer"; on: app.detailMode === "transfer" }
 
         Item { width: 1; height: 10; visible: app.automationSupported && !root.compact }
-        SectionLabel { width: parent.width; text: "Automation"; visible: app.automationSupported && !root.compact }
+        SectionLabel { width: parent.width; text: qsTr("Automation"); visible: app.automationSupported && !root.compact }
         Toggle {
             visible: app.automationSupported && !root.compact
             width: parent.width
-            text: "Daily update"
-            hint: app.automationMechanism === "launchd" ? "launchd agent" : app.automationMechanism === "Task Scheduler" ? "Task Scheduler" : "systemd user timer"
+            text: qsTr("Daily update")
+            hint: app.automationMechanism === "launchd" ? qsTr("launchd agent") : app.automationMechanism === "Task Scheduler" ? qsTr("Task Scheduler") : qsTr("systemd user timer")
             checked: app.timerState === "on"
             onToggled: app.setTimer(checked)
         }
         Toggle {
             visible: app.automationSupported && !root.compact
             width: parent.width
-            text: "Adopt strays"
-            hint: "watch agent folders"
+            text: qsTr("Adopt strays")
+            hint: qsTr("watch agent folders")
             checked: app.watcherState === "on"
             onToggled: app.setWatcher(checked)
         }
@@ -152,11 +152,11 @@ Rectangle {
         width: scroller.width - 2 * x
         y: Math.max(topCol.height + 16, scroller.height - height - 16)
         spacing: 10
-        FilterItem { text: "Settings"; mode: "@settings"; iconName: "sliders"; asAction: true; hideCount: true; onTriggered: root.settingsRequested(); TourTarget { key: "settings" } }
+        FilterItem { text: qsTr("Settings"); mode: "@settings"; iconName: "sliders"; asAction: true; hideCount: true; onTriggered: root.settingsRequested(); TourTarget { key: "settings" } }
         NumText {
             visible: !root.compact
             x: 4
-            text: "Skill Hub " + app.version
+            text: "Skill Hub " + app.version   // i18n-ok
             color: Theme.text3
             font.family: Theme.ui
             font.pixelSize: Theme.fsMicro

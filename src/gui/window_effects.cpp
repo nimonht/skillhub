@@ -1,5 +1,6 @@
 #include "gui/window_effects.h"
 
+#include <QCoreApplication>
 #include <QGuiApplication>
 #include <QOperatingSystemVersion>
 #include <QQuickWindow>
@@ -77,19 +78,22 @@ void apply(QQuickWindow *window, const QString &material, bool dark) {
 #endif
 }
 
+// in the window's language (src/gui/translator.cpp)
+static QString tr(const char *text) { return QCoreApplication::translate("window_effects", text); }
+
 QString note(const QString &material) {
-    if (material == QLatin1String("solid")) return QStringLiteral("Solid looks the same everywhere.");
+    if (material == QLatin1String("solid")) return tr("Solid looks the same everywhere.");
 #if defined(Q_OS_WIN)
-    return windows_11() ? QStringLiteral("Windows 11 draws the blur.") : QStringLiteral("Blur needs Windows 11, so this stays solid here.");
+    return windows_11() ? tr("Windows 11 draws the blur.") : tr("Blur needs Windows 11, so this stays solid here.");
 #elif defined(Q_OS_MACOS)
-    return material == QLatin1String("glass") ? QStringLiteral("macOS 26 draws Liquid Glass; older versions draw the blur.") : QStringLiteral("macOS draws the blur.");
+    return material == QLatin1String("glass") ? tr("macOS 26 draws Liquid Glass; older versions draw the blur.") : tr("macOS draws the blur.");
 #else
-    if (QGuiApplication::platformName() == QLatin1String("xcb") && !x11_compositor()) return QStringLiteral("This desktop runs no compositor, so the window stays solid.");
+    if (QGuiApplication::platformName() == QLatin1String("xcb") && !x11_compositor()) return tr("This desktop runs no compositor, so the window stays solid.");
     const QString desktop = qEnvironmentVariable("XDG_CURRENT_DESKTOP").toLower();
-    if (desktop.contains(QLatin1String("hyprland"))) return QStringLiteral("Hyprland blurs what is behind the window when decoration:blur is on, which it is by default.");
-    if (desktop.contains(QLatin1String("gnome"))) return QStringLiteral("GNOME does not blur behind windows, so the window is translucent without blur.");
-    if (desktop.contains(QLatin1String("kde"))) return QStringLiteral("KDE blurs only windows that ask through its own protocol, so here the window is translucent without blur.");
-    return QStringLiteral("Your compositor decides: with blur set up it blurs what is behind the window, otherwise the window is just translucent.");
+    if (desktop.contains(QLatin1String("hyprland"))) return tr("Hyprland blurs what is behind the window when decoration:blur is on, which it is by default.");
+    if (desktop.contains(QLatin1String("gnome"))) return tr("GNOME does not blur behind windows, so the window is translucent without blur.");
+    if (desktop.contains(QLatin1String("kde"))) return tr("KDE blurs only windows that ask through its own protocol, so here the window is translucent without blur.");
+    return tr("Your compositor decides: with blur set up it blurs what is behind the window, otherwise the window is just translucent.");
 #endif
 }
 

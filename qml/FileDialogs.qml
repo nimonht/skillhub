@@ -15,22 +15,22 @@ Item {
 
     FileDialog {
         id: openDlg
-        title: "Choose a Skill Hub export"
+        title: qsTr("Choose a Skill Hub export")
         fileMode: FileDialog.OpenFile
-        nameFilters: ["Skill Hub exports (*.json)", "All files (*)"]
+        nameFilters: [qsTr("Skill Hub exports (*.json)"), qsTr("All files (*)")]
         onAccepted: root.openChosen(root.toPath(selectedFile))
     }
     FileDialog {
         id: saveDlg
-        title: "Export skills to"
+        title: qsTr("Export skills to")
         fileMode: FileDialog.SaveFile
         defaultSuffix: "json"
-        nameFilters: ["Skill Hub exports (*.json)"]
+        nameFilters: [qsTr("Skill Hub exports (*.json)")]
         onAccepted: root.saveChosen(root.toPath(selectedFile))
     }
     FolderDialog {
         id: folderDlg
-        title: "Choose a folder of skills"
+        title: qsTr("Choose a folder of skills")
         onAccepted: root.folderChosen(root.toPath(selectedFolder))
     }
 }

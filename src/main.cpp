@@ -87,7 +87,9 @@ int main(int argc, char **argv) {
 
         qmlRegisterType<VTermItem>("SkillHub.Terminal", 1, 0, "VTermItem");
         window_effects::prepare();
+        if (!shotFile.isEmpty()) qputenv("SKILLHUB_LANGUAGE", opt("--language").isEmpty() ? QByteArray("en") : opt("--language").toUtf8());   // tests read the text
         AppController controller;
+        controller.applyLanguage(QSettings().value(QStringLiteral("ui/language")).toString());   // before any text is made
         QTimer::singleShot(500, &controller, &AppController::checkUpdatesQuietly);  // verdicts without a click
         if (!args.contains(QStringLiteral("--shot"))) {   // Skill Hub itself: soon after the start, and once a day in a window left open
             QTimer::singleShot(3000, &controller, [&controller] { controller.checkAppUpdate(false); });
@@ -97,6 +99,7 @@ int main(int argc, char **argv) {
         }
         QQmlApplicationEngine engine;
         engine.rootContext()->setContextProperty(QStringLiteral("app"), &controller);
+        QObject::connect(&controller, &AppController::languageChanged, &engine, &QQmlEngine::retranslate);
         if (!shotFile.isEmpty()) {
             const QStringList sz = opt("--size").split(QLatin1Char('x'));
             if (sz.size() == 2) engine.rootContext()->setContextProperty(QStringLiteral("startSize"), QSize(sz[0].toInt(), sz[1].toInt()));
@@ -149,6 +152,7 @@ int main(int argc, char **argv) {
                     if (opt("--action") == QLatin1String("update-all")) controller.updateAll();
                     if (opt("--action") == QLatin1String("check")) controller.checkUpdates();
                     if (opt("--action") == QLatin1String("adopt")) controller.adopt();
+                    if (opt("--action") == QLatin1String("language")) controller.setLanguage(opt("--switch-to"));   // while the window is open
                     if (opt("--action") == QLatin1String("accent")) QMetaObject::invokeMethod(window, "pickAccent", Q_ARG(QVariant, opt("--accent")));   // as the settings page does
                     if (opt("--action") == QLatin1String("app-update")) controller.installAppUpdate();   // the button: on success the window quits by itself
                     if (opt("--action") == QLatin1String("restart")) {  // twice: the second one is what a stuck stop would break
@@ -169,6 +173,12 @@ int main(int argc, char **argv) {
                     QVariant text;
                     QMetaObject::invokeMethod(window, "terminalScreen", Q_RETURN_ARG(QVariant, text));
                     QFile dump(opt("--terminal-dump"));
+                    if (dump.open(QIODevice::WriteOnly)) dump.write(text.toString().toUtf8());
+                }
+                if (!opt("--text-dump").isEmpty()) {   // words the window shows, to see which language they are in
+                    QVariant text;
+                    QMetaObject::invokeMethod(window, "shownText", Q_RETURN_ARG(QVariant, text));
+                    QFile dump(opt("--text-dump"));
                     if (dump.open(QIODevice::WriteOnly)) dump.write(text.toString().toUtf8());
                 }
                 if (!opt("--terminal-tabs").isEmpty()) {

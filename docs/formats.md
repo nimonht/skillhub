@@ -287,6 +287,7 @@ Everything that both the command line and the window need. Missing keys mean the
   "version": 1,
   "appearance": {
     "theme": "system",
+    "language": "system",
     "accent": { "source": "default", "color": "#34E0A6" },
     "tintSurfaces": false,
     "material": "solid",
@@ -331,6 +332,10 @@ Everything that both the command line and the window need. Missing keys mean the
 
 - `appearance.theme`: `system`, `dark` or `light`. `accent.source`: `default` (mint), `system`, `preset` or `custom`;
   `color` is the chosen `#RRGGBB`. `material`: `solid`, `blur` or `glass`. `density`: `comfortable` or `compact`.
+  A key whose value is `null` counts as missing: 2.0.0-beta4 wrote `"accent": null` when a colour was picked.
+- `appearance.language`: the window's language, `system` (the first of the system's languages it has, else English), `en` or
+  `vi`. The window keeps a copy in its own QSettings (`ui/language`) so that it starts in that language. The command line and the
+  background service speak English. A language is a file in `i18n/`, from English text to its translation.
 - `updates.appCheck`: the window looks for a new version of Skill Hub itself. `updates.checkAtLaunch` is about skills.
 - `updates.autoSkipFindings`: automatic runs leave out an update that brings a high finding of the offline check
   (`skillhub scan`) the installed version lacks, and, with reports on, one whose security report got worse since the last

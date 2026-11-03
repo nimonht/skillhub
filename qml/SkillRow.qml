@@ -23,7 +23,7 @@ Item {
     width: ListView.view ? ListView.view.width : 600
     height: Theme.rowH
     Accessible.role: Accessible.ListItem
-    Accessible.name: name + ", " + status + (problem ? ", has link problems" : "")
+    Accessible.name: name + ", " + status + (problem ? qsTr(", has link problems") : "")
     Accessible.selected: selected
 
     Rectangle {
@@ -117,7 +117,7 @@ Item {
         visible: app.hiddenCount > 0
         x: row.portsX + row.shown * app.portW + (app.portW - width) / 2
         anchors.verticalCenter: parent.verticalCenter
-        agentLabel: app.hiddenCount + " more agents"
+        agentLabel: qsTr("%1 more agents").arg(app.hiddenCount)
         link: {
             for (var k = row.shown; k < row.links.length; ++k) if (row.links[k] === "missing" || row.links[k] === "copy" || row.links[k] === "foreign") return "missing"
             return "link"

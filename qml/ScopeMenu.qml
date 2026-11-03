@@ -12,7 +12,7 @@ AbstractButton {
     enabled: !app.busy
     onClicked: pop.open()
     Accessible.role: Accessible.ComboBox
-    Accessible.name: "Skills of " + app.scopeLabel
+    Accessible.name: qsTr("Skills of %1").arg(app.scopeLabel)
     Connections { target: app; function onShowScopeMenu() { pop.open() } }
     Loader {   // native dialogs when the module exists; without it projects are added with skillhub projects add
         id: dialogs
@@ -71,7 +71,7 @@ AbstractButton {
 
         contentItem: Column {
             spacing: 2
-            Choice { text: "Your skills"; iconName: "all"; current: !app.inProject; onClicked: { pop.close(); app.setScope("") } }
+            Choice { text: qsTr("Your skills"); iconName: "all"; current: !app.inProject; onClicked: { pop.close(); app.setScope("") } }
             Repeater {
                 model: app.projects
                 delegate: Choice {
@@ -86,7 +86,7 @@ AbstractButton {
                 model: app.suggestedProjects
                 delegate: Choice {
                     required property string modelData
-                    text: "Add " + modelData.split("/").pop()
+                    text: qsTr("Add %1").arg(modelData.split("/").pop())
                     detail: modelData
                     iconName: "plus"
                     onClicked: { pop.close(); app.addProject(modelData) }
@@ -94,7 +94,7 @@ AbstractButton {
             }
             Choice {
                 visible: dialogs.status === Loader.Ready
-                text: "Add a project"
+                text: qsTr("Add a project")
                 iconName: "folder"
                 onClicked: { pop.close(); dialogs.item.openFolder() }
             }
