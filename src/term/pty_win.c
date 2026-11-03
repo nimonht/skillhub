@@ -1,3 +1,4 @@
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -17,6 +18,7 @@ typedef void(WINAPI *close_fn)(void *);
 struct sh_pty {
     void *console;
     HANDLE in, out, process;
+    HANDLE job;  // the shell and everything it starts; NULL when Windows would not make one
     close_fn close_console;
     resize_fn resize;
 };
@@ -128,10 +130,27 @@ sh_pty *sh_pty_spawn(const char *program, const char *const *argv, const char *c
         SetEnvironmentVariableW(names[i], value);
         free(value);
     }
+    // A job holds what the shell starts, so closing the terminal can find it: programs that start helpers with hidden consoles of
+    // their own (codex, node) leave those running when the terminal's console closes. A program may still leave the job on purpose.
+    HANDLE job = CreateJobObjectW(NULL, NULL);
+    if (job) {
+        JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits;
+        memset(&limits, 0, sizeof limits);
+        limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_BREAKAWAY_OK;
+        SetInformationJobObject(job, JobObjectExtendedLimitInformation, &limits, sizeof limits);
+    }
     wchar_t *wprog = wide(program), *wcwd = cwd && *cwd ? wide(cwd) : NULL;
     PROCESS_INFORMATION pi;
-    const BOOL ok = CreateProcessW(wprog, line, NULL, NULL, FALSE, EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT, NULL, wcwd, &si.StartupInfo, &pi);
+    const DWORD flags = EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT | (job ? CREATE_SUSPENDED : 0);  // in the job before it starts anything
+    const BOOL ok = CreateProcessW(wprog, line, NULL, NULL, FALSE, flags, NULL, wcwd, &si.StartupInfo, &pi);
     const DWORD failure = GetLastError();
+    if (ok && job) {
+        if (!AssignProcessToJobObject(job, pi.hProcess)) {  // a terminal without the job still works: it ends the shell alone, as before
+            CloseHandle(job);
+            job = NULL;
+        }
+        ResumeThread(pi.hThread);  // whatever happened to the job: a shell left suspended would be a dead terminal
+    }
     for (size_t i = 0; i < vars; ++i) {
         if (names[i]) SetEnvironmentVariableW(names[i], kept[i]);  // NULL: it was not set
         free(names[i]);
@@ -147,6 +166,7 @@ sh_pty *sh_pty_spawn(const char *program, const char *const *argv, const char *c
     free(si.lpAttributeList);
     if (!ok) {
         if (err) *err = message("cannot start the shell");
+        if (job) CloseHandle(job);
         ((close_fn)(void *)GetProcAddress(kernel, "ClosePseudoConsole"))(console);
         CloseHandle(in_write);
         CloseHandle(out_read);
@@ -158,6 +178,7 @@ sh_pty *sh_pty_spawn(const char *program, const char *const *argv, const char *c
     p->in = in_write;
     p->out = out_read;
     p->process = pi.hProcess;
+    p->job = job;
     p->close_console = (close_fn)(void *)GetProcAddress(kernel, "ClosePseudoConsole");
     p->resize = (resize_fn)(void *)GetProcAddress(kernel, "ResizePseudoConsole");
     return p;
@@ -180,12 +201,71 @@ void sh_pty_resize(sh_pty *p, int cols, int rows) {
 
 void sh_pty_hangup(sh_pty *p) {
     if (p->console) {
-        p->close_console(p->console);  // the shell goes, and the read pipe ends
+        p->close_console(p->console);  // the shell and the programs on its console go, and the read pipe ends
         p->console = NULL;
     }
 }
 
-void sh_pty_kill(sh_pty *p) { TerminateProcess(p->process, 1); }
+// From the program's own file: a console program, or one with windows (left running, as other terminals do: VS Code from `code .`)
+static bool console_program(HANDLE process) {
+    wchar_t path[1024];
+    DWORD len = sizeof path / sizeof *path;
+    if (!QueryFullProcessImageNameW(process, 0, path, &len)) return false;
+    HANDLE f = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, 0, NULL);
+    if (f == INVALID_HANDLE_VALUE) return false;
+    bool console = false;
+    IMAGE_DOS_HEADER dos;
+    DWORD got = 0;
+    if (ReadFile(f, &dos, sizeof dos, &got, NULL) && got == sizeof dos && dos.e_magic == IMAGE_DOS_SIGNATURE && dos.e_lfanew > 0) {
+        // the signature, the file header and the optional header as far as Subsystem, which sits at the same place in PE32 and PE32+
+        unsigned char nt[4 + sizeof(IMAGE_FILE_HEADER) + 72];
+        LARGE_INTEGER at;
+        at.QuadPart = dos.e_lfanew;
+        if (SetFilePointerEx(f, at, NULL, FILE_BEGIN) && ReadFile(f, nt, sizeof nt, &got, NULL) && got == sizeof nt) {
+            DWORD signature;
+            WORD subsystem;
+            memcpy(&signature, nt, sizeof signature);
+            memcpy(&subsystem, nt + 4 + sizeof(IMAGE_FILE_HEADER) + 68, sizeof subsystem);
+            console = signature == IMAGE_NT_SIGNATURE && subsystem == IMAGE_SUBSYSTEM_WINDOWS_CUI;
+        }
+    }
+    CloseHandle(f);
+    return console;
+}
+
+// The console programs still in the job: helpers on hidden consoles, and programs that would not close with the console
+static void end_console_programs(HANDLE job) {
+    if (!job) return;
+    const DWORD room = 1024;
+    JOBOBJECT_BASIC_PROCESS_ID_LIST *list = malloc(sizeof *list + room * sizeof(ULONG_PTR));
+    if (!list) return;
+    for (int round = 0; round < 4; ++round) {  // those started while others were ended: a few more rounds
+        memset(list, 0, sizeof *list);
+        list->NumberOfAssignedProcesses = room;
+        if (!QueryInformationJobObject(job, JobObjectBasicProcessIdList, list, (DWORD)(sizeof *list + room * sizeof(ULONG_PTR)), NULL) &&
+            GetLastError() != ERROR_MORE_DATA)
+            break;
+        const ULONG_PTR *ids = list->ProcessIdList;
+        int ended = 0;
+        for (DWORD i = 0; i < list->NumberOfProcessIdsInList; ++i) {
+            HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_TERMINATE | SYNCHRONIZE, FALSE, (DWORD)ids[i]);
+            if (!h) continue;
+            BOOL in = FALSE;  // the number may have gone to another process since the list was made
+            if (IsProcessInJob(h, job, &in) && in && console_program(h) && TerminateProcess(h, 1)) {
+                WaitForSingleObject(h, 200);
+                ++ended;
+            }
+            CloseHandle(h);
+        }
+        if (!ended) break;
+    }
+    free(list);
+}
+
+void sh_pty_kill(sh_pty *p) {
+    TerminateProcess(p->process, 1);
+    end_console_programs(p->job);
+}
 
 void sh_pty_free(sh_pty *p) {
     if (!p) return;
@@ -194,5 +274,9 @@ void sh_pty_free(sh_pty *p) {
     CloseHandle(p->out);
     if (WaitForSingleObject(p->process, 500) == WAIT_TIMEOUT) TerminateProcess(p->process, 1);
     CloseHandle(p->process);
+    if (p->job) {
+        end_console_programs(p->job);
+        CloseHandle(p->job);
+    }
     free(p);
 }

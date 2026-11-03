@@ -15,6 +15,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 
 BIN = os.path.abspath(sys.argv[1])
 OUT = os.path.abspath(sys.argv[2]) if len(sys.argv) > 2 else tempfile.mkdtemp(prefix="skillhub-shots-")
@@ -80,6 +81,102 @@ def hostile_text():
     if hits:
         fail("the window fetched what a repository named: %s" % sorted(set(hits)))
     print("ok  hostile text")
+
+
+def config_file():
+    return os.path.join(env.get("SKILLHUB_CONFIG") or os.path.join(home, "AppData", "Roaming", "skillhub"), "settings.json")
+
+
+def alive(pid):
+    if os.name == "nt":   # os.kill would end it: ask whether it has exited instead
+        import ctypes
+        k = ctypes.windll.kernel32
+        h = k.OpenProcess(0x00100000 | 0x1000, False, pid)   # SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION
+        if not h:
+            return False
+        running = k.WaitForSingleObject(h, 0) == 0x102   # WAIT_TIMEOUT
+        k.CloseHandle(h)
+        return running
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+
+
+def end(pid):
+    if os.name == "nt":
+        subprocess.run(["taskkill", "/F", "/PID", str(pid)], capture_output=True)
+    else:
+        try:
+            os.kill(pid, 9)
+        except OSError:
+            pass
+
+
+def terminal_close(shell_env):
+    """Quitting the window ends what runs in its terminals, and leaves what detached from them. On POSIX the stubborn one has a
+    process group of its own and ignores the hangup, as codex does; on Windows it is a helper on a hidden console of its own, which
+    the terminal's console closing does not reach. The one that stays left the session (setsid), or is a program with windows."""
+    held, left = os.path.join(home, "stubborn.pid"), os.path.join(home, "detached.pid")
+    script = os.path.join(home, "close_test.py")
+    with open(script, "w") as f:
+        f.write("import os, signal, subprocess, sys, time\n"
+                "def stay(pidfile):\n"
+                "    with open(pidfile, 'w') as f: f.write(str(os.getpid()))\n"
+                "    time.sleep(120)\n"
+                "what, pidfile = sys.argv[1], sys.argv[2]\n"
+                "if what == 'stubborn':\n"
+                "    os.setpgid(0, 0); signal.signal(signal.SIGHUP, signal.SIG_IGN); stay(pidfile)\n"
+                "elif what == 'detached':\n"
+                "    if os.fork(): os._exit(0)\n"      # a job's leader cannot call setsid
+                "    os.setsid(); stay(pidfile)\n"
+                "elif what == 'child':\n"
+                "    stay(pidfile)\n"
+                "else:\n"                              # Windows: a helper on a hidden console, and a program with windows
+                "    subprocess.Popen([sys.executable, __file__, 'child', pidfile], creationflags=0x08000000)\n"
+                "    pyw = os.path.join(os.path.dirname(sys.executable), 'pythonw.exe')\n"
+                "    if os.path.exists(pyw): subprocess.Popen([pyw, __file__, 'child', sys.argv[3]])\n"
+                "    time.sleep(120)\n")
+    run_env = shell_env
+    if os.name == "nt":
+        q = lambda a: '"%s"' % a if " " in a else a
+        run = "%s %s windows %s %s" % (q(sys.executable), q(script), q(held), q(left))
+        os.makedirs(os.path.dirname(config_file()), exist_ok=True)
+        with open(config_file(), "w") as f:   # cmd: the line above is written for it
+            json.dump({"version": 1, "terminal": {"shell": os.environ.get("ComSpec", "C:\\Windows\\System32\\cmd.exe"), "banner": False}}, f)
+    else:
+        run = "'%s' '%s' stubborn '%s' & '%s' '%s' detached '%s' </dev/null >/dev/null 2>&1" % (sys.executable, script, held, sys.executable, script, left)
+    p = subprocess.run([BIN, "gui", "--shot", os.path.join(OUT, "terminal-close.png"), "--theme", "dark", "--size", "1280x800", "--layout", "dock=340",
+                        "--mode", "terminal", "--terminal-run", run, "--settle", "60" if os.name == "nt" else "20"],
+                       env=run_env, capture_output=True, text=True, timeout=240)
+    pids = {}
+    for name, path in (("stubborn", held), ("detached", left)):
+        if os.path.exists(path):
+            with open(path) as f:
+                pids[name] = int(f.read().strip() or 0)
+    try:
+        if p.returncode != 0:
+            fail("terminal close: exit %d\n%s" % (p.returncode, p.stderr))
+        if not pids.get("stubborn"):
+            fail("terminal close: the program did not start in the terminal\n--- stderr\n%s" % p.stderr)
+        for _ in range(50):
+            if not alive(pids["stubborn"]):
+                break
+            time.sleep(0.1)
+        else:
+            fail("terminal close: a program in the terminal outlived the window")
+        if pids.get("detached") and not alive(pids["detached"]):
+            fail("terminal close: a program that left the terminal was ended with it")
+    finally:
+        for pid in pids.values():
+            if pid and alive(pid):
+                end(pid)
+        if os.path.exists(config_file()):
+            os.remove(config_file())
+    print("ok  terminal close" + ("" if pids.get("detached") else " (no detached program to spare on this system)"))
 
 
 try:
@@ -165,6 +262,7 @@ try:
         if p.returncode != 0:
             fail("terminal flood: exit %d\n%s" % (p.returncode, p.stderr))
         print("ok  terminal flood")
+    terminal_close(shell_env)
     hostile_text()
     print("gui launch test passed (screenshots in %s)" % OUT)
 finally:

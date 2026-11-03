@@ -2,6 +2,7 @@
 #define _GNU_SOURCE  // ptsname_r
 #endif
 
+#include <dirent.h>
 #include <errno.h>
 #include <stdbool.h>
 #include <fcntl.h>
@@ -13,6 +14,10 @@
 #include <sys/wait.h>
 #include <termios.h>
 #include <unistd.h>
+
+#ifdef __APPLE__
+#include <libproc.h>
+#endif
 
 #include "sh_pty.h"
 
@@ -123,12 +128,53 @@ void sh_pty_resize(sh_pty *p, int cols, int rows) {
     ioctl(p->fd, TIOCSWINSZ, &size);
 }
 
+// Every process in the terminal's session gets `sig`: the shell, and all it started that did not leave the session with setsid.
+// An interactive shell gives each command a process group of its own, so the shell's group alone misses them: codex, for one,
+// catches the hangup and would run on with nobody to talk to. Returns how many were signalled.
+static int signal_session(pid_t sid, int sig) {
+    if (sid <= 1) return 0;
+    const pid_t self = getpid();
+    int hit = 0;
+#if defined(__linux__)
+    DIR *d = opendir("/proc");
+    if (d) {
+        const struct dirent *e;
+        while ((e = readdir(d))) {
+            char *end;
+            const long pid = strtol(e->d_name, &end, 10);
+            if (*end || pid <= 1 || pid == self) continue;
+            if (getsid((pid_t)pid) == sid && kill((pid_t)pid, sig) == 0) ++hit;
+        }
+        closedir(d);
+        return hit;
+    }
+#elif defined(__APPLE__)
+    const int count = proc_listallpids(NULL, 0);
+    pid_t *pids = count > 0 ? calloc((size_t)count + 64, sizeof *pids) : NULL;  // room for some started since
+    if (pids) {
+        const int n = proc_listallpids(pids, (int)(((size_t)count + 64) * sizeof *pids));
+        for (int i = 0; i < n; ++i)
+            if (pids[i] > 1 && pids[i] != self && getsid(pids[i]) == sid && kill(pids[i], sig) == 0) ++hit;
+        free(pids);
+        return hit;
+    }
+#endif
+    return kill(-sid, sig) == 0;  // no list of processes: the shell's own group, at least
+}
+
+// Those that fork while being killed: a few more rounds, until none is left
+static void kill_session(pid_t sid) {
+    for (int round = 0; round < 4 && signal_session(sid, SIGKILL) > 0; ++round) usleep(5000);
+}
+
 void sh_pty_hangup(sh_pty *p) {
-    if (p->pid > 0) kill(-p->pid, SIGHUP);
+    if (p->pid <= 0) return;
+    signal_session(p->pid, SIGHUP);
+    signal_session(p->pid, SIGCONT);  // a stopped job hears the hangup too
 }
 
 void sh_pty_kill(sh_pty *p) {
-    if (p->pid > 0) kill(-p->pid, SIGKILL);
+    if (p->pid > 0) kill_session(p->pid);
 }
 
 void sh_pty_free(sh_pty *p) {
@@ -137,7 +183,7 @@ void sh_pty_free(sh_pty *p) {
     if (p->pid > 0) {
         int status;
         if (waitpid(p->pid, &status, WNOHANG) == 0) {
-            kill(-p->pid, SIGKILL);
+            kill_session(p->pid);  // before the shell is reaped: until then its number cannot go to another session
             waitpid(p->pid, &status, 0);
         }
     }
