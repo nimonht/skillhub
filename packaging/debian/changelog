@@ -1,3 +1,10 @@
+skillhub (2.0.0~beta5) unstable; urgency=medium
+
+  * Closing a terminal ends the programs in it; the accent and the sliders
+    of Settings work again; the window in Vietnamese.
+
+ -- nimonht <181256175+nimonht@users.noreply.github.com>  Tue, 03 Nov 2026 21:26:31 +0700
+
 skillhub (2.0.0~beta4) unstable; urgency=medium
 
   * An offline check of every skill, and optional security reports.

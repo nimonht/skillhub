@@ -1,7 +1,7 @@
 # Maintainer: nimonht
 pkgname=skillhub
-pkgver=2.0.0beta4
-_tag=2.0.0-beta4  # pacman forbids a hyphen in pkgver, and 2.0.0beta1 sorts before 2.0.0
+pkgver=2.0.0beta5
+_tag=2.0.0-beta5  # pacman forbids a hyphen in pkgver, and 2.0.0beta1 sorts before 2.0.0
 pkgrel=1
 pkgdesc='One skills folder for every coding agent: a C command line and a native Qt6 window'
 arch=('x86_64' 'aarch64')
@@ -11,7 +11,7 @@ depends=('qt6-base' 'qt6-declarative' 'git' 'libuv')
 makedepends=('cmake' 'python' 'pkgconf' 'qt6-shadertools')
 options=('!debug')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$_tag.tar.gz")
-sha256sums=('4ae9137bce9d5ddfcd0402b00b3ded0aa870ed7626b18563127cd01c91e49443')
+sha256sums=('SKIP')  # filled in after the tag, like every release
 
 build() {
   cmake -B build -S "$pkgname-$_tag" -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE=None -Wno-dev

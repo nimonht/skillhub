@@ -1,5 +1,27 @@
 # Changelog
 
+## 2.0.0-beta5 - 2026-11-03
+
+The fixes planned as "beta 4.1", and the window in Vietnamese. It is called beta5 because the updater in beta3 and beta4 reads
+versions as `2.0.0-betaN`, and would never offer a `beta4.1`; from either of them this version arrives through the Update button.
+
+- **Closing a terminal ends what runs in it.** A program that catches the hangup, such as Codex, kept running after its tab or the
+  whole window was closed, out of sight, until the computer was shut down. The shell gives every command a process group of its own,
+  and the hangup and the kill reached only the shell's. Now they reach every process in the terminal's session. A program that
+  detached on purpose (`setsid`, a daemon, an app with a window of its own such as VS Code from `code .`) keeps running, as in other
+  terminals. On Windows the shell runs in a job: console programs it started end with the tab, also helpers on hidden consoles.
+- **The accent can be changed again.** In beta4, every colour picked in Settings or in the first-run tour was saved as nothing, and
+  from then on the accent buttons did nothing at all. The Qt that the releases ship hands such a choice over in a form that was
+  written as `null`. The project folders under Settings → Projects were lost the same way. A `settings.json` written by beta4 works
+  again without editing it.
+- **Sliders keep what you set.** Every slider in Settings (intensity, hue, font size, downloads at once, the cache limit and the rest)
+  jumped back to its old value as soon as anything else changed: the value it saved was the one from before the drag. Now what the
+  knob shows when you let go is saved, once.
+- **Tiếng Việt.** The window speaks Vietnamese: Settings → Appearance → Language, or the first page of the tour. It follows the
+  system's language until you choose, and switches at once. What the background service and the command line say (the activity
+  log, error details) stays in English for now. `i18n/vi.json` holds the translation, and CONTRIBUTING.md explains how to add a
+  language.
+
 ## 2.0.0-beta4 - 2026-11-03
 
 Know what a skill does before an agent follows it. From beta3 this version arrives through the update button.
