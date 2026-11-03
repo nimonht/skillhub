@@ -19,6 +19,8 @@
 #include "sh_proc.h"
 #include "sh_projects.h"
 #include "sh_sysinfo.h"
+#include "sh_reports.h"
+#include "sh_scan.h"
 #include "sh_selfupdate.h"
 #include "sh_utf.h"
 
@@ -904,6 +906,44 @@ static void automation_result(server *s, sh_rpc_msg *m, sh_store *st) {
     free(watcher);
 }
 
+// The offline check of one skill, and its reports when the user has turned them on. Slow: the reports may need the network.
+static void m_skill_safety(server *s, sh_rpc_msg *m, const slow_call *c) {
+    sh_store st;
+    scope_store(c->project, &st, NULL, NULL);
+    const char *name = param_str(m->params, "name");
+    sh_skills sk;
+    sh_store_scan(&st, &sk);
+    const sh_skill *found = NULL;
+    for (size_t i = 0; i < sk.len && !found; ++i)
+        if (strcmp(sk.items[i].name, name) == 0) found = &sk.items[i];
+    if (!found) {
+        send_error(s, m, SH_RPC_NOT_FOUND, "no such skill");
+    } else {
+        sh_findings f;
+        sh_scan_dir(found->path, &f);
+        const char *names[] = {name};
+        sh_report rep;
+        sh_reports_get(st.cache, &found->src, names, 1, false, &rep);
+        yyjson_mut_doc *d = yyjson_mut_doc_new(NULL);
+        yyjson_mut_val *r = yyjson_mut_obj(d), *list = yyjson_mut_arr(d), *reports = yyjson_mut_obj(d);
+        yyjson_mut_obj_add_strcpy(d, r, "name", name);
+        yyjson_mut_obj_add_strcpy(d, r, "folder", found->path);
+        yyjson_mut_obj_add_uint(d, r, "high", sh_findings_count(&f, SH_FIND_HIGH));
+        yyjson_mut_obj_add_uint(d, r, "medium", sh_findings_count(&f, SH_FIND_MEDIUM));
+        sh_findings_json(d, list, &f);
+        yyjson_mut_obj_add_val(d, r, "findings", list);
+        yyjson_mut_obj_add_bool(d, r, "truncated", f.truncated);
+        sh_report_json(d, reports, &rep);
+        yyjson_mut_obj_add_val(d, r, "reports", reports);
+        send_result(s, m, d, r);
+        yyjson_mut_doc_free(d);
+        sh_report_free(&rep);
+        sh_findings_free(&f);
+    }
+    sh_skills_free(&sk);
+    sh_store_free(&st);
+}
+
 static void m_app_check(server *s, sh_rpc_msg *m, const slow_call *c) {
     (void)c;
     sh_update_build b;
@@ -1032,6 +1072,7 @@ static const struct {
     {"fetch.render", m_fetch_render, false},
     {"projects.list", m_projects_list, false},
     {"app.checkUpdate", m_app_check, false},
+    {"skills.safety", m_skill_safety, false},
     {"automation.status", m_automation_status, false},
     {"automation.set", m_automation_set, true},
 };

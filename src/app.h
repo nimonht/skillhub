@@ -167,7 +167,9 @@ class AppController : public QObject {
     Q_PROPERTY(QString watcherState READ watcherState NOTIFY automationChanged)
     Q_PROPERTY(QString centralPath READ centralPath NOTIFY countsChanged)
     Q_PROPERTY(QString version READ version CONSTANT)
-    Q_PROPERTY(QVariantMap appUpdate READ appUpdate NOTIFY appUpdateChanged)  // a new version of Skill Hub itself, docs/protocol.md
+    Q_PROPERTY(QVariantMap appUpdate READ appUpdate NOTIFY appUpdateChanged)
+    Q_PROPERTY(QVariantMap safety READ safety NOTIFY safetyChanged)        // the offline check and reports of the selected skill
+    Q_PROPERTY(QVariantList reviewAgents READ reviewAgents CONSTANT)        // coding agents here that can give a second opinion  // a new version of Skill Hub itself, docs/protocol.md
     Q_PROPERTY(QString themeMode READ themeMode WRITE setThemeMode NOTIFY themeChanged)  // system | dark | light
     Q_PROPERTY(bool reduceMotion READ reduceMotion WRITE setReduceMotion NOTIFY themeChanged)  // the user's setting
     Q_PROPERTY(bool stillMotion READ stillMotion NOTIFY themeChanged)                          // setting or forced (tests)
@@ -233,6 +235,8 @@ public:
     QString centralPath() const;
     QString version() const;
     QVariantMap appUpdate() const { return appUpdate_; }
+    QVariantMap safety() const { return safety_; }
+    QVariantList reviewAgents() const;
     QString themeMode() const { return themeMode_; }
     void setThemeMode(const QString &m);
     bool reduceMotion() const { return reduce_; }
@@ -302,6 +306,8 @@ public:
     Q_INVOKABLE void restartBackend();
     Q_INVOKABLE void checkAppUpdate(bool asked);   // asked: says so when there is nothing new, and ignores the setting
     Q_INVOKABLE void installAppUpdate();
+    Q_INVOKABLE void readSafety(const QString &name);
+    Q_INVOKABLE void askSecondOpinion(const QString &agent);  // of the selected skill, in a terminal tab
     void showAppUpdate(const QString &latest, bool canInstall);   // the screenshots
     Q_INVOKABLE void setScope(const QString &path);
     Q_INVOKABLE void addProject(const QString &path);
@@ -361,6 +367,8 @@ signals:
     void pathSizesChanged();
     void showSettings(const QString &section);
     void appUpdateChanged();
+    void safetyChanged();
+    void openTerminalAt(const QString &folder, const QString &command);
     void scopeChanged();
     void projectsChanged();
     void showScopeMenu();
@@ -407,7 +415,7 @@ private:
     QJsonObject settings_;
     QVariantList pathSizes_, shells_;
     int settingsRev_ = 0, lockSplit_ = -1;
-    QVariantMap appUpdate_;
+    QVariantMap appUpdate_, safety_;
     QString portalAccent_;
     QVariantMap paletteDark_, paletteLight_;
     QString undoMethod_;       // skills.rollback or skills.restore, for what just happened

@@ -15,6 +15,7 @@ extern "C" {
 yyjson_mut_doc *sh_state_load(char **err);
 bool sh_state_save(yyjson_mut_doc *m);
 long long sh_setting_int(const char *section, const char *key, long long fallback);  // from settings.json; never fails
+bool sh_setting_bool(const char *section, const char *key, bool fallback);           // the same for a true or false
 
 #ifdef __cplusplus
 }

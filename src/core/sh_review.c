@@ -28,6 +28,7 @@ void sh_review_free(sh_review *r) {
     free(r->stage);
     free(r->tree);
     free(r->err);
+    sh_findings_free(&r->added);
     memset(r, 0, sizeof *r);
 }
 
@@ -200,6 +201,10 @@ void sh_review_compare(const char *stage, sh_review *r) {
         if (diff_finished(&p)) read_patches(r, sh_buf_str(&p.out), p.out.len);
         else r->err = sh_strdup(p.err && *p.err ? p.err : "git diff failed");
         sh_git_result_free(&p);
+        char *old = sh_path_join(stage, "old"), *fresh = sh_path_join(stage, "new");
+        sh_scan_added(old, fresh, &r->added);
+        free(old);
+        free(fresh);
     }
     sh_git_result_free(&g);
 }

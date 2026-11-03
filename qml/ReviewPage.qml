@@ -164,6 +164,16 @@ Rectangle {
                     text: "Adds or changes scripts. Agents may run them, so read them before you apply."
                 }
                 Note {
+                    readonly property var found: notes.r !== null && notes.r.newFindings ? notes.r.newFindings : []
+                    readonly property int high: found.filter(function (f) { return f.level === "high" }).length
+                    visible: found.length > 0
+                    icon: "alert"; tone: high > 0 ? Theme.dangerText : Theme.notifyText; fill: Theme.notifyLow
+                    text: "The offline check finds " + found.length + " thing" + (found.length === 1 ? "" : "s") + " the installed version does not have"
+                          + (high > 0 ? ", " + high + " of them high" : "") + ": "
+                          + found.slice(0, 3).map(function (f) { return f.title.toLowerCase() + " (" + f.file + ":" + f.line + ")" }).join("; ")
+                          + (found.length > 3 ? "; and more" : "") + "."
+                }
+                Note {
                     visible: notes.r !== null && notes.r.available && notes.r.localEdits
                     icon: "alert"; tone: Theme.notifyText; fill: Theme.notifyLow
                     text: "Your edits in this skill will be replaced. A backup is kept."

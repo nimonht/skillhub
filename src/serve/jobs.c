@@ -254,6 +254,9 @@ static yyjson_mut_val *review_json(job *j, const sh_review *r, size_t *budget) {
     }
     yyjson_mut_obj_add_bool(j->out, o, "truncated", truncated);
     yyjson_mut_obj_add_val(j->out, o, "files", files);
+    yyjson_mut_val *found = yyjson_mut_arr(j->out);
+    sh_findings_json(j->out, found, &r->added);
+    yyjson_mut_obj_add_val(j->out, o, "newFindings", found);
     return o;
 }
 

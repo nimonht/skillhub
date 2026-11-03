@@ -54,6 +54,8 @@ jobs:
         run: python3 tests/automation_smoke.py build/skillhub
       - name: Disk space
         run: python3 tests/storage_smoke.py build/skillhub
+      - name: The offline check and security reports
+        run: python3 tests/scan_smoke.py build/skillhub
       - name: Skill Hub updating itself, and what it refuses
         run: python3 tests/selfupdate_smoke.py build/skillhub-update-test build/skillhub-gui
       - name: Install / uninstall round trip (must not remove shared directories)
@@ -104,6 +106,8 @@ jobs:
         run: python3 tests/automation_smoke.py build/skillhub
       - name: Disk space
         run: python3 tests/storage_smoke.py build/skillhub
+      - name: The offline check and security reports
+        run: python3 tests/scan_smoke.py build/skillhub
       - name: GUI renders headless on Qt 6.4
         run: sh tests/gui-smoke.sh build/skillhub "$RUNNER_TEMP/screens-qt64"
 
@@ -154,7 +158,7 @@ jobs:
         run: |
           CC=clang cmake -B build-fuzz -DSKILLHUB_GUI=OFF -DSKILLHUB_FUZZ=ON -DSKILLHUB_TESTS=OFF -DCMAKE_BUILD_TYPE=RelWithDebInfo
           cmake --build build-fuzz -j"$(nproc)"
-          for t in frontmatter import source lock rpc; do
+          for t in frontmatter import source lock rpc scan; do
             mkdir -p "$RUNNER_TEMP/corpus-$t"
             build-fuzz/fuzz_$t -max_total_time=60 "$RUNNER_TEMP/corpus-$t" tests/fuzz/corpus/$t
           done
@@ -195,6 +199,8 @@ jobs:
         run: python3 tests/automation_smoke.py build/skillhub-gui.app/Contents/MacOS/skillhub
       - name: Disk space
         run: python3 tests/storage_smoke.py build/skillhub-gui.app/Contents/MacOS/skillhub
+      - name: The offline check and security reports
+        run: python3 tests/scan_smoke.py build/skillhub-gui.app/Contents/MacOS/skillhub
       - name: Skill Hub updating itself, and what it refuses
         run: python3 tests/selfupdate_smoke.py build/skillhub-update-test
       - name: launchd takes what we give it
@@ -264,6 +270,9 @@ jobs:
         run: python3 tests/automation_smoke.py build/skillhub-cli.exe
       - name: Disk space
         run: python3 tests/storage_smoke.py build/skillhub-cli.exe
+      - name: The offline check and security reports
+        shell: bash
+        run: python3 tests/scan_smoke.py build/skillhub-cli.exe
       - name: Skill Hub updating itself, and what it refuses
         shell: bash
         run: python3 tests/selfupdate_smoke.py build/skillhub-update-test.exe build/skillhub.exe

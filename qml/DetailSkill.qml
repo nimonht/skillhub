@@ -307,6 +307,105 @@ Flickable {
             }
         }
 
+        // the offline check, what outside scanners said, and a second opinion: findings to read, never a verdict
+        Column {
+            id: checks
+            readonly property var s: Object.assign({ loaded: false, findings: [], high: 0, medium: 0, truncated: false,
+                                                     reports: { state: "off", source: "", scanners: [] } }, app.safety)
+            readonly property var rep: checks.s.reports
+            width: parent.width
+            spacing: 6
+            SectionLabel { width: parent.width; text: "Checks"; trailing: checks.s.loaded && checks.s.findings.length > 0 ? String(checks.s.findings.length) : "" }
+            Text {
+                textFormat: Text.PlainText
+                width: parent.width
+                wrapMode: Text.Wrap
+                text: !checks.s.loaded ? "Reading the skill..."
+                    : checks.s.findings.length === 0 ? "Nothing to note. The check reads the text with fixed rules, so no finding is no proof of safety."
+                    : checks.s.high + " high, " + checks.s.medium + " medium. Read these lines before an agent follows the skill."
+                color: checks.s.high > 0 ? Theme.dangerText : Theme.text2
+                font.family: Theme.ui; font.pixelSize: Theme.fsSmall; lineHeight: 1.2
+            }
+            Repeater {
+                model: checks.s.findings
+                delegate: Column {
+                    required property var modelData
+                    width: checks.width
+                    spacing: 2
+                    Row {
+                        spacing: 8
+                        Text { textFormat: Text.PlainText; text: modelData.level === "high" ? "HIGH" : "MEDIUM"; color: modelData.level === "high" ? Theme.dangerText : Theme.notifyText; font.family: Theme.ui; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
+                        Text { textFormat: Text.PlainText; text: modelData.title; color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
+                    }
+                    NumText { width: parent.width; elide: Text.ElideMiddle; text: modelData.file + ":" + modelData.line; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
+                    Text { textFormat: Text.PlainText; width: parent.width; wrapMode: Text.WrapAnywhere; text: modelData.excerpt; color: Theme.text; font.family: Theme.mono; font.pixelSize: Theme.fsSmall }
+                }
+            }
+            Text { textFormat: Text.PlainText; visible: checks.s.truncated; text: "... and more: run skillhub scan " + root.d.name; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
+
+            SectionLabel { width: parent.width; text: "Reports from skills.sh" }
+            Text {
+                textFormat: Text.PlainText
+                visible: checks.rep.state !== "ok"
+                width: parent.width
+                wrapMode: Text.Wrap
+                text: checks.rep.state === "off" ? "Off. When on, Skill Hub asks skills.sh what three outside scanners found. Only public GitHub skills are looked up, and the repository and the skill name are sent."
+                    : checks.rep.state === "not-github" ? "Only skills from public GitHub repositories have reports."
+                    : checks.rep.state === "private" ? checks.rep.source + " is not public, so nothing was sent."
+                    : checks.rep.state === "failed" ? "skills.sh could not be reached."
+                    : "skills.sh has no report for this skill."
+                color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall; lineHeight: 1.2
+            }
+            Btn {
+                visible: checks.rep.state === "off"
+                kind: "ghost"; compact: true; text: "Turn reports on"
+                onClicked: { app.setSetting("security", "reports", true); app.readSafety(root.d.name) }
+            }
+            Repeater {
+                model: checks.rep.state === "ok" ? checks.rep.scanners : []
+                delegate: Row {
+                    required property var modelData
+                    width: checks.width
+                    spacing: 10
+                    Text { textFormat: Text.PlainText; width: 150; elide: Text.ElideRight; text: modelData.label; color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
+                    Text {
+                        textFormat: Text.PlainText
+                        width: 130
+                        text: modelData.risk + (modelData.alerts > 0 ? ", " + modelData.alerts + (modelData.alerts === 1 ? " alert" : " alerts") : "")
+                        color: modelData.risk === "high" || modelData.risk === "critical" ? Theme.dangerText : modelData.risk === "medium" ? Theme.notifyText : Theme.text2
+                        font.family: Theme.ui; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold
+                    }
+                    NumText { text: modelData.analyzedAt.substring(0, 10); color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
+                }
+            }
+            Text {
+                textFormat: Text.PlainText
+                visible: checks.rep.state === "ok"
+                width: parent.width
+                wrapMode: Text.Wrap
+                text: "Each scanner on its own: they often disagree. A report describes the skill upstream on its date, which may not be the version you have."
+                color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall; lineHeight: 1.2
+            }
+
+            SectionLabel { width: parent.width; text: "Second opinion"; visible: app.reviewAgents.length > 0 }
+            Text {
+                textFormat: Text.PlainText
+                visible: app.reviewAgents.length > 0
+                width: parent.width
+                wrapMode: Text.Wrap
+                text: "Opens a terminal in a copy of this skill with the agent's command typed. Press Enter to start it; it asks before it does anything. Its answer is not saved."
+                color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall; lineHeight: 1.2
+            }
+            Flow {
+                width: parent.width
+                spacing: 6
+                Repeater {
+                    model: app.reviewAgents
+                    delegate: Btn { required property var modelData; kind: "ghost"; compact: true; iconName: "terminal"; text: "Ask " + modelData.label; enabled: checks.s.loaded; onClicked: app.askSecondOpinion(modelData.id) }
+                }
+            }
+        }
+
         // facts
         Column {
             width: parent.width

@@ -226,6 +226,7 @@ Written exactly like `npx skills` `src/local-lock.ts`, because it is committed a
 | `stage/review-<name>-<pid>-<n>/` | a reviewed update: `new/` (upstream's folder) and `review.json` (`name`, `tree`, `skillPath`, and `hash`, the SHA-256 folder hash of `new/`, checked again before it is applied, so what is applied is what was shown). Kept for a day; other stages count as leftovers after ten minutes |
 | `sources.json` | derived update data, safe to delete |
 | `fetch-sizes.json` | folder sizes for `skillhub fetch`, remembered for an hour or until the folder changes |
+| `reports.json` | skills.sh answers (`skills`, keyed `owner/repo|name`) and whether a repository is public (`repos`), each kept a day; safe to delete |
 
 - Normalized URL: lowercase scheme and host, no trailing `/` or `.git`; `git@host:path` becomes `ssh://git@host/path`.
 - Clones made by older versions are full working trees, sometimes with a local path as `origin` (the tests seed one). They are used as
@@ -318,9 +319,11 @@ Everything that both the command line and the window need. Missing keys mean the
     "backupsKept": 3,
     "reviewBeforeUpdate": true,
     "autoSkipScripts": true,
+    "autoSkipFindings": true,
     "checkAtLaunch": true,
     "appCheck": true
   },
+  "security": { "reports": false },
   "storage": { "cacheMaxMB": 1024, "backupDays": 90 },
   "projects": { "roots": [] }
 }
@@ -329,6 +332,11 @@ Everything that both the command line and the window need. Missing keys mean the
 - `appearance.theme`: `system`, `dark` or `light`. `accent.source`: `default` (mint), `system`, `preset` or `custom`;
   `color` is the chosen `#RRGGBB`. `material`: `solid`, `blur` or `glass`. `density`: `comfortable` or `compact`.
 - `updates.appCheck`: the window looks for a new version of Skill Hub itself. `updates.checkAtLaunch` is about skills.
+- `updates.autoSkipFindings`: automatic runs leave out an update that brings a high finding of the offline check
+  (`skillhub scan`) the installed version lacks, and, with reports on, one whose security report got worse since the last
+  install or update (`reports` in `state.json`). A report that cannot be had holds nothing. A manual update is never held.
+- `security.reports`: look up skills.sh's security reports for skills from public GitHub repositories. Off by default; off
+  whatever it says while `DO_NOT_TRACK` or `DISABLE_TELEMETRY` is set. See SECURITY.md for what is sent.
 - `updates.parallel` and `updates.parallelPerHost` limit git fetches (each can use tens of MB);
   `updates.parallelChecksPerHost` limits the lightweight `ls-remote` checks, which are bound by network round trips.
 - `terminal.shell` and `terminal.external` are empty for "detect". `importLook` is `kitty`, `ghostty`, `alacritty` or
@@ -373,7 +381,8 @@ Durable state that Skill Hub owns and that is not a preference.
   "holds": { "user": { "<skill>": { "fromTree": "<40 hex>", "since": "<ISO UTC>" } } },
   "parked": { "<skill>": { "lockEntry": { "...": "..." }, "parkedAt": "<ISO UTC>" } },
   "lockMigration": { "from": "<legacyPath>", "to": "<npxPath>", "at": "<ISO UTC>", "entries": 12 },
-  "automationEnv": { "CLAUDE_CONFIG_DIR": "/home/me/.claude", "CODEX_HOME": "/home/me/.codex" }
+  "automationEnv": { "CLAUDE_CONFIG_DIR": "/home/me/.claude", "CODEX_HOME": "/home/me/.codex" },
+  "reports": { "<skill>": { "ath": "safe", "socket": "low", "snyk": "medium" } }
 }
 ```
 
@@ -386,6 +395,9 @@ Durable state that Skill Hub owns and that is not a preference.
 - `automationEnv`: variables the agent catalog refers to (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, ...) and the `XDG_*` folders,
   recorded when automation is switched on. Scheduled runs (systemd, launchd, Task Scheduler) do not inherit the login
   environment; `--auto` and watcher runs use these values for variables that are unset.
+- `reports`: what each scanner said when the skill was last installed or updated with reports on, the baseline an automatic
+  run compares a new report with. Risk words rank `unknown` < `safe` < `low` < `medium` < `high` < `critical`; a scanner
+  that moved up holds the update. A skill with no baseline gets one from its first report and is not held.
 
 ## 7. Parked skills (`<home>/.agents/.parked/<name>`)
 
@@ -482,6 +494,7 @@ Exit codes:
 | 1 | the operation failed, or `doctor` found problems |
 | 2 | usage error |
 | 10 | `check`: updates are available |
+| 11 | `scan`: the offline check found something high |
 | 75 | another Skill Hub operation holds the lock |
 | 127 | the window (`skillhub-gui`) or the backend could not be started |
 
@@ -512,4 +525,6 @@ Commands that work on many repositories (`add`, `check`, `update`, `import`) han
 | `SKILLHUB_NO_SYMLINKS` | Any value: behave like an account that may not create symlinks. On Windows junctions are used for the user's own skills. Everywhere, projects get synced copies |
 | `SKILLHUB_GUI_BIN` | the window program `skillhub` starts, instead of the one next to it |
 | `SKILLHUB_BACKEND` | the backend program the window starts, instead of the one next to it |
+| `DO_NOT_TRACK`, `DISABLE_TELEMETRY` | any value but `0` or `false`: no security reports, whatever the setting or `--reports` says |
+| `SKILLHUB_REPORTS_URL`, `SKILLHUB_REPORTS_GIT_BASE` | tests: skills.sh's address (`http://127.0.0.1:` only), and where to ask whether a repository is public |
 | `SKILLHUB_THEME`, `SKILLHUB_REDUCE_MOTION`, `SKILLHUB_NO_HOVER` | window test switches |

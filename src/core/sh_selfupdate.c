@@ -18,6 +18,7 @@
 #include "sh_fs.h"
 #include "sh_git.h"
 #include "sh_hash.h"
+#include "sh_http.h"
 #include "sh_path.h"
 #include "sh_proc.h"
 #include "sh_utf.h"
@@ -247,71 +248,6 @@ static char *env_or(const char *name, const char *fallback) {
     return sh_strdup(fallback);
 }
 
-// The system's own program by its full path where the system has one, so nothing earlier on PATH can stand in for it.
-static char *fetch_program(bool *wget) {
-    *wget = false;
-#if defined(_WIN32)
-    char *root = sh_getenv("SystemRoot");
-    char *curl = sh_strfmt("%s/System32/curl.exe", root && *root ? root : "C:/Windows");
-    free(root);
-    if (sh_is_file(curl)) return curl;
-    free(curl);
-    return NULL;
-#elif defined(__APPLE__)
-    return sh_is_file("/usr/bin/curl") ? sh_strdup("/usr/bin/curl") : NULL;
-#else
-    char *found = sh_find_executable("curl", NULL);
-    if (found) return found;
-    found = sh_find_executable("wget", NULL);
-    *wget = found != NULL;
-    return found;
-#endif
-}
-
-static bool can_fetch(void) {
-    bool wget;
-    char *program = fetch_program(&wget);
-    const bool ok = program != NULL;
-    free(program);
-    return ok;
-}
-
-static bool http_get(const char *url, const char *dest, int timeout_ms, char **err) {
-    const bool tls = sh_starts_with(url, "https://");
-    if (!tls && !sh_starts_with(url, "http://127.0.0.1:")) {  // plain http exists for the tests' server on this machine, nothing else
-        *err = sh_strfmt("refusing to download from %s", url);
-        return false;
-    }
-    bool wget;
-    char *program = fetch_program(&wget);
-    if (!program) {
-        *err = sh_strdup("neither curl nor wget was found");
-        return false;
-    }
-    char *output = sh_strfmt("--output-document=%s", dest);
-    const char *const with_curl[] = {program, "-q", "--fail", "--location", "--silent", "--show-error", "--proto", tls ? "=https" : "=http",
-                                     "--proto-redir", tls ? "=https" : "=http", "--connect-timeout", "20", "--output", dest, url, NULL};
-    const char *const with_wget[] = {program, "--quiet", "--timeout=20", "--tries=2", output, url, NULL};
-    const char *const with_wget_tls[] = {program, "--quiet", "--https-only", "--timeout=20", "--tries=2", output, url, NULL};
-    const char *const *argv = !wget ? with_curl : tls ? with_wget_tls : with_wget;
-    sh_proc_opts o = {0};
-    o.timeout_ms = timeout_ms;
-    sh_proc_result r = {0};
-    const bool ok = sh_proc_run(argv, &o, &r);
-    if (!ok) {
-        char *why = sh_trimmed(sh_buf_str(&r.err), r.err.len);
-        *err = r.timed_out ? sh_strfmt("the download of %s timed out", sh_path_name(dest))
-             : *why        ? sh_strfmt("could not download %s: %s", sh_path_name(dest), why)
-                           : sh_strfmt("could not download %s", sh_path_name(dest));
-        free(why);
-        sh_remove_file(dest);
-    }
-    sh_proc_result_free(&r);
-    free(output);
-    free(program);
-    return ok;
-}
-
 static bool remote_versions(sh_strv *tags, char **err) {
     char *remote = env_or("SKILLHUB_UPDATE_REMOTE", PROJECT ".git");
     const char *const args[] = {"ls-remote", "--tags", "--refs", "--", remote, NULL};
@@ -341,7 +277,7 @@ static bool signed_sums(const sh_update_build *b, const char *v, const char *dir
     sh_buf sig = SH_BUF_INIT;
     bool ok = sh_mkpath(dir);
     if (!ok) *err = sh_strfmt("cannot create %s", dir);
-    ok = ok && http_get(sig_url, sig_file, SMALL_FILE_MS, err) && http_get(sums_url, sums_file, SMALL_FILE_MS, err);
+    ok = ok && sh_http_get(sig_url, sig_file, SMALL_FILE_MS, err) && sh_http_get(sums_url, sums_file, SMALL_FILE_MS, err);
     if (ok) {
         ok = sh_read_file(sums_file, MAX_SUMS, sums) && sh_read_file(sig_file, 1024, &sig) &&
              sh_update_signature_ok(sums->data, sums->len, sig.data, sig.len, b->public_key);
@@ -409,7 +345,7 @@ static char *blocked(const sh_update_build *b, sh_install_kind kind, const char 
     default: break;
     }
     if (!*b->public_key) return sh_strfmt("This build cannot verify new versions. Get the new version from %s", page);
-    if (!can_fetch()) return sh_strfmt("Neither curl nor wget was found, so it cannot download the update. Install one of them, or get it from %s", page);
+    if (!sh_http_available()) return sh_strfmt("Neither curl nor wget was found, so it cannot download the update. Install one of them, or get it from %s", page);
 #ifdef __APPLE__
     if (kind == SH_INSTALL_APP) {
         if (strstr(exe, "/AppTranslocation/")) return sh_strdup("Move Skill Hub to the Applications folder first, then update.");
@@ -641,7 +577,7 @@ bool sh_update_install(const sh_update_build *b, const sh_update_info *u, const 
     bool ok = asset != NULL && signed_sums(b, u->latest, dir, &sums, err) && sh_update_sum_of(sh_buf_str(&sums), asset, want);
     if (ok) {
         log(user, "Downloading Skill Hub");
-        ok = http_get(url, file, BIG_FILE_MS, err);
+        ok = sh_http_get(url, file, BIG_FILE_MS, err);
     } else if (!*err) {
         *err = sh_strfmt("version %s has nothing for this system", u->latest);
     }

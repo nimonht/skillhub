@@ -261,6 +261,7 @@ are never touched.
 | `add OWNER/REPO [--skill a,b \| --all]` | install skills from a GitHub repository |
 | `remove NAME` | remove a skill everywhere (a copy is kept in the backup folder) |
 | `track NAME OWNER/REPO [PATH]` | set the upstream of a skill you already have |
+| `scan [NAME...] [--json] [--reports]` | the offline check of skills: findings with file and line, exit 11 when something is high. `--reports` adds skills.sh's security reports for public GitHub skills for this run |
 | `self-update [--check] [--json]` | Skill Hub itself, where it can replace itself; otherwise it says what to do. `update` and `autoupdate` are about skills |
 | `autoupdate on\|off\|status` | daily update: systemd user timer, launchd agent, or a scheduled task. Automatic runs leave out skills on hold and updates that add or change scripts |
 | `watch on\|off\|status` | stray-skill watcher: systemd path unit, launchd agent, or a task that starts `skillhub watch --run` at logon |
@@ -303,16 +304,16 @@ manager or `sudo cmake --build build --target uninstall`; both remove only files
 
 What is planned, in order. Nothing here has a date.
 
-**Next: know what a skill does before it runs (2.0.0-beta4)**
+**Done in 2.0.0-beta4: know what a skill does before it runs**
 
-- [ ] An offline check of every skill: pipe-to-shell commands, long base64, invisible Unicode, reads of `~/.ssh` or tokens. It uses fixed rules, so
+- [x] An offline check of every skill: pipe-to-shell commands, long base64, invisible Unicode, reads of `~/.ssh` or tokens. It uses fixed rules, so
   the text of a skill cannot talk it out of a result.
-- [ ] Security reports from skills.sh for public GitHub skills, off until you turn them on, because the lookup tells skills.sh what you have installed.
+- [x] Security reports from skills.sh for public GitHub skills, off until you turn them on, because the lookup tells skills.sh what you have installed.
   Each scanner is shown with its date, never as one "safe" badge: the scanners can disagree, and a report may describe another version.
-- [ ] Those results in Review, next to the script flags, and a worse report holds an update back from automatic runs.
-- [ ] A second opinion from your own coding agent, opened in the built-in terminal with its permission prompts on. Its answer is never stored as a verdict.
+- [x] Those results in Review, next to the script flags, and a worse report holds an update back from automatic runs.
+- [x] A second opinion from your own coding agent, opened in the built-in terminal with its permission prompts on. Its answer is never stored as a verdict.
 
-**Then: updates that reach everyone**
+**Next: updates that reach everyone**
 
 - [ ] An AUR package, then Copr or an apt repository, so package managers find new versions by themselves.
 - [ ] The Windows portable zip replaces itself, as the installer does.

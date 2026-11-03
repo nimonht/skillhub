@@ -12,7 +12,7 @@ Rectangle {
     property string section: "appearance"
     readonly property var sections: [
         { id: "appearance", label: "Appearance", icon: "sun" }, { id: "layout", label: "Layout", icon: "all" },
-        { id: "terminal", label: "Terminal", icon: "terminal" }, { id: "updates", label: "Updates and sources", icon: "upgrade" }, { id: "projects", label: "Projects", icon: "branch" },
+        { id: "terminal", label: "Terminal", icon: "terminal" }, { id: "updates", label: "Updates and sources", icon: "upgrade" }, { id: "safety", label: "Safety", icon: "alert" }, { id: "projects", label: "Projects", icon: "branch" },
         { id: "storage", label: "Storage", icon: "folder" }, { id: "advanced", label: "Advanced", icon: "tool" }, { id: "about", label: "About", icon: "info" } ]
 
     function look(key, fallback) { return Theme.setting("appearance", key, fallback) }
@@ -339,6 +339,23 @@ Rectangle {
                     title: "Other terminals"
                     note: "Found on this machine: " + (app.externalTerminals.length ? app.externalTerminals.map(function (t) { return t.label }).join(", ") : "none") + ". {dir} and {shell} stand for the folder and the shell in a command of your own."
                     Field { width: parent.width; text: Theme.setting("terminal", "externalTemplate", ""); placeholderText: "kitty --directory {dir} {shell}"; onAccepted: app.setSetting("terminal", "externalTemplate", text.trim()) }
+                }
+            }
+
+            // ---- safety
+            Column {
+                visible: root.section === "safety"
+                width: parent.width
+                spacing: 16
+                Group {
+                    title: "Checks"
+                    note: "Every skill is read with fixed rules for things worth a look: downloads piped into a shell, commands that wipe files, hidden text, drop services for data, instructions to hide things from you. Nothing is sent anywhere."
+                    Toggle { width: Math.min(parent.width, 420); text: "Leave out updates that add a warning"; hint: "Automatic runs only. A new high finding, or a report that got worse, waits for you in Review"; checked: Theme.setting("updates", "autoSkipFindings", true); onToggled: app.setSetting("updates", "autoSkipFindings", checked) }
+                }
+                Group {
+                    title: "Reports from skills.sh"
+                    note: "What three outside scanners (Gen Agent Trust Hub, Socket, Snyk) found, shown for each skill. Only skills from public GitHub repositories are looked up, and their repository and name are sent to skills.sh; a private repository is never sent. Off while DO_NOT_TRACK is set."
+                    Toggle { width: Math.min(parent.width, 420); text: "Look up security reports"; checked: Theme.setting("security", "reports", false); onToggled: { app.setSetting("security", "reports", checked); if (app.selected !== "") app.readSafety(app.selected) } }
                 }
             }
 

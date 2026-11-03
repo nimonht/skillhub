@@ -7,6 +7,8 @@ Rectangle {
     id: root
     color: term.background
     property bool started: false
+    property string startIn: ""   // the folder the shell starts in, "" for the usual one
+    property string typed: ""     // typed once the shell is up, without Enter: the user starts it
     property alias title: term.title
     property alias running: term.running
     objectName: "terminalSession"
@@ -35,10 +37,12 @@ Rectangle {
         term.program = start.program
         term.arguments = start.arguments
         term.environment = start.environment
-        term.workingDirectory = app.terminalFolder()
+        term.workingDirectory = root.startIn !== "" ? root.startIn : app.terminalFolder()
         term.start()
         term.forceActiveFocus()
+        if (root.typed !== "") typeLater.start()
     }
+    Timer { id: typeLater; interval: 900; onTriggered: term.type(root.typed) }
     Connections {
         target: app
         function onBannerReady(text) {

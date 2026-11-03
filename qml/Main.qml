@@ -361,6 +361,7 @@ ApplicationWindow {
         target: app
         function onShowSettings(section) { win.settingsOpen = true }
         function onShowTerminal() { win.consoleOpen = true; activity.showTerminal() }
+        function onOpenTerminalAt(folder, command) { win.consoleOpen = true; activity.addSession(folder, command) }
         function onSettingsChanged() {   // once, when the settings first arrive
             if (win.dockChecked) return
             win.dockChecked = true

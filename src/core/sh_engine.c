@@ -12,6 +12,8 @@
 #include "sh_json.h"
 #include "sh_origin.h"
 #include "sh_path.h"
+#include "sh_reports.h"
+#include "sh_scan.h"
 #include "sh_state.h"
 #include "sh_thread.h"
 #include "sh_time.h"
@@ -66,6 +68,8 @@ struct sh_engine {
     int workers;      // repositories handled at once
     bool auto_mode;
     bool skip_scripts;
+    bool skip_findings;  // automatic runs leave out updates that bring a high finding (updates.autoSkipFindings)
+    bool watch_reports;  // and updates of skills whose security report got worse (with security.reports on)
     bool lock_failed;  // a group commit could not be written; set and read on the calling thread
     long cancelled;  // read and written through sh_atomic_*
     sh_engine_progress progress;
@@ -95,6 +99,8 @@ static bool setting_skip_scripts(void) {
 void sh_engine_set_auto(sh_engine *e) {
     e->auto_mode = true;
     e->skip_scripts = setting_skip_scripts();
+    e->skip_findings = sh_setting_bool("updates", "autoSkipFindings", true);
+    e->watch_reports = e->skip_findings && sh_reports_enabled();
 }
 
 void sh_engine_on_progress(sh_engine *e, sh_engine_progress fn, void *user) {
@@ -707,13 +713,32 @@ static char *copy_folder(const char *from, const char *to) {  // NULL, or why it
     return c.err;
 }
 
-// an automatic update that would bring in new scripts waits for the user to look at it
+// An automatic update waits for the user to look at it when it brings new scripts, when it brings a high finding of the offline
+// check, or when a security report about the skill got worse since the last update. Each reason has its own setting; a report that
+// cannot be had holds nothing.
 static bool held_back(sh_engine *e, placement *p) {
-    if (!e->skip_scripts) return false;
-    char *installed = sh_store_skill_dir(e->st, p->name);
-    p->left_out = sh_adds_scripts(p->stage, installed);
+    if (!e->skip_scripts && !e->skip_findings) return false;
+    char *installed = sh_store_skill_dir(e->st, p->name), *why = NULL;
+    if (e->skip_scripts && sh_adds_scripts(p->stage, installed)) {
+        why = sh_strdup("the update adds or changes scripts");
+    } else if (e->skip_findings && sh_scan_adds_high(installed, p->stage)) {
+        why = sh_strdup("the update brings a high finding of the offline check (skillhub scan)");
+    } else if (e->watch_reports && p->note.entry) {
+        const char *names[] = {p->name};
+        sh_report now;
+        sh_reports_get(e->st->cache, p->note.entry, names, 1, false, &now);  // the network, outside the lock
+        char *report_why = NULL;
+        sh_mutex_lock(e->m);
+        const bool worse = sh_reports_worse_than_baseline(p->name, &now, &report_why);
+        sh_mutex_unlock(e->m);
+        if (worse) why = sh_strfmt("a security report got worse: %s", report_why);
+        free(report_why);
+        sh_report_free(&now);
+    }
+    p->left_out = why != NULL;
+    if (why) sh_store_log(e->st, "left %s out: %s (skillhub update %s --review)", p->name, why, p->name);
+    free(why);
     free(installed);
-    if (p->left_out) sh_store_log(e->st, "left %s out: the update adds or changes scripts (skillhub update %s --review)", p->name, p->name);
     return p->left_out;
 }
 
@@ -836,6 +861,9 @@ static void updated(sh_engine *e, const repo_slot *s, sh_skill *sk, const char *
     set_str(&sk->description, sh_fm_value(&fm, "description"));
     sh_fm_free(&fm);
     free(md);
+    sh_mutex_lock(e->m);
+    sh_reports_remember(e->st->cache, sk->name, &sk->src);  // what the scanners say now is what a later report is compared with
+    sh_mutex_unlock(e->m);
     sh_store_log(e->st, "updated %s -> %.8s", sk->name, id);
 }
 
@@ -1205,6 +1233,9 @@ static void installed(sh_engine *e, const repo_slot *s, const install_item *it, 
     src.installed_at = sh_now_iso();
     src.updated_at = sh_strdup(src.installed_at);
     queue_entry(e, it->name, &src, remembers_tree(e, s) ? id : "", content);
+    sh_mutex_lock(e->m);
+    sh_reports_remember(e->st->cache, it->name, &src);
+    sh_mutex_unlock(e->m);
     free(content);
     sh_source_free(&src);
     sh_store_log(e->st, it->link ? "linked %s to %s" : "installed %s from %s", it->name, s->o.source);

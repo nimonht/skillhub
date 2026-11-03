@@ -21,6 +21,8 @@
 #include "sh_path.h"
 #include "sh_proc.h"
 #include "sh_projects.h"
+#include "sh_reports.h"
+#include "sh_scan.h"
 #include "sh_selfupdate.h"
 #include "sh_serve.h"
 #include "sh_store.h"
@@ -154,6 +156,7 @@ static void usage(void) {
         "                                  free space; conflicts, which hold your own edits, go only when named\n"
         "  skillhub uninstall [--dry-run] [--yes] [--keep-cache]\n"
         "                                  remove units, installed files below $HOME and the cache (keeps your skills)\n"
+        "  skillhub scan [NAME...] [--json] [--reports]   the offline check of skills (exit 11: something high); --reports adds skills.sh\n"
         "  skillhub self-update [--check] [--json]   update Skill Hub itself, or only see whether a new version is out\n"
         "  skillhub serve --stdio          the window's background service (JSON-RPC on standard input and output)\n");
     fflush(stdout);
@@ -572,6 +575,13 @@ static void print_review(const sh_review *r, bool patches) {
     outf("%s: %s\n", r->name, r->available ? "update available" : "no update, these are local edits");
     if (r->available && r->local_edits) out("  local edits will be replaced; a backup is kept\n");
     if (r->risk) out("  adds or changes scripts: read them before you agree\n");
+    if (r->added.len) {
+        outf("  the offline check finds %zu thing(s) the installed version does not have:\n", r->added.len);
+        for (size_t i = 0; i < r->added.len; ++i) {
+            const sh_finding *f = &r->added.items[i];
+            outf("    %-6s %-20s %s:%d  %s\n", f->level == SH_FIND_HIGH ? "high" : "medium", f->rule, f->file, f->line, f->excerpt);
+        }
+    }
     for (size_t i = 0; i < r->n; ++i) print_file(&r->files[i]);
     for (size_t i = 0; patches && i < r->n; ++i) print_patch(&r->files[i]);
 }
@@ -1290,6 +1300,119 @@ static lock_outcome take_mutation_lock(const char *cmd, const args_t *a, int wai
     return watcher ? LOCK_STEP_ASIDE : LOCK_BUSY;
 }
 
+#define EXIT_FINDINGS 11
+
+static void print_report(const sh_report *r) {
+    switch (r->state) {
+    case SH_REPORT_OK:
+        outf("  reports (skills.sh, %s):", r->source);
+        for (size_t i = 0; i < r->n; ++i) {
+            const sh_report_row *x = &r->rows[i];
+            outf("%s %s %s", i ? ";" : "", x->label, x->risk);
+            if (x->alerts > 0) outf(" (%d alert%s)", x->alerts, x->alerts == 1 ? "" : "s");
+            if (*x->analyzed_at) outf(", %.10s", x->analyzed_at);
+        }
+        out("\n");
+        break;
+    case SH_REPORT_NONE: outf("  reports: skills.sh has none for this skill\n"); break;
+    case SH_REPORT_PRIVATE: outf("  reports: %s is not public, so nothing was sent\n", r->source); break;
+    case SH_REPORT_FAILED: out("  reports: skills.sh could not be reached\n"); break;
+    default: break;
+    }
+}
+
+static void print_finding(const sh_finding *f) {
+    outf("  %-6s %-20s %s:%d  %s\n", f->level == SH_FIND_HIGH ? "high" : "medium", f->rule, f->file, f->line, f->excerpt);
+}
+
+// The offline check: what is worth reading before an agent follows these skills. It never says a skill is safe.
+static int cmd_scan(sh_store *st, const args_t *a) {
+    const bool json = has(a, "--json");
+    sh_skills sk;
+    sh_store_scan(st, &sk);
+    sh_strv wanted = SH_STRV_INIT;
+    for (int i = 0; i < a->n; ++i)
+        if (!sh_starts_with(a->v[i], "--")) sh_strv_push(&wanted, a->v[i]);
+    int rc = 0;
+    for (size_t i = 0; i < wanted.len; ++i)
+        if (!skill_named(&sk, wanted.items[i])) {
+            errf("no skill named %s\n", wanted.items[i]);
+            rc = 1;
+        }
+    // reports, one request per repository: --reports is consent for this run, the setting for every run, the environment's opt-out wins
+    const bool reports = has(a, "--reports") || sh_reports_enabled();
+    if (has(a, "--reports") && sh_reports_opted_out()) errf("note: DO_NOT_TRACK or DISABLE_TELEMETRY is set, so skills.sh is not asked\n");
+    sh_report *rep = sh_xcalloc(sk.len + 1, sizeof *rep);
+    for (size_t i = 0; i < sk.len && reports && rc == 0; ++i) {
+        const sh_skill *s = &sk.items[i];
+        if (rep[i].state != SH_REPORT_OFF || rep[i].source || (wanted.len && !sh_strv_contains(&wanted, s->name))) continue;
+        sh_strv names = SH_STRV_INIT;
+        size_t *idx = sh_xcalloc(sk.len, sizeof *idx), k = 0;
+        for (size_t j = i; j < sk.len; ++j) {
+            const sh_skill *t = &sk.items[j];
+            if (wanted.len && !sh_strv_contains(&wanted, t->name)) continue;
+            if (!sh_streq(t->src.source, s->src.source) || !sh_streq(t->src.type, s->src.type) || rep[j].source) continue;
+            sh_strv_push(&names, t->name);
+            idx[k++] = j;
+        }
+        sh_report *got = sh_xcalloc(k + 1, sizeof *got);
+        sh_reports_get(st->cache, &s->src, (const char *const *)names.items, k, true, got);
+        for (size_t m = 0; m < k; ++m) rep[idx[m]] = got[m];
+        free(got);
+        free(idx);
+        sh_strv_free(&names);
+    }
+    yyjson_mut_doc *d = json ? yyjson_mut_doc_new(NULL) : NULL;
+    yyjson_mut_val *list = d ? yyjson_mut_arr(d) : NULL;
+    if (d) yyjson_mut_doc_set_root(d, list);
+    size_t high = 0, medium = 0, clean = 0;
+    for (size_t i = 0; i < sk.len && rc == 0; ++i) {
+        const sh_skill *s = &sk.items[i];
+        if (wanted.len && !sh_strv_contains(&wanted, s->name)) continue;
+        sh_findings f;
+        sh_scan_dir(s->path, &f);
+        const size_t h = sh_findings_count(&f, SH_FIND_HIGH), m = sh_findings_count(&f, SH_FIND_MEDIUM);
+        high += h;
+        medium += m;
+        clean += f.len == 0;
+        if (d) {
+            yyjson_mut_val *o = yyjson_mut_obj(d), *items = yyjson_mut_arr(d);
+            yyjson_mut_obj_add_strcpy(d, o, "name", s->name);
+            yyjson_mut_obj_add_uint(d, o, "high", h);
+            yyjson_mut_obj_add_uint(d, o, "medium", m);
+            sh_findings_json(d, items, &f);
+            yyjson_mut_obj_add_val(d, o, "findings", items);
+            yyjson_mut_obj_add_bool(d, o, "truncated", f.truncated);
+            if (reports) {
+                yyjson_mut_val *r = yyjson_mut_obj(d);
+                sh_report_json(d, r, &rep[i]);
+                yyjson_mut_obj_add_val(d, o, "reports", r);
+            }
+            yyjson_mut_arr_append(list, o);
+        } else if (f.len || (reports && rep[i].state != SH_REPORT_NOT_GITHUB && rep[i].state != SH_REPORT_OFF)) {
+            outf("%s: %zu high, %zu medium\n", s->name, h, m);
+            for (size_t k = 0; k < f.len; ++k) print_finding(&f.items[k]);
+            if (f.truncated) out("  ... and more\n");
+            if (reports) print_report(&rep[i]);
+        }
+        sh_findings_free(&f);
+    }
+    for (size_t i = 0; i < sk.len; ++i) sh_report_free(&rep[i]);
+    free(rep);
+    if (d) {
+        char *text = sh_json_string(d, true);
+        outf("%s\n", text ? text : "[]");
+        free(text);
+        yyjson_mut_doc_free(d);
+    } else if (rc == 0) {
+        outf("%zu high, %zu medium; %zu skill(s) with nothing to note. The check reads text with fixed rules: no finding is no proof of safety.\n",
+             high, medium, clean);
+    }
+    sh_strv_free(&wanted);
+    sh_skills_free(&sk);
+    return rc ? rc : high ? EXIT_FINDINGS : 0;
+}
+
 static void update_log(void *user, const char *line) {
     (void)user;
     outf("%s\n", line);
@@ -1478,6 +1601,7 @@ static int run_cli(int argc, char **argv) {
     } else if (strcmp(cmd, "uninstall") == 0) rc = cmd_uninstall(&st, &a);
     else if (strcmp(cmd, "autoupdate") == 0 || strcmp(cmd, "watch") == 0) rc = cmd_automation(&st, cmd, &a);
     else if (strcmp(cmd, "self-update") == 0) rc = cmd_self_update(&st, &a);
+    else if (strcmp(cmd, "scan") == 0) rc = cmd_scan(&st, &a);
     else {
         usage();
         rc = !*cmd || strcmp(cmd, "help") == 0 || strcmp(cmd, "--help") == 0 ? 0 : 2;

@@ -9,7 +9,29 @@
 - Where the program can replace itself: the release's `SHA256SUMS` and its signature while looking, and the new version once you ask for it.
   These come from GitHub's release files, through the system's `curl` or `wget`.
 
+- Security reports, **only when you turn them on** (Settings → Safety, or `skillhub scan --reports` for one run): for each skill
+  from a **public** GitHub repository, its repository (`owner/repo`) and skill name go to `https://www.skills.sh/tele/audit`,
+  the endpoint `npx skills` uses. A repository counts as public only when an anonymous `git ls-remote` of
+  `github.com/owner/repo.git` succeeds with your git configuration and credential helpers switched off, so a private
+  repository is never sent, even one you can read. `DO_NOT_TRACK` or `DISABLE_TELEMETRY` switches reports off entirely.
+
 No telemetry, no accounts, no other endpoints.
+
+## Checking skills
+
+`skillhub scan`, the Checks section of a skill and Review read each skill's text files with fixed rules, offline: downloads
+piped into a shell, commands that wipe files or disks, invisible or reordered characters, drop services for data, instructions to
+override the agent's rules or hide things from you, reads of credential files, long encoded blobs. The rules cannot be talked out
+of a result by the skill's text, unlike a model. They find things worth reading; **no finding is no proof of safety**.
+
+Reports from skills.sh are three outside scanners' views. They often disagree (Socket calls some of Anthropic's own skills
+critical where the others say safe or low) and describe the skill upstream on their date, not necessarily your version, so
+they are shown each on its own and never added up into one verdict.
+
+*Second opinion* opens your own coding agent in the built-in terminal, never in the skill's folder: an agent treats its
+working folder as a project and would take the skill's `.claude/`, `.mcp.json` or `AGENTS.md` as its own settings. It works
+in a fresh folder that holds a copy of the skill, with the command typed but not run, so the agent asks before it does
+anything. What it answers is not stored; a skill's text can steer what an agent concludes.
 
 ## Updating Skill Hub itself
 

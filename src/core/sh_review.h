@@ -5,6 +5,8 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#include "sh_scan.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -30,6 +32,7 @@ typedef struct {
     bool truncated;    // some patch was cut, or the whole review reached its limit
     sh_diff_file *files;
     size_t n;
+    sh_findings added; // what the offline check finds in the new version and not in the installed one
     char *err;         // why there is no review
 } sh_review;
 

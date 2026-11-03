@@ -20,9 +20,9 @@ Rectangle {
         while (taken.includes(n)) n += 1
         return n
     }
-    function addSession() {
+    function addSession(folder, command) {   // both optional: a folder to start in, and a command typed but not run
         const num = freeNumber()
-        sessions.append({ sid: nextSession, num: num, name: "Terminal " + num })
+        sessions.append({ sid: nextSession, num: num, name: "Terminal " + num, folder: folder || "", command: command || "" })
         nextSession += 1
         tab = "t" + (nextSession - 1)
     }
@@ -100,6 +100,10 @@ Rectangle {
         model: sessions
         delegate: TerminalSession {
             required property int sid
+            required property string folder
+            required property string command
+            startIn: folder
+            typed: command
             anchors.fill: parent
             anchors.topMargin: bar.height
             visible: root.tab === "t" + sid

@@ -122,6 +122,9 @@ add_library(skillhub_core STATIC
     src/core/sh_path.c src/core/sh_path.h
     src/core/sh_proc.c src/core/sh_proc.h
     src/core/sh_rpc.c src/core/sh_rpc.h
+    src/core/sh_scan.c src/core/sh_scan.h
+    src/core/sh_http.c src/core/sh_http.h
+    src/core/sh_reports.c src/core/sh_reports.h
     src/core/sh_selfupdate.c src/core/sh_selfupdate.h
     src/core/sh_store.c src/core/sh_store.h
     src/core/sh_str.c src/core/sh_str.h
@@ -195,7 +198,7 @@ if(UNIX AND NOT APPLE)
 endif()
 
 if(SKILLHUB_FUZZ)
-    foreach(target frontmatter import source lock rpc)
+    foreach(target frontmatter import source lock rpc scan)
         add_executable(fuzz_${target} tests/fuzz/fuzz_${target}.c)
         target_link_libraries(fuzz_${target} PRIVATE skillhub_core)
         target_link_options(fuzz_${target} PRIVATE -fsanitize=fuzzer)
@@ -207,7 +210,7 @@ if(SKILLHUB_TESTS)
     enable_testing()
     add_executable(skillhub_unit_tests tests/unit/test_main.c tests/unit/test.h tests/unit/test_text.c tests/unit/test_paths.c
                                        tests/unit/test_frontmatter.c tests/unit/test_lock.c tests/unit/test_git.c
-                                       tests/unit/test_store.c tests/unit/test_shellstart.c tests/unit/test_selfupdate.c)
+                                       tests/unit/test_store.c tests/unit/test_shellstart.c tests/unit/test_selfupdate.c tests/unit/test_scan.c)
     target_link_libraries(skillhub_unit_tests PRIVATE skillhub_core)
     target_compile_options(skillhub_unit_tests PRIVATE ${SKILLHUB_C_WARNINGS})
     target_compile_definitions(skillhub_unit_tests PRIVATE SKILLHUB_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
