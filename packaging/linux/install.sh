@@ -36,7 +36,9 @@ DESKTOP
 command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database "$share/applications" >/dev/null 2>&1 || true
 
 echo "Skill Hub $version is installed in $root"
-case ":$PATH:" in
-    *":$bin:"*) echo "Run: skillhub" ;;
-    *) echo "$bin is not on your PATH yet. Add it, or run: $bin/skillhub" ;;
-esac
+# what the shell finds, not how PATH spells it (~/.local/share/../bin is ~/.local/bin too)
+if [ "$(command -v skillhub 2>/dev/null)" -ef "$bin/skillhub" ]; then
+    echo "Run: skillhub"
+else
+    echo "$bin is not on your PATH yet. Add it, or run: $bin/skillhub"
+fi

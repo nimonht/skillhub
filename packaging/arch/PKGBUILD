@@ -11,7 +11,7 @@ depends=('qt6-base' 'qt6-declarative' 'git' 'libuv')
 makedepends=('cmake' 'python' 'pkgconf' 'qt6-shadertools')
 options=('!debug')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$_tag.tar.gz")
-sha256sums=('SKIP')  # filled in after the tag, like every release
+sha256sums=('4ae9137bce9d5ddfcd0402b00b3ded0aa870ed7626b18563127cd01c91e49443')
 
 build() {
   cmake -B build -S "$pkgname-$_tag" -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE=None -Wno-dev
