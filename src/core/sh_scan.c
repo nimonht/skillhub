@@ -3,6 +3,7 @@
 // broad, so documentation that merely mentions a token stays medium.
 #include "sh_scan.h"
 
+#include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -136,7 +137,7 @@ static bool in_list(const char *const *list, const char *s, size_t n) {
 }
 
 // `curl ... | sh`, `wget -O- ... | sudo bash`, `bash <(curl ...)`, `eval "$(curl ...)"`, `iex (iwr ...)`
-static long pipe_to_shell(const char *lower, size_t n) {
+static ptrdiff_t pipe_to_shell(const char *lower, size_t n) {
     for (const char *const *f = FETCHERS; *f; ++f) {
         const char *hit = find_word(lower, n, *f, 0);
         if (!hit) continue;
@@ -151,18 +152,18 @@ static long pipe_to_shell(const char *lower, size_t n) {
             if (n - j >= 3 && memcmp(lower + j, "-e ", 3) == 0) j = skip_spaces(lower, n, j + 3);
             size_t k = j;
             while (k < n && (sh_uni_is_alnum((unsigned char)lower[k]) || lower[k] == '-')) ++k;
-            if (k > j && in_list(SHELLS, lower + j, k - j)) return (long)at;
+            if (k > j && in_list(SHELLS, lower + j, k - j)) return (ptrdiff_t)at;
         }
         // the shell reads what the fetcher prints: <( curl ...), $( curl ...), (iwr ...) handed to iex
         for (size_t i = at; i > 0; --i) {
             const char c = lower[i - 1];
             if (c == ' ' || c == '\t' || c == '"') continue;
             if (c == '(' && i >= 2 && (lower[i - 2] == '<' || lower[i - 2] == '$')) {
-                if (lower[i - 2] == '<') return (long)at;
+                if (lower[i - 2] == '<') return (ptrdiff_t)at;
                 const char *e = strstr(lower, "eval");
-                if (e && e < hit) return (long)at;
+                if (e && e < hit) return (ptrdiff_t)at;
             }
-            if (c == '(' && strstr(lower, "iex") && strstr(lower, "iex") < hit) return (long)at;
+            if (c == '(' && strstr(lower, "iex") && strstr(lower, "iex") < hit) return (ptrdiff_t)at;
             break;
         }
     }
@@ -177,7 +178,7 @@ static bool dangerous_target(const char *t, size_t n) {
 }
 
 // `rm -rf /`, `rm -fr ~`, `rm -r -f "$HOME"`, `mkfs.ext4 /dev/sda`, `dd if=... of=/dev/sda`, `chmod -R 777 /`, a fork bomb
-static long destructive(const char *lower, size_t n) {
+static ptrdiff_t destructive(const char *lower, size_t n) {
     for (const char *p = lower; (p = find_word(lower, n, "rm", (size_t)(p - lower))) != NULL; p += 2) {
         size_t i = (size_t)(p - lower) + 2;
         bool recursive = false;
@@ -212,8 +213,8 @@ static long destructive(const char *lower, size_t n) {
     return -1;
 }
 
-static long any_of(const char *lower, const char *const *needles) {
-    long first = -1;
+static ptrdiff_t any_of(const char *lower, const char *const *needles) {
+    ptrdiff_t first = -1;
     for (; *needles; ++needles) {
         const char *hit = strstr(lower, *needles);
         if (hit && (first < 0 || hit - lower < first)) first = hit - lower;
@@ -251,7 +252,7 @@ static bool mixed(const char *s, size_t n) {
 }
 
 // a long run of base64 or hex: something meant for a machine, not for the reader (inline images are left alone)
-static long encoded_blob(const char *line, size_t n) {
+static ptrdiff_t encoded_blob(const char *line, size_t n) {
     size_t run = 0, hex = 0;
     for (size_t i = 0; i < n; ++i) {
         run = base64_char(line[i]) ? run + 1 : 0;
@@ -267,7 +268,7 @@ static long encoded_blob(const char *line, size_t n) {
                 run = hex = 0;
                 continue;
             }
-            return (long)start;
+            return (ptrdiff_t)start;
         }
     }
     return -1;
@@ -307,7 +308,7 @@ void sh_scan_text(const char *rel, const char *text, size_t n, sh_findings *out)
         char *lower = sh_strndup(p, len);
         for (char *c = lower; *c; ++c)
             if (*c >= 'A' && *c <= 'Z') *c = (char)(*c + 32);
-        long at;
+        ptrdiff_t at;
         if ((at = pipe_to_shell(lower, len)) >= 0)
             report(out, "pipe-to-shell", "Downloads a script and runs it at once", SH_FIND_HIGH, rel, line_no, p, len, (size_t)at);
         if ((at = destructive(lower, len)) >= 0)

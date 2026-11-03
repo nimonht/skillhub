@@ -103,6 +103,12 @@ def main():
         run(env, "scan", expect=11)
         check(Audit.asked == [], "with reports off nothing may be asked: %s" % Audit.asked)
         print("ok  reports off (the default): skills.sh is asked nothing")
+        if not (shutil.which("curl") or shutil.which("wget")):  # a minimal system (CI's Debian container): nothing can be fetched
+            p = run(env, "scan", "--reports", expect=11)
+            check(Audit.asked == [] and "skills.sh could not be reached" in p.stdout, "without curl or wget it says so:\n" + p.stdout)
+            print("ok  without curl or wget, reports say skills.sh could not be reached (the rest needs one of them)")
+            print("scan smoke test passed")
+            return
 
         p = run(env, "scan", "--reports", expect=11)
         check(("acme/skills", "alpha,beta") in Audit.asked, "one question for the repository: %s" % Audit.asked)
