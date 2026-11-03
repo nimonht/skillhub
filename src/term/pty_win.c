@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <windows.h>
+#include <tlhelp32.h>
 
 #include "sh_pty.h"
 
@@ -206,14 +207,14 @@ void sh_pty_hangup(sh_pty *p) {
     }
 }
 
-// From the program's own file: a console program, or one with windows (left running, as other terminals do: VS Code from `code .`)
-static bool console_program(HANDLE process) {
+// From the program's own file: IMAGE_SUBSYSTEM_WINDOWS_CUI for a console program, _GUI for one with windows; 0 when unknown
+static WORD subsystem_of(HANDLE process) {
     wchar_t path[1024];
     DWORD len = sizeof path / sizeof *path;
-    if (!QueryFullProcessImageNameW(process, 0, path, &len)) return false;
+    if (!QueryFullProcessImageNameW(process, 0, path, &len)) return 0;
     HANDLE f = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, 0, NULL);
-    if (f == INVALID_HANDLE_VALUE) return false;
-    bool console = false;
+    if (f == INVALID_HANDLE_VALUE) return 0;
+    WORD subsystem = 0;
     IMAGE_DOS_HEADER dos;
     DWORD got = 0;
     if (ReadFile(f, &dos, sizeof dos, &got, NULL) && got == sizeof dos && dos.e_magic == IMAGE_DOS_SIGNATURE && dos.e_lfanew > 0) {
@@ -223,17 +224,48 @@ static bool console_program(HANDLE process) {
         at.QuadPart = dos.e_lfanew;
         if (SetFilePointerEx(f, at, NULL, FILE_BEGIN) && ReadFile(f, nt, sizeof nt, &got, NULL) && got == sizeof nt) {
             DWORD signature;
-            WORD subsystem;
             memcpy(&signature, nt, sizeof signature);
-            memcpy(&subsystem, nt + 4 + sizeof(IMAGE_FILE_HEADER) + 68, sizeof subsystem);
-            console = signature == IMAGE_NT_SIGNATURE && subsystem == IMAGE_SUBSYSTEM_WINDOWS_CUI;
+            if (signature == IMAGE_NT_SIGNATURE) memcpy(&subsystem, nt + 4 + sizeof(IMAGE_FILE_HEADER) + 68, sizeof subsystem);
         }
     }
     CloseHandle(f);
-    return console;
+    return subsystem;
 }
 
-// The console programs still in the job: helpers on hidden consoles, and programs that would not close with the console
+static bool started_before(HANDLE older, HANDLE younger) {
+    FILETIME a, b, unused1, unused2, unused3;
+    if (!GetProcessTimes(older, &a, &unused1, &unused2, &unused3) || !GetProcessTimes(younger, &b, &unused1, &unused2, &unused3)) return false;
+    return CompareFileTime(&a, &b) <= 0;
+}
+
+typedef struct {
+    DWORD pid, parent;
+} proc_link;
+
+// Started, at any depth, by a program with windows that is still in the job: that app's own, such as the shells in VS Code's
+// terminal after `code .`, which go on with it. Each step up must have started earlier, or the number went to another process.
+static bool under_windowed_app(HANDLE job, const proc_link *links, size_t n, DWORD pid, HANDLE process) {
+    DWORD at = pid;
+    for (int depth = 0; depth < 32; ++depth) {
+        DWORD parent = 0;
+        for (size_t i = 0; i < n && !parent; ++i)
+            if (links[i].pid == at) parent = links[i].parent;
+        if (!parent || parent == at) return false;
+        HANDLE up = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, parent);
+        if (!up) return false;
+        BOOL in = FALSE;
+        const bool ours = IsProcessInJob(up, job, &in) && in && started_before(up, process);
+        const WORD subsystem = ours ? subsystem_of(up) : 0;
+        CloseHandle(up);
+        if (!ours) return false;   // out of the job: the terminal itself started it
+        if (subsystem == IMAGE_SUBSYSTEM_WINDOWS_GUI) return true;
+        at = parent;
+    }
+    return false;
+}
+
+// The console programs still in the job: helpers on hidden consoles, and programs that would not close with the console. Programs
+// with windows of their own stay, and so does what they started.
 static void end_console_programs(HANDLE job) {
     if (!job) return;
     const DWORD room = 1024;
@@ -245,18 +277,38 @@ static void end_console_programs(HANDLE job) {
         if (!QueryInformationJobObject(job, JobObjectBasicProcessIdList, list, (DWORD)(sizeof *list + room * sizeof(ULONG_PTR)), NULL) &&
             GetLastError() != ERROR_MORE_DATA)
             break;
+        // who started whom, for every process now: the job knows its members, not their parents
+        size_t n = 0, cap = 0;
+        proc_link *links = NULL;
+        HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+        if (snap != INVALID_HANDLE_VALUE) {
+            PROCESSENTRY32W e;
+            e.dwSize = sizeof e;
+            for (BOOL more = Process32FirstW(snap, &e); more; more = Process32NextW(snap, &e)) {
+                if (n == cap) {
+                    cap = cap ? cap * 2 : 512;
+                    links = need(realloc(links, cap * sizeof *links));
+                }
+                links[n].pid = e.th32ProcessID;
+                links[n].parent = e.th32ParentProcessID;
+                ++n;
+            }
+            CloseHandle(snap);
+        }
         const ULONG_PTR *ids = list->ProcessIdList;
         int ended = 0;
         for (DWORD i = 0; i < list->NumberOfProcessIdsInList; ++i) {
             HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_TERMINATE | SYNCHRONIZE, FALSE, (DWORD)ids[i]);
             if (!h) continue;
             BOOL in = FALSE;  // the number may have gone to another process since the list was made
-            if (IsProcessInJob(h, job, &in) && in && console_program(h) && TerminateProcess(h, 1)) {
+            if (IsProcessInJob(h, job, &in) && in && subsystem_of(h) == IMAGE_SUBSYSTEM_WINDOWS_CUI &&
+                !under_windowed_app(job, links, n, (DWORD)ids[i], h) && TerminateProcess(h, 1)) {
                 WaitForSingleObject(h, 200);
                 ++ended;
             }
             CloseHandle(h);
         }
+        free(links);
         if (!ended) break;
     }
     free(list);
