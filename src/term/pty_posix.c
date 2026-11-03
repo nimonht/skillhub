@@ -23,9 +23,15 @@
 
 extern char **environ;
 
+typedef struct {
+    pid_t pid, pgid;
+} member;
+
 struct sh_pty {
     int fd;
     pid_t pid;
+    member *members;  // the session as the hangup found it: macOS no longer finds a session once its leader has exited
+    size_t n_members;
 };
 
 // out of memory ends the program, as sh_xmalloc does in the core, which is not linked here
@@ -128,13 +134,15 @@ void sh_pty_resize(sh_pty *p, int cols, int rows) {
     ioctl(p->fd, TIOCSWINSZ, &size);
 }
 
-// Every process in the terminal's session gets `sig`: the shell, and all it started that did not leave the session with setsid.
-// An interactive shell gives each command a process group of its own, so the shell's group alone misses them: codex, for one,
-// catches the hangup and would run on with nobody to talk to. Returns how many were signalled.
-static int signal_session(pid_t sid, int sig) {
-    if (sid <= 1) return 0;
+// Every process in the terminal's session: the shell, and all it started that did not leave the session with setsid. An interactive
+// shell gives each command a process group of its own, so the shell's group alone misses them: codex, for one, catches the
+// hangup and would run on with nobody to talk to. Malloc'd; NULL with *n = 0 when processes cannot be listed here.
+static member *session_members(pid_t sid, size_t *n) {
+    *n = 0;
+    if (sid <= 1) return NULL;
     const pid_t self = getpid();
-    int hit = 0;
+    size_t cap = 16;
+    member *out = need(malloc(cap * sizeof *out));
 #if defined(__linux__)
     DIR *d = opendir("/proc");
     if (d) {
@@ -142,50 +150,68 @@ static int signal_session(pid_t sid, int sig) {
         while ((e = readdir(d))) {
             char *end;
             const long pid = strtol(e->d_name, &end, 10);
-            if (*end || pid <= 1 || pid == self) continue;
-            if (getsid((pid_t)pid) == sid && kill((pid_t)pid, sig) == 0) ++hit;
+            if (*end || pid <= 1 || pid == self || getsid((pid_t)pid) != sid) continue;
+            if (*n == cap) out = need(realloc(out, (cap *= 2) * sizeof *out));
+            out[(*n)++] = (member){(pid_t)pid, getpgid((pid_t)pid)};
         }
         closedir(d);
-        return hit;
     }
 #elif defined(__APPLE__)
-    // the kernel lists a session's processes itself; getsid() may refuse one in another session
     int mib[4] = {CTL_KERN, KERN_PROC, KERN_PROC_SESSION, sid};
     size_t len = 0;
     if (sysctl(mib, 4, NULL, &len, NULL, 0) == 0) {
         len += 32 * sizeof(struct kinfo_proc);  // room for some started since
-        struct kinfo_proc *list = malloc(len);
-        if (list && sysctl(mib, 4, list, &len, NULL, 0) == 0) {
+        struct kinfo_proc *list = need(malloc(len));
+        if (sysctl(mib, 4, list, &len, NULL, 0) == 0) {
             for (size_t i = 0; i < len / sizeof *list; ++i) {
                 const pid_t pid = list[i].kp_proc.p_pid;
-                if (pid > 1 && pid != self && kill(pid, sig) == 0) ++hit;
+                if (pid <= 1 || pid == self) continue;
+                if (*n == cap) out = need(realloc(out, (cap *= 2) * sizeof *out));
+                out[(*n)++] = (member){pid, list[i].kp_eproc.e_pgid};
             }
-            free(list);
-            return hit;
         }
         free(list);
     }
 #endif
-    return kill(-sid, sig) == 0;  // no list of processes: the shell's own group, at least
+    return out;
+}
+
+// `sig` to the session as it is now and as the hangup found it; a remembered process only while it is still in the same group,
+// since its number may have gone to another. Returns how many were signalled.
+static int signal_session(sh_pty *p, int sig) {
+    if (p->pid <= 1) return 0;
+    size_t n = 0;
+    member *now = session_members(p->pid, &n);
+    int hit = 0;
+    for (size_t i = 0; i < n; ++i) hit += kill(now[i].pid, sig) == 0;
+    for (size_t i = 0; i < p->n_members; ++i) {
+        bool seen = false;
+        for (size_t j = 0; j < n && !seen; ++j) seen = now[j].pid == p->members[i].pid;
+        if (!seen && getpgid(p->members[i].pid) == p->members[i].pgid) hit += kill(p->members[i].pid, sig) == 0;
+    }
+    free(now);
+    if (!n && !p->n_members) hit += kill(-p->pid, sig) == 0;  // no list of processes: the shell's own group, at least
+    return hit;
 }
 
 // Those that fork while being killed: a few more rounds, until none is left
-static void kill_session(pid_t sid) {
-    for (int round = 0; round < 4 && signal_session(sid, SIGKILL) > 0; ++round) usleep(5000);
+static void kill_session(sh_pty *p) {
+    for (int round = 0; round < 4 && signal_session(p, SIGKILL) > 0; ++round) usleep(5000);
 }
 
 void sh_pty_hangup(sh_pty *p) {
     if (p->pid <= 0) return;
-    signal_session(p->pid, SIGHUP);
-    signal_session(p->pid, SIGCONT);  // a stopped job hears the hangup too
+    if (!p->members) p->members = session_members(p->pid, &p->n_members);
+    signal_session(p, SIGHUP);
+    signal_session(p, SIGCONT);  // a stopped job hears the hangup too
 }
 
 void sh_pty_kill(sh_pty *p) {
-    if (p->pid > 0) kill_session(p->pid);
+    if (p->pid > 0) kill_session(p);
 }
 
 // how many besides the shell are still in the session (a zombie counts until it is reaped)
-static int others_in_session(pid_t sid) { return signal_session(sid, 0) - (kill(sid, 0) == 0); }
+static int others_in_session(sh_pty *p) { return signal_session(p, 0) - (kill(p->pid, 0) == 0); }
 
 void sh_pty_free(sh_pty *p) {
     if (!p) return;
@@ -193,17 +219,18 @@ void sh_pty_free(sh_pty *p) {
     if (p->pid > 0) {
         // A terminal's programs end with it; one that should outlive it leaves the session (setsid). The hangup alone is not enough:
         // macOS revokes the terminal when the shell exits, so a program that ignores the hangup no longer even holds it.
-        if (others_in_session(p->pid) > 0) {
-            signal_session(p->pid, SIGTERM);
-            signal_session(p->pid, SIGCONT);
-            for (int i = 0; i < 50 && others_in_session(p->pid) > 0; ++i) usleep(10000);
-            kill_session(p->pid);
+        if (others_in_session(p) > 0) {
+            signal_session(p, SIGTERM);
+            signal_session(p, SIGCONT);
+            for (int i = 0; i < 50 && others_in_session(p) > 0; ++i) usleep(10000);
+            kill_session(p);
         }
         int status;
         if (waitpid(p->pid, &status, WNOHANG) == 0) {
-            kill_session(p->pid);  // before the shell is reaped: until then its number cannot go to another session
+            kill_session(p);  // before the shell is reaped: until then its number cannot go to another session
             waitpid(p->pid, &status, 0);
         }
     }
+    free(p->members);
     free(p);
 }
