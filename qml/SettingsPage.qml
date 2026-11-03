@@ -17,7 +17,7 @@ Rectangle {
 
     function look(key, fallback) { return Theme.setting("appearance", key, fallback) }
     function setLook(key, value) { app.setSetting("appearance", key, value) }
-    readonly property var accent: look("accent", { source: "default", color: "#34E0A6" })
+    readonly property var accent: { const a = look("accent", null); return a && a.source ? a : { source: "default", color: "#34E0A6" } }
     readonly property string seed: accent.source === "system" ? app.systemAccent : (accent.color || "#34E0A6")
     readonly property var lch: app.oklch(seed) || { l: 0.8, c: 0.14, h: 165 }
     function setAccent(source, color) { setLook("accent", { source: source, color: color === undefined ? accent.color : color }) }

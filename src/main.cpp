@@ -149,6 +149,7 @@ int main(int argc, char **argv) {
                     if (opt("--action") == QLatin1String("update-all")) controller.updateAll();
                     if (opt("--action") == QLatin1String("check")) controller.checkUpdates();
                     if (opt("--action") == QLatin1String("adopt")) controller.adopt();
+                    if (opt("--action") == QLatin1String("accent")) QMetaObject::invokeMethod(window, "pickAccent", Q_ARG(QVariant, opt("--accent")));   // as the settings page does
                     if (opt("--action") == QLatin1String("app-update")) controller.installAppUpdate();   // the button: on success the window quits by itself
                     if (opt("--action") == QLatin1String("restart")) {  // twice: the second one is what a stuck stop would break
                         controller.restartBackend();

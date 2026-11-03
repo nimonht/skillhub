@@ -22,6 +22,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
+#include <QJSValue>
 #include <QLocale>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -772,14 +773,22 @@ void AppController::applySettings(const QJsonObject &s) {
     emit themeChanged();
 }
 
+// null counts as unset: 2.0.0-beta4 saved a picked accent as null (see jsonOf), and the window must not stay stuck on that
 QVariant AppController::setting(const QString &section, const QString &key, const QVariant &fallback) const {
     const QJsonValue v = settings_.value(section).toObject().value(key);
-    return v.isUndefined() ? fallback : v.toVariant();
+    return v.isUndefined() || v.isNull() ? fallback : v.toVariant();
+}
+
+// What QML passes in. Some Qt versions (6.8, which the releases ship) hand a JavaScript object or array over as a QJSValue, and
+// QJsonValue::fromVariant makes null of that, so the accent and the project folders were saved as null. Others convert it first.
+static QJsonValue jsonOf(const QVariant &value) {
+    if (value.metaType() == QMetaType::fromType<QJSValue>()) return QJsonValue::fromVariant(value.value<QJSValue>().toVariant());
+    return QJsonValue::fromVariant(value);
 }
 
 void AppController::setSetting(const QString &section, const QString &key, const QVariant &value) {
     QJsonObject part = settings_.value(section).toObject();
-    part.insert(key, QJsonValue::fromVariant(value));
+    part.insert(key, jsonOf(value));
     QJsonObject next = settings_;
     next.insert(section, part);
     applySettings(next);
@@ -788,6 +797,7 @@ void AppController::setSetting(const QString &section, const QString &key, const
 }
 
 void AppController::setThemeMode(const QString &m) { setSetting(QStringLiteral("appearance"), QStringLiteral("theme"), m); }
+
 
 void AppController::setReduceMotion(bool on) { setSetting(QStringLiteral("appearance"), QStringLiteral("reduceMotion"), on); }
 

@@ -83,8 +83,34 @@ def hostile_text():
     print("ok  hostile text")
 
 
+def qml_errors(name, p):
+    bad = [l for l in p.stderr.splitlines() if re.search(r"\.qml:\d+|TypeError|ReferenceError|Binding loop|is not installed|module .* is not", l)]
+    if bad:
+        fail("%s: QML reported errors:\n%s" % (name, "\n".join(bad)))
+
+
 def config_file():
     return os.path.join(env.get("SKILLHUB_CONFIG") or os.path.join(home, "AppData", "Roaming", "skillhub"), "settings.json")
+
+
+def accent():
+    """A colour picked in the settings page is saved as a colour. Qt 6.8 hands a JavaScript object to C++ as a QJSValue, and
+    2.0.0-beta4 saved that as null; the page then threw on every accent button. Starts from such a file, which must not break it."""
+    os.makedirs(os.path.dirname(config_file()), exist_ok=True)
+    with open(config_file(), "w") as f:
+        json.dump({"version": 1, "appearance": {"accent": None}}, f)
+    p = subprocess.run([BIN, "gui", "--shot", os.path.join(OUT, "accent.png"), "--theme", "dark", "--size", "1280x800", "--mode", "settings",
+                        "--section", "appearance", "--action", "accent", "--accent", "#5B8DEF", "--settle", "10"],
+                       env=env, capture_output=True, text=True, timeout=240)
+    if p.returncode != 0:
+        fail("accent: exit %d\n%s" % (p.returncode, p.stderr))
+    qml_errors("accent", p)
+    with open(config_file()) as f:
+        saved = json.load(f).get("appearance", {}).get("accent")
+    if saved != {"source": "custom", "color": "#5B8DEF"}:
+        fail("accent: the picked colour was saved as %r\n--- stderr\n%s" % (saved, p.stderr))
+    os.remove(config_file())
+    print("ok  accent")
 
 
 def alive(pid):
@@ -262,6 +288,7 @@ try:
         if p.returncode != 0:
             fail("terminal flood: exit %d\n%s" % (p.returncode, p.stderr))
         print("ok  terminal flood")
+    accent()
     terminal_close(shell_env)
     hostile_text()
     print("gui launch test passed (screenshots in %s)" % OUT)

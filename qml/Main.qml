@@ -250,6 +250,8 @@ ApplicationWindow {
     readonly property string look: Theme.material + (Theme.dark ? "/dark" : "/light")
     onLookChanged: app.applyMaterial(win, Theme.dark)
 
+    // for the test of the accent: through the settings page, which hands the backend a JavaScript object
+    function pickAccent(hex) { settings.setAccent("custom", hex) }
     // for the test of the terminal
     function typeInTerminal(text) { const s = activity.sessionItem(); if (s) s.typeText(text) }
     function terminalScreen() { const s = activity.sessionItem(); return s ? s.screenText() : "" }
