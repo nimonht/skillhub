@@ -1,5 +1,23 @@
 # Changelog
 
+## 2.0.0-beta4 - 2026-11-03
+
+Know what a skill does before an agent follows it. From beta3 this version arrives through the update button.
+
+- **An offline check of every skill.** `skillhub scan`, a skill's new Checks section and Review read every text file with fixed rules:
+  downloads piped into a shell, commands that wipe files or disks, invisible or reordered characters, drop services for data,
+  instructions to override the agent's rules or hide things from you, reads of credential files, long encoded blobs. Each finding has
+  a level, a file and a line. The rules were tuned until Anthropic's and Vercel's official skills show nothing high. A finding is
+  something to read; no finding is no proof of safety.
+- **Security reports from skills.sh, if you want them.** Settings → Safety turns them on (off by default), and `skillhub scan
+  --reports` asks once. Each of the three scanners is shown with its result and date, never added up: they disagree, Socket for
+  example calls some of Anthropic's own skills critical. Only public GitHub repositories are looked up, checked without your
+  credentials, so a private one is never sent. `DO_NOT_TRACK` switches reports off.
+- **Automatic runs wait for you** when an update brings a new high finding, or when a scanner's report got worse since the last
+  update. Review shows why; a manual update still goes through. Settings → Safety turns this off.
+- **A second opinion from your own agent.** Claude Code, Codex or Gemini CLI opens in the built-in terminal on a copy of the skill,
+  never in its folder, with the command typed for you to start. Nothing it says is stored.
+
 ## 2.0.0-beta3 - 2026-11-02
 
 Install this version by hand once: earlier versions have no updater. From here on it updates itself.
