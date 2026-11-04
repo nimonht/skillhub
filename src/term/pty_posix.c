@@ -157,15 +157,16 @@ static member *session_members(pid_t sid, size_t *n) {
         closedir(d);
     }
 #elif defined(__APPLE__)
-    int mib[4] = {CTL_KERN, KERN_PROC, KERN_PROC_SESSION, sid};
+    int mib[3] = {CTL_KERN, KERN_PROC, KERN_PROC_ALL};
     size_t len = 0;
-    if (sysctl(mib, 4, NULL, &len, NULL, 0) == 0) {
+    if (sysctl(mib, 3, NULL, &len, NULL, 0) == 0 && len > 0) {
         len += 32 * sizeof(struct kinfo_proc);  // room for some started since
         struct kinfo_proc *list = need(malloc(len));
-        if (sysctl(mib, 4, list, &len, NULL, 0) == 0) {
-            for (size_t i = 0; i < len / sizeof *list; ++i) {
+        if (sysctl(mib, 3, list, &len, NULL, 0) == 0) {
+            const size_t count = len / sizeof(struct kinfo_proc);
+            for (size_t i = 0; i < count; ++i) {
                 const pid_t pid = list[i].kp_proc.p_pid;
-                if (pid <= 1 || pid == self) continue;
+                if (pid <= 1 || pid == self || getsid(pid) != sid) continue;
                 if (*n == cap) out = need(realloc(out, (cap *= 2) * sizeof *out));
                 out[(*n)++] = (member){pid, list[i].kp_eproc.e_pgid};
             }
@@ -217,6 +218,7 @@ void sh_pty_free(sh_pty *p) {
     if (!p) return;
     close(p->fd);
     if (p->pid > 0) {
+        if (!p->members) p->members = session_members(p->pid, &p->n_members);
         // A terminal's programs end with it; one that should outlive it leaves the session (setsid). The hangup alone is not enough:
         // macOS revokes the terminal when the shell exits, so a program that ignores the hangup no longer even holds it.
         if (others_in_session(p) > 0) {
