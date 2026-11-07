@@ -183,7 +183,9 @@ Rectangle {
             }
             Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Theme.line; opacity: 0.5 }
             TapHandler {
-                onTapped: (point, button) => { list.forceActiveFocus(); root.choose(line.index, point.modifiers & Qt.ControlModifier, point.modifiers & Qt.ShiftModifier) }
+                id: tap
+                // the handler's point knows the modifiers; the event point that tapped() passes does not
+                onTapped: { list.forceActiveFocus(); root.choose(line.index, tap.point.modifiers & Qt.ControlModifier, tap.point.modifiers & Qt.ShiftModifier) }
                 onDoubleTapped: line.opened = !line.opened
             }
         }
