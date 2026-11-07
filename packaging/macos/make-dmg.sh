@@ -1,6 +1,6 @@
 #!/bin/sh
 # Builds dist/SkillHub-VERSION-macos-universal.dmg from a CMake build directory (needs Qt's macdeployqt, run on macOS).
-#   packaging/macos/make-dmg.sh build 2.0.0-beta5
+#   packaging/macos/make-dmg.sh build 2.0.0-beta6
 # The bundle holds the window (Contents/MacOS/skillhub-gui) and the command line (Contents/MacOS/skillhub); the last line
 # printed is the command line's path.
 # The app is signed ad hoc only (no Apple developer identity): Gatekeeper asks the user to confirm the first start.

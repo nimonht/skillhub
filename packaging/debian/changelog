@@ -1,3 +1,11 @@
+skillhub (2.0.0~beta6) unstable; urgency=medium
+
+  * A log viewer and a diagnostic report; the terminal keeps the keyboard
+    and scrolls; Liquid Glass on macOS 26; no flicker on hover in the light
+    theme.
+
+ -- nimonht <181256175+nimonht@users.noreply.github.com>  Sat, 07 Nov 2026 16:00:00 +0700
+
 skillhub (2.0.0~beta5) unstable; urgency=medium
 
   * Closing a terminal ends the programs in it; the accent and the sliders

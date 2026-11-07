@@ -1,7 +1,7 @@
 # Maintainer: nimonht
 pkgname=skillhub
-pkgver=2.0.0beta5
-_tag=2.0.0-beta5  # pacman forbids a hyphen in pkgver, and 2.0.0beta1 sorts before 2.0.0
+pkgver=2.0.0beta6
+_tag=2.0.0-beta6  # pacman forbids a hyphen in pkgver, and 2.0.0beta1 sorts before 2.0.0
 pkgrel=1
 pkgdesc='One skills folder for every coding agent: a C command line and a native Qt6 window'
 arch=('x86_64' 'aarch64')

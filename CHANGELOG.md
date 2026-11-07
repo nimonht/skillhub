@@ -1,5 +1,42 @@
 # Changelog
 
+## 2.0.0-beta6 - 2026-11-07
+
+The last beta before 2.0.0: tools for finding out what went wrong, a terminal that keeps its keys, and the glass of macOS 26. From
+beta3 and later this version arrives through the Update button.
+
+- **A log viewer.** The dock has a *Log* tab (`Ctrl+Shift+L`) with every line of the session and the one before: what the window, Qt and the
+  background service said. Filter by level (all, warnings, errors) and by side (window or service), search, follow the newest line, wrap long
+  lines, select lines and copy them, or save what is shown. The lines are also kept in `logs/skillhub.log` in the cache folder, five files
+  of 1 MiB, so they survive a crash; before this, Qt's warnings and the background service's standard error were lost or sat in a file
+  nothing showed. The Windows window, which has no console, shows its warnings here for the first time.
+- **A diagnostic report.** *Settings, Advanced, Diagnostics* saves or copies a text file with versions, system, graphics, folders,
+  settings, memory use of the window and of the background service, and the end of the log; `skillhub diagnose [FILE]` makes the part the
+  command line knows. The home folder is written as `~`, user and host names are left out, and nothing is sent anywhere.
+- **Memory dumps, by the system's tool.** The same page shows the two process numbers and the steps for Task Manager's *Create memory
+  dump file* (and `gcore` or `lldb` elsewhere). Skill Hub does not write dumps itself: an unsigned program that can read memory looks like a
+  credential stealer to an antivirus. CI now fails a Windows build whose programs import `MiniDumpWriteDump`, `dbghelp` or the functions
+  that read another program's memory.
+- **The terminal keeps the keyboard.** A focused terminal owns every key except a few chords of the window: `/` no longer opens the
+  search, `Esc` no longer dismisses a panel, and `F5`, `Ctrl+R`, `Ctrl+F`, `Ctrl+N`, `Ctrl+U` and `Ctrl+J` reach the shell. Switching tabs, opening
+  the dock or starting a terminal gives it the keyboard; clicking a tab no longer takes it away. On macOS the Control key is a Control key
+  again (it was sent as Command), and `Cmd+C` and `Cmd+V` copy and paste.
+- **The terminal scrolls.** A touchpad or a finely stepped wheel moved the history by nothing at all (steps under a notch were rounded
+  down); they add up now. A shell or a spinner that wrote while you were reading used to pull the view back to the bottom; the view stays
+  on what you are reading until you type. In `less`, `vim`, `tmux` and full-screen agents the wheel goes to the program (mouse reports,
+  or arrow keys), and `Shift` takes it back. `Shift+PageUp`, `PageDown`, `Home` and `End` move through the history, and a thin bar shows where
+  you are.
+- **Liquid Glass.** On macOS 26 the window's glass takes the theme's appearance instead of the system's, the effect view is found
+  again when the material changes (it was most likely added again each time), and the panels are far more see-through (their floor is 0.74 and 0.62
+  instead of 0.89 and 0.83; `tests/contrast.py` still holds every text to 4.5:1). Toasts, the project menu and tooltips are redrawn as glass:
+  a lens that bends what is behind at the rim, bright edges lit from the top left, a faint colour fringe, frosting, and a soft shadow. The side
+  panels get a lit rim. This was written without a Mac: please report what it looks like on macOS 26.
+- **No flicker on hover in the light theme.** Hovering a row, a rail entry, a switch or a button faded its fill from `transparent`, which
+  is black without opacity, so every hover flashed dark and moving over a list flickered and felt slow. The fills now fade from their own colour.
+- **Windows.** The shell of a terminal starts inside its job (the job-list attribute) instead of suspended and resumed, which is one less
+  call of the kind an antivirus is suspicious of. If Microsoft Defender blocks the unsigned programs anyway, the README says what to do;
+  signing them is the lasting answer and is not done yet.
+
 ## 2.0.0-beta5 - 2026-11-03
 
 The fixes planned as "beta 4.1", and the window in Vietnamese. It is called beta5 because the updater in beta3 and beta4 reads
