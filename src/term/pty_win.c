@@ -15,6 +15,9 @@ typedef void(WINAPI *close_fn)(void *);
 #ifndef PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE
 #define PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE 0x00020016
 #endif
+#ifndef PROC_THREAD_ATTRIBUTE_JOB_LIST
+#define PROC_THREAD_ATTRIBUTE_JOB_LIST 0x0002000D
+#endif
 
 struct sh_pty {
     void *console;
@@ -64,6 +67,20 @@ static void quote(wchar_t *out, size_t *at, const wchar_t *arg) {
     out[(*at)++] = L'"';
 }
 
+// The attributes of the shell's start: its pseudo console and, when there is one, the job it starts in. A process that starts in its
+// job needs no suspended start and no later assignment, so nothing of it runs outside the job. `job` points at a handle that stays valid
+// until CreateProcess has returned, or is NULL.
+static LPPROC_THREAD_ATTRIBUTE_LIST start_attributes(void *console, HANDLE *job) {
+    const DWORD count = job ? 2 : 1;
+    SIZE_T bytes = 0;
+    InitializeProcThreadAttributeList(NULL, count, 0, &bytes);
+    LPPROC_THREAD_ATTRIBUTE_LIST list = need(malloc(bytes));
+    InitializeProcThreadAttributeList(list, count, 0, &bytes);
+    UpdateProcThreadAttribute(list, 0, PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE, console, sizeof console, NULL, NULL);
+    if (job) UpdateProcThreadAttribute(list, 0, PROC_THREAD_ATTRIBUTE_JOB_LIST, job, sizeof *job, NULL, NULL);
+    return list;
+}
+
 sh_pty *sh_pty_spawn(const char *program, const char *const *argv, const char *cwd, const char *const *env, int cols, int rows, char **err) {
     HMODULE kernel = GetModuleHandleW(L"kernel32.dll");
     const create_fn create = (create_fn)(void *)GetProcAddress(kernel, "CreatePseudoConsole");
@@ -91,15 +108,20 @@ sh_pty *sh_pty_spawn(const char *program, const char *const *argv, const char *c
     CloseHandle(in_read);
     CloseHandle(out_write);
 
+    // A job holds what the shell starts, so closing the terminal can find it: programs that start helpers with hidden consoles of
+    // their own (codex, node) leave those running when the terminal's console closes. A program may still leave the job on purpose.
+    HANDLE job = CreateJobObjectW(NULL, NULL);
+    if (job) {
+        JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits;
+        memset(&limits, 0, sizeof limits);
+        limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_BREAKAWAY_OK;
+        SetInformationJobObject(job, JobObjectExtendedLimitInformation, &limits, sizeof limits);
+    }
     STARTUPINFOEXW si;
     memset(&si, 0, sizeof si);
     si.StartupInfo.cb = sizeof si;
     si.StartupInfo.dwFlags = STARTF_USESTDHANDLES;  // with none given: otherwise a redirected parent hands the shell its own stdio, and the console stays empty
-    SIZE_T bytes = 0;
-    InitializeProcThreadAttributeList(NULL, 1, 0, &bytes);
-    si.lpAttributeList = need(malloc(bytes));
-    InitializeProcThreadAttributeList(si.lpAttributeList, 1, 0, &bytes);
-    UpdateProcThreadAttribute(si.lpAttributeList, 0, PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE, console, sizeof console, NULL, NULL);
+    si.lpAttributeList = start_attributes(console, job ? &job : NULL);
 
     size_t room = 16;
     for (size_t i = 0; argv[i]; ++i) room += 3 * strlen(argv[i]) + 4;
@@ -131,27 +153,19 @@ sh_pty *sh_pty_spawn(const char *program, const char *const *argv, const char *c
         SetEnvironmentVariableW(names[i], value);
         free(value);
     }
-    // A job holds what the shell starts, so closing the terminal can find it: programs that start helpers with hidden consoles of
-    // their own (codex, node) leave those running when the terminal's console closes. A program may still leave the job on purpose.
-    HANDLE job = CreateJobObjectW(NULL, NULL);
-    if (job) {
-        JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits;
-        memset(&limits, 0, sizeof limits);
-        limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_BREAKAWAY_OK;
-        SetInformationJobObject(job, JobObjectExtendedLimitInformation, &limits, sizeof limits);
-    }
     wchar_t *wprog = wide(program), *wcwd = cwd && *cwd ? wide(cwd) : NULL;
     PROCESS_INFORMATION pi;
-    const DWORD flags = EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT | (job ? CREATE_SUSPENDED : 0);  // in the job before it starts anything
-    const BOOL ok = CreateProcessW(wprog, line, NULL, NULL, FALSE, flags, NULL, wcwd, &si.StartupInfo, &pi);
-    const DWORD failure = GetLastError();
-    if (ok && job) {
-        if (!AssignProcessToJobObject(job, pi.hProcess)) {  // a terminal without the job still works: it ends the shell alone, as before
-            CloseHandle(job);
-            job = NULL;
-        }
-        ResumeThread(pi.hThread);  // whatever happened to the job: a shell left suspended would be a dead terminal
+    const DWORD flags = EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT;
+    BOOL ok = CreateProcessW(wprog, line, NULL, NULL, FALSE, flags, NULL, wcwd, &si.StartupInfo, &pi);
+    if (!ok && job) {  // a terminal without the job still works: it ends the shell alone, as before
+        DeleteProcThreadAttributeList(si.lpAttributeList);
+        free(si.lpAttributeList);
+        CloseHandle(job);
+        job = NULL;
+        si.lpAttributeList = start_attributes(console, NULL);
+        ok = CreateProcessW(wprog, line, NULL, NULL, FALSE, flags, NULL, wcwd, &si.StartupInfo, &pi);
     }
+    const DWORD failure = GetLastError();
     for (size_t i = 0; i < vars; ++i) {
         if (names[i]) SetEnvironmentVariableW(names[i], kept[i]);  // NULL: it was not set
         free(names[i]);
