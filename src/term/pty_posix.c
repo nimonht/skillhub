@@ -178,17 +178,19 @@ static member *session_members(pid_t sid, size_t *n) {
 }
 
 // `sig` to the session as it is now and as the hangup found it; a remembered process only while it is still in the same group,
-// since its number may have gone to another. Returns how many were signalled.
+// since its number may have gone to another. The shell is signalled too, but not counted: once it has exited (a zombie until it is
+// reaped) one system still finds it in the session and another does not, and counting it made "is anything else left?" depend on
+// which. Returns how many others were signalled.
 static int signal_session(sh_pty *p, int sig) {
     if (p->pid <= 1) return 0;
     size_t n = 0;
     member *now = session_members(p->pid, &n);
     int hit = 0;
-    for (size_t i = 0; i < n; ++i) hit += kill(now[i].pid, sig) == 0;
+    for (size_t i = 0; i < n; ++i) hit += (kill(now[i].pid, sig) == 0) && now[i].pid != p->pid;
     for (size_t i = 0; i < p->n_members; ++i) {
         bool seen = false;
         for (size_t j = 0; j < n && !seen; ++j) seen = now[j].pid == p->members[i].pid;
-        if (!seen && getpgid(p->members[i].pid) == p->members[i].pgid) hit += kill(p->members[i].pid, sig) == 0;
+        if (!seen && getpgid(p->members[i].pid) == p->members[i].pgid) hit += (kill(p->members[i].pid, sig) == 0) && p->members[i].pid != p->pid;
     }
     free(now);
     if (!n && !p->n_members) hit += kill(-p->pid, sig) == 0;  // no list of processes: the shell's own group, at least
@@ -212,7 +214,7 @@ void sh_pty_kill(sh_pty *p) {
 }
 
 // how many besides the shell are still in the session (a zombie counts until it is reaped)
-static int others_in_session(sh_pty *p) { return signal_session(p, 0) - (kill(p->pid, 0) == 0); }
+static int others_in_session(sh_pty *p) { return signal_session(p, 0); }
 
 void sh_pty_free(sh_pty *p) {
     if (!p) return;
