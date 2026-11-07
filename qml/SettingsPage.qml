@@ -586,7 +586,7 @@ Rectangle {
         modal: true
         focus: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-        anchors.centerIn: Overlay.overlay
+        anchors.centerIn: parent   // the page; Qt 6.4's QtQuick.Controls.Basic has no Overlay
         width: Math.min(540, root.width - 48)
         padding: 22
         onAboutToShow: ids = app.processIds()

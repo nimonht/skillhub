@@ -1561,7 +1561,9 @@ QString AppController::windowReport() const {
     switch (QQuickWindow::graphicsApi()) {
     case QSGRendererInterface::OpenGL: api = QStringLiteral("OpenGL"); break;
     case QSGRendererInterface::Direct3D11: api = QStringLiteral("Direct3D 11"); break;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 6, 0)   // Qt 6.4, the oldest supported, has no Direct3D 12
     case QSGRendererInterface::Direct3D12: api = QStringLiteral("Direct3D 12"); break;
+#endif
     case QSGRendererInterface::Vulkan: api = QStringLiteral("Vulkan"); break;
     case QSGRendererInterface::Metal: api = QStringLiteral("Metal"); break;
     case QSGRendererInterface::Software: api = QStringLiteral("Software"); break;
