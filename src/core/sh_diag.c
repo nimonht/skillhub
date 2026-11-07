@@ -140,19 +140,43 @@ char *sh_diag_memory_text(const sh_diag_memory *m) {
 
 // ---- the report ----
 
+// Windows names one folder with either slash and in any case: the store's C:/Users/Me is also C:\Users\me in a variable
+static bool same_path_char(char a, char b) {
+#ifdef _WIN32
+    if (a == '\\') a = '/';
+    if (b == '\\') b = '/';
+    if (a >= 'A' && a <= 'Z') a = (char)(a - 'A' + 'a');
+    if (b >= 'A' && b <= 'Z') b = (char)(b - 'A' + 'a');
+#endif
+    return a == b;
+}
+
+// a letter of a file name (any byte of a UTF-8 one): the home folder is never found in the middle of a name
+static bool name_char(char c) {
+    const unsigned char u = (unsigned char)c;
+    return (u >= 'a' && u <= 'z') || (u >= 'A' && u <= 'Z') || (u >= '0' && u <= '9') || u == '.' || u == '_' || u == '-' || u >= 0x80;
+}
+
+// `home` at `p`, as a whole: not /home/u in /home/user, nor the second /home/u of /home/u/home/u
+static bool home_at(const char *text, const char *p, const char *home, size_t n) {
+    if (p > text && name_char(p[-1])) return false;
+    for (size_t i = 0; i < n; ++i)
+        if (!p[i] || !same_path_char(p[i], home[i])) return false;
+    return !name_char(p[n]);
+}
+
 char *sh_diag_shorten(const char *text, const char *home) {
     const size_t n = home ? strlen(home) : 0;
     if (n < 2) return sh_strdup(text);  // "/" or "" would turn every slash into ~
     sh_buf b = SH_BUF_INIT;
-    for (const char *p = text, *at; *p;) {
-        at = strstr(p, home);
-        if (!at) {
-            sh_buf_puts(&b, p);
-            break;
+    sh_buf_append(&b, "", 0);
+    for (const char *p = text; *p;) {
+        if (home_at(text, p, home, n)) {
+            sh_buf_putc(&b, '~');
+            p += n;
+        } else {
+            sh_buf_putc(&b, *p++);
         }
-        sh_buf_append(&b, p, (size_t)(at - p));
-        sh_buf_putc(&b, '~');
-        p = at + n;
     }
     return sh_buf_steal(&b);
 }

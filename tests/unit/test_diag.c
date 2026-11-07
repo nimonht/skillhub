@@ -27,6 +27,15 @@ static void shorten(void) {
     CHECK_STR(sh_diag_shorten("/a/b", "/"), "/a/b");   // a root would turn every slash into ~
     CHECK_STR(sh_diag_shorten("/a/b", ""), "/a/b");
     CHECK_STR(sh_diag_shorten("/a/b", NULL), "/a/b");
+    CHECK_STR(sh_diag_shorten("", "/home/u"), "");
+    CHECK_STR(sh_diag_shorten("/home/u/home/u", "/home/u"), "~/home/u");   // home/u inside it is a folder of its own
+    CHECK_STR(sh_diag_shorten("/home/user/x /home/u", "/home/u"), "/home/user/x ~");   // another user's folder stays as it is
+#ifdef _WIN32
+    // a variable or a file may spell the store's home with backslashes, or in another case: it is the same folder
+    CHECK_STR(sh_diag_shorten("SKILLHUB_HOME C:\\Users\\Me\\tmp", "C:/Users/me"), "SKILLHUB_HOME ~\\tmp");
+#else
+    CHECK_STR(sh_diag_shorten("/HOME/U/x", "/home/u"), "/HOME/U/x");   // another folder here
+#endif
 }
 
 static void memory(void) {
