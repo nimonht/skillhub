@@ -7,10 +7,12 @@ Item {
     signal openChosen(string path)
     signal saveChosen(string path)
     signal folderChosen(string path)
+    signal textChosen(string path)
     property string startFolder: ""
     function toPath(u) { return decodeURIComponent(u.toString().replace(/^file:\/\/\/([A-Za-z]:)/, "$1").replace(/^file:\/\//, "")) }
     function openFile() { openDlg.open() }
     function openFolder() { folderDlg.open() }
+    function saveText(name, title) { textDlg.title = title || qsTr("Save the log"); textDlg.currentFile = "file://" + root.startFolder + "/" + name; textDlg.open() }
     function saveFile(name) { saveDlg.currentFile = "file://" + root.startFolder + "/" + name; saveDlg.open() }
 
     FileDialog {
@@ -27,6 +29,14 @@ Item {
         defaultSuffix: "json"
         nameFilters: [qsTr("Skill Hub exports (*.json)")]
         onAccepted: root.saveChosen(root.toPath(selectedFile))
+    }
+    FileDialog {
+        id: textDlg
+        title: qsTr("Save the log")
+        fileMode: FileDialog.SaveFile
+        defaultSuffix: "log"
+        nameFilters: [qsTr("Text files (*.log *.txt)"), qsTr("All files (*)")]
+        onAccepted: root.textChosen(root.toPath(selectedFile))
     }
     FolderDialog {
         id: folderDlg

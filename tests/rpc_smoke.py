@@ -312,6 +312,15 @@ def main():
         if "timer" not in status or "supported" not in status:
             fail("automation.status: %s" % status)
 
+        # the diagnostic report: text for people, this process's own counters, and the home folder written as ~
+        report = b.call("diag.report")
+        if "Skill Hub diagnostic report" not in report.get("text", "") or report.get("pid", 0) <= 0:
+            fail("diag.report: %s" % str(report)[:200])
+        if report.get("residentKb", 1) <= 0:
+            fail("diag.report residentKb: %s" % report)
+        if home and home in report["text"]:
+            fail("diag.report shows the home folder as it is")
+
         # shutting down in the middle of a job: it stops at a safe point, then the answer comes
         job = b.call("skills.check")["job"]
         sd = b.call("shutdown")

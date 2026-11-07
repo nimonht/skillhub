@@ -1,13 +1,12 @@
 #include "core_client.h"
 
+#include "gui/app_log.h"
+
 #include <QCoreApplication>
 #include <QDir>
-#include <QFile>
-#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QProcess>
-#include <QStandardPaths>
 #include <QThread>
 #include <tuple>
 #include <utility>
@@ -30,18 +29,6 @@ QString backendProgram() {
     return QDir(QCoreApplication::applicationDirPath()).filePath(name);
 }
 
-// The backend's standard error goes to a file: unread, QProcess would keep it in memory for the backend's whole life,
-// and after a crash it is the only clue. Kept small; only the latest runs matter.
-QString backendLog() {
-    QString dir = qEnvironmentVariable("SKILLHUB_CACHE");
-    if (!qEnvironmentVariableIsSet("SKILLHUB_CACHE"))
-        dir = QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation) + QStringLiteral("/skillhub");
-    if (dir.isEmpty() || !QDir().mkpath(dir)) return {};
-    const QString path = dir + QStringLiteral("/backend.log");
-    if (QFileInfo(path).size() > 1024 * 1024) QFile::remove(path);
-    return path;
-}
-
 // the rows of a snapshot page or a delta, built here so the interface thread gets them ready-made
 SkillRows takeRows(QJsonObject &holder, const QString &key) {
     const QJsonArray arr = holder.value(key).toArray();
@@ -59,19 +46,22 @@ SkillRows takeRows(QJsonObject &holder, const QString &key) {
 class BackendIo : public QObject {
     Q_OBJECT
 public:
-    void start(const QString &program, const QString &log) {
+    void start(const QString &program) {
         if (proc_) proc_->disconnect(this);   // its end must not read as the end of the backend that starts now
         delete proc_;
         buf_.clear();
+        errBuf_.clear();
         proc_ = new QProcess(this);
-        proc_->setStandardErrorFile(log.isEmpty() ? QProcess::nullDevice() : log, QIODevice::Append);
         connect(proc_, &QProcess::readyReadStandardOutput, this, &BackendIo::read);
+        connect(proc_, &QProcess::readyReadStandardError, this, &BackendIo::readError);
         connect(proc_, &QProcess::started, this, &BackendIo::started);
         connect(proc_, &QProcess::errorOccurred, this, [this](QProcess::ProcessError e) {
             if (e == QProcess::FailedToStart) emit ended(tr("cannot start %1: %2").arg(proc_->program(), proc_->errorString()));
         });
         connect(proc_, &QProcess::finished, this, [this](int code, QProcess::ExitStatus status) {
             read();
+            readError();
+            if (!errBuf_.isEmpty()) logError(std::exchange(errBuf_, {}));
             emit ended(status == QProcess::CrashExit ? tr("the background service crashed")
                                                      : tr("the background service exited (%1)").arg(code));
         });
@@ -96,6 +86,28 @@ signals:
     void ended(const QString &why);
 
 private:
+    // What the backend writes on its standard error (a startup problem, an abort, a library's complaint) goes to the log, line by
+    // line: after a crash it is the only clue. Read as it comes, so the pipe never fills.
+    void readError() {
+        errBuf_ += proc_->readAllStandardError();
+        qsizetype from = 0, nl;
+        while ((nl = errBuf_.indexOf('\n', from)) >= 0) {
+            logError(errBuf_.mid(from, nl - from));
+            from = nl + 1;
+        }
+        errBuf_.remove(0, from);
+        if (errBuf_.size() > 65536) logError(std::exchange(errBuf_, {}));   // no line that long: do not hold it for ever
+    }
+
+    static void logError(const QByteArray &raw) {
+        const QString text = QString::fromUtf8(raw).trimmed();
+        if (text.isEmpty()) return;
+        const QString low = text.toLower();
+        const bool bad = low.contains(QLatin1String("fail")) || low.contains(QLatin1String("error")) || low.contains(QLatin1String("abort")) ||
+                         low.contains(QLatin1String("assert")) || low.contains(QLatin1String("fatal"));
+        AppLog::write(QStringLiteral("stderr"), bad ? QStringLiteral("error") : QStringLiteral("info"), text);
+    }
+
     void read() {
         buf_ += proc_->readAllStandardOutput();
         qsizetype from = 0, nl;
@@ -126,7 +138,7 @@ private:
     }
 
     QProcess *proc_ = nullptr;
-    QByteArray buf_;
+    QByteArray buf_, errBuf_;
 };
 
 CoreClient::CoreClient(QObject *parent) : QObject(parent) {
@@ -151,8 +163,8 @@ CoreClient::~CoreClient() {
 }
 
 void CoreClient::start() {
-    const QString program = backendProgram(), log = backendLog();
-    QMetaObject::invokeMethod(io_, [io = io_, program, log] { io->start(program, log); });
+    const QString program = backendProgram();
+    QMetaObject::invokeMethod(io_, [io = io_, program] { io->start(program); });
 }
 
 void CoreClient::send(qint64 id, const QString &method, const QJsonObject &params) {

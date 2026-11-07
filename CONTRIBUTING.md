@@ -23,7 +23,10 @@ python3 tests/contrast.py build/skillhub      # WCAG gate on qml/Theme.qml, 72 h
 sh tests/gui-smoke.sh build/skillhub out      # headless render of every page, the tour and the terminal; fails on QML errors
 python3 tests/greeting_smoke.py build/skillhub # one greeting in a new terminal, on the real zsh, bash and fish
 python3 tests/i18n_check.py                   # every text of the window translated, and no English outside qsTr()
-qmltestrunner -platform offscreen -input tests/qml  # QML components on their own: the settings sliders
+qmltestrunner -platform offscreen -input tests/qml  # QML components on their own: the sliders, the hover fades (the Qt 6 one: /usr/lib/qt6/bin on some systems)
+python3 tests/shortcut_lint.py                # every shortcut of the window is kept from a focused terminal, or left to it, on purpose
+ctest --test-dir build                        # also: the terminal's scrolling and keys with real events (terminal), the view of the history (scroll)
+python3 tests/deployed_imports.py --forbidden-only build   # Windows: our programs read no other program's memory and write no dump
 ```
 
 The C core also builds with sanitizers (`CC=clang cmake -B build-asan -DSKILLHUB_GUI=OFF -DSKILLHUB_SANITIZE=ON`; ThreadSanitizer
@@ -38,8 +41,10 @@ until then the updater ignores the release. `tests/selfupdate_smoke.py` runs aga
 
 Look at the UI without a display: `QT_QPA_PLATFORM=offscreen build/skillhub gui --shot out.png --theme light --size 1000x640
 --select NAME` (also `--agent ID`, `--mode add|review|settings|terminal|onboarding`, `--section NAME`, `--step N`, `--coach N`,
-`--scope FOLDER`, `--layout rail=64,detail=460,dock=260`, `--filter problems`, `--search TEXT`, `--discover OWNER/REPO`, `--console`).
-The software renderer used by `offscreen` is a little rougher than the GPU one; check final looks on a real session.
+`--scope FOLDER`, `--layout rail=64,detail=460,dock=260`, `--filter problems`, `--search TEXT`, `--discover OWNER/REPO`, `--console`, `--mode log`).
+The software renderer used by `offscreen` is a little rougher than the GPU one; check final looks on a real session. It has no shader, so Liquid
+Glass shows as a plain surface there: on a machine with a GPU, `SKILLHUB_GLASS_SHOT=1 QT_QPA_PLATFORM=xcb build/skillhub gui --shot out.png
+--action adopt` renders the real glass in a toast (`SKILLHUB_FORCE_TRANSLUCENT=1` and a settings.json with `"material":"glass"` choose it).
 
 ## Layout
 
@@ -49,7 +54,9 @@ The software renderer used by `offscreen` is a little rougher than the GPU one; 
 | `src/serve/` | `skillhub serve --stdio`, the window's backend: the libuv loop, jobs, state and deltas, file watchers |
 | `src/app.*`, `src/gui/` | the window's list models and `AppController`, on top of `CoreClient`, its connection to `skillhub serve` |
 | `src/gui/terminal/`, `src/term/` | the built-in terminal: the Qt item over libvterm, and PTY or ConPTY |
-| `src/gui/window_effects*` | native blur and Liquid Glass |
+| `src/gui/window_effects*` | native blur and Liquid Glass (`NSGlassEffectView` on macOS 26), and `shaders/glass.frag`, the glass of toasts, menus and tooltips |
+| `src/gui/app_log.*` | the window's log: a model for the viewer and the rotating file `logs/skillhub.log` |
+| `src/core/sh_diag.*` | the diagnostic report (`skillhub diagnose`, `diag.report`) |
 | `src/main.cpp` | `skillhub-gui`: start-up and the `--shot` screenshot harness |
 | `qml/` | the interface; `Theme.qml` holds every colour, size and duration as roles |
 | `i18n/` | the window's languages besides English: `vi.json` maps each English text to Vietnamese (`src/gui/translator.cpp` reads it) |

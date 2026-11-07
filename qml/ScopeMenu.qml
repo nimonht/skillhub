@@ -42,7 +42,10 @@ AbstractButton {
         width: Math.max(root.width, 280)
         padding: 6
         focus: true
-        background: Rectangle { radius: 4; color: Theme.bg2; border.color: Theme.line; border.width: 1 }
+        background: Item {
+            Glass { anchors.fill: parent; radius: 4; tint: Theme.bg2 }
+            Rectangle { anchors.fill: parent; radius: 4; color: "transparent"; border.color: Theme.line; border.width: 1 }
+        }
         onOpened: app.loadProjects()
 
         component Choice: AbstractButton {

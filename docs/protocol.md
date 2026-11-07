@@ -127,12 +127,13 @@ Then come notifications:
 
 ```json
 ← {"method":"event.progress","params":{"job":"j7","done":120,"total":10000,"current":"gsap-core"}}
-← {"method":"event.log","params":{"lines":[{"time":"18:41:07","level":"info","text":"updated gsap-core -> 1a2b3c4d"}]}}
+← {"method":"event.log","params":{"lines":[{"time":"18:41:07","ts":1793000467123,"level":"info","text":"updated gsap-core -> 1a2b3c4d"}]}}
 ← {"method":"event.jobDone","params":{"job":"j7","kind":"update","ok":true,
      "summary":{"updated":118,"failed":2,"skipped":0},
      "results":[{"name":"gsap-core","ok":true},{"name":"x","ok":false,"error":"not found upstream"}]}}
 ```
 
+- `ts` of a log line is milliseconds since 1970; the window writes it to its log file (`<cache>/logs/skillhub.log`). A client that does not know it ignores it.
 - Progress is sent at most every 50 ms per job; log lines are batched. When the write queue fills, waiting progress and
   log events are merged (the newest progress, the log lines concatenated). They are never dropped.
 - The window composes toasts from `event.jobDone`.
@@ -196,6 +197,7 @@ Parameters marked `?` are optional. `names` is a list of skill names; an empty o
 | `storage.clean` | `cache`, `versions`, `removed`, `conflicts` (booleans, all off by default) | job; the summary carries `freed` in bytes |
 | `lock.merge` | none | job; the one-time merge of the two user lock files (`docs/formats.md` section 2), with backups of both |
 | `fetch.render` | `colors?` (`truecolor` or `256`), `icons?`, `logo?` | `{ "ansi": "<the banner as terminal text>" }` |
+| `diag.report` | none | `{ "text":"<the diagnostic report, for people>", "pid":N, "residentKb"?:N, "peakKb"?:N }`; read only, takes no lock; the same text as `skillhub diagnose` |
 | `jobs.cancel` | `job` | `{}` |
 
 `<Project>`: `{ "path", "name", "skills":N, "autoUpdate":false }`.
@@ -207,7 +209,7 @@ The backend answers: `initialize`, `shutdown`, `state.snapshot`, `skills.read`,
 `storage.clean`, `lock.merge`, `fetch.render`, `system.info`,
 `providers.list`, `providers.setManaged`, `providers.addCustom`, `providers.removeCustom`, `providers.rescan`,
 `transfer.export`, `transfer.preview`, `transfer.import`, `automation.status`, `automation.set`, `settings.get`,
-`settings.set`, `jobs.cancel`, and `doctor`, which only the command line has so far (`-32601`).
+`settings.set`, `diag.report`, `jobs.cancel`, and `doctor`, which only the command line has so far (`-32601`).
 
 ### Notifications from the backend
 

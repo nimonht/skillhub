@@ -134,6 +134,10 @@ Windows zip show a notice with what to do. A final version never moves to a beta
   `sudo ln -s "/Applications/Skill Hub.app/Contents/MacOS/skillhub" /usr/local/bin/skillhub`.
 - *Windows*: SmartScreen says "Windows protected your PC": **More info**, then **Run anyway**. The window is `skillhub.exe`;
   `skillhub-cli.exe` is the same program for terminals and scripts (the installer can add it to your PATH).
+- *Windows, Microsoft Defender*: an unsigned program is sometimes taken for a threat by mistake. First check the file against
+  `SHA256SUMS` on the release page (`Get-FileHash FILE` in PowerShell); if it matches, open **Windows Security, Virus & threat protection,
+  Protection history**, pick the entry and choose **Actions, Restore** (or **Allow on device**). Please also report the false positive at
+  <https://www.microsoft.com/wdsi/filesubmission>.
 
 Ubuntu 22.04 (Qt 6.2) is too old. On any other Linux, build from source. The two `.deb` flavours exist because Ubuntu 24.04
 renamed its Qt libraries (`libqt6core6t64`); installing the wrong one just fails with a clear dependency error.
@@ -219,11 +223,27 @@ skillhub watch on          # auto-adopt strays dropped into agent folders
 | `Ctrl+Shift+A` | manage agents |
 | `Ctrl+Shift+E` | transfer skills (export / import) |
 | `Ctrl+J` | show / hide the activity log |
+| `Ctrl+Shift+L` | show / hide the log viewer |
 | `` Ctrl+` `` | show / hide the terminal |
 | `Ctrl+,` | settings |
 | `Ctrl+Alt+Arrows` | resize the panel with the focus, or the dock; `Ctrl+Alt+0` puts everything back |
-| `Ctrl+Shift+C`, `Ctrl+Shift+V` | copy and paste in the terminal |
+| `Ctrl+Shift+C`, `Ctrl+Shift+V` | copy and paste in the terminal (`Cmd+C`, `Cmd+V` on macOS) |
+| `Shift+PageUp`, `Shift+PageDown`, `Shift+Home`, `Shift+End` | scroll the terminal's history |
 | `Esc` | clear the filter or close the panel |
+
+While the terminal has the keyboard it owns it: `/`, `Esc`, `F1`, `F5` and `Ctrl+F`, `N`, `R`, `U`, `J` go to the shell. Only the chords that
+cannot clash stay with the window (`` Ctrl+` ``, `Ctrl+,`, `Ctrl+Alt+Arrows`, `Ctrl+Alt+0`, `Ctrl+Shift+E`, `A`, `U`, `L`, and `Cmd` chords on macOS).
+`` Ctrl+` `` always leaves the terminal. The wheel scrolls the history; in a full-screen program (less, vim, an agent) it belongs to the program, and
+`Shift` takes it back.
+
+### When something goes wrong
+
+The log viewer (the *Log* tab of the dock, `Ctrl+Shift+L`) shows what Skill Hub, Qt and the background service said: filter by level and
+side, search, copy, save. Every line is also kept in `logs/skillhub.log` in the cache folder (five files of 1 MiB; *Open the log folder* in the
+viewer or in Settings, Advanced). *Settings, Advanced, Diagnostics* writes a report for a bug: versions, system, folders, settings, memory use and
+the end of the log, with the home folder as `~` and no user or host name (`skillhub diagnose [FILE]` does the same in a terminal). Nothing is sent
+anywhere. For a memory dump, the same page explains how to make one with the system's own tool (Task Manager on Windows); Skill Hub does not write
+one itself.
 
 ## How agents are found and wired
 
@@ -293,7 +313,6 @@ manager or `sudo cmake --build build --target uninstall`; both remove only files
 
 ## Status and limits
 
-- Linux is the home platform. **macOS and Windows** run the same program (window and CLI). The macOS and Windows builds are tested by CI (build, command line, window rendering, and what the daily update and the watcher write and run, without running them) but have not been used on real hardware by the author: please report what you find.
 - Blur and Liquid Glass are native on Windows 11 and macOS (Liquid Glass itself on macOS 26). On Linux your compositor does the blurring: Hyprland, Sway with SwayFX and others do, GNOME does not, and KDE needs its own protocol, which this build does not use. Solid always works.
 - Task Scheduler has no file-change trigger, so on Windows the stray watcher is a small program that stays running from logon. On Linux and macOS the system starts it when a folder changes.
 - Windows links agents' folders with symlinks when Windows allows them (Developer Mode or administrator) and with junctions otherwise, so no setting is needed.
@@ -304,36 +323,9 @@ manager or `sudo cmake --build build --target uninstall`; both remove only files
 
 What is planned, in order. Nothing here has a date.
 
-**Done in 2.0.0-beta4: know what a skill does before it runs**
-
-- [x] An offline check of every skill: pipe-to-shell commands, long base64, invisible Unicode, reads of `~/.ssh` or tokens. It uses fixed rules, so
-  the text of a skill cannot talk it out of a result.
-- [x] Security reports from skills.sh for public GitHub skills, off until you turn them on, because the lookup tells skills.sh what you have installed.
-  Each scanner is shown with its date, never as one "safe" badge: the scanners can disagree, and a report may describe another version.
-- [x] Those results in Review, next to the script flags, and a worse report holds an update back from automatic runs.
-- [x] A second opinion from your own coding agent, opened in the built-in terminal with its permission prompts on. Its answer is never stored as a verdict.
-
-**Next: updates that reach everyone**
-
 - [ ] An AUR package, then Copr or an apt repository, so package managers find new versions by themselves.
 - [ ] The Windows portable zip replaces itself, as the installer does.
 - [ ] An optional setting to install new versions without asking, once the updater has proven itself through several releases.
-
-**Before 2.0.0**
-
-- [ ] Code signing, so Windows and macOS stop warning at first start.
-- [ ] A full pass on a real Mac.
-- [ ] Reports from the betas dealt with, and `v2` merged into `main`.
-
-**Done in 2.0 so far**
-
-- [x] Show a diff before applying an update, and one-click rollback in the GUI
-- [x] Per-agent enable/disable for a skill
-- [x] Project-level skills (`.claude/skills` in a repository), not only user-level ones
-- [x] GitLab / arbitrary git URLs and local-path sources
-- [x] Daily update and stray watcher on macOS (launchd) and Windows (Task Scheduler)
-- [x] Skill Hub updates itself, from signed releases
-- [x] A portable Linux tarball that installs without root
 
 ## Contributing
 
@@ -344,5 +336,4 @@ Issues and pull requests are welcome, especially "agent X reads user skills from
 
 [MIT](LICENSE). The logo, banner and screenshots in this repository are covered by the same license. Fonts: Barlow by
 The Barlow Project Authors, SIL Open Font License 1.1 ([`fonts/OFL.txt`](fonts/OFL.txt)). Visual language inspired by the
-MIT-licensed [`endfield-design`](https://github.com/Statrue/endfield-design-skill) skill; no *Arknights: Endfield* material is
-included. The agent catalog is derived from the registry of [vercel-labs/skills](https://github.com/vercel-labs/skills) (MIT, Copyright (c) 2026 Vercel, Inc.; licence text in [`data/LICENSE-vercel-labs-skills`](data/LICENSE-vercel-labs-skills)). Agent marks come from [lobe-icons](https://github.com/lobehub/lobe-icons) (MIT) and [simple-icons](https://github.com/simple-icons/simple-icons) (CC0); they are the property of their owners and only identify each agent (no affiliation or endorsement). Everything third-party is listed in [NOTICE.md](NOTICE.md).
+MIT-licensed [`endfield-design`](https://github.com/Statrue/endfield-design-skill) skill. The agent catalog is derived from the registry of [vercel-labs/skills](https://github.com/vercel-labs/skills) (MIT, Copyright (c) 2026 Vercel, Inc.; licence text in [`data/LICENSE-vercel-labs-skills`](data/LICENSE-vercel-labs-skills)). Agent marks come from [lobe-icons](https://github.com/lobehub/lobe-icons) (MIT) and [simple-icons](https://github.com/simple-icons/simple-icons) (CC0); they are the property of their owners and only identify each agent (no affiliation or endorsement). Everything third-party is listed in [NOTICE.md](NOTICE.md).

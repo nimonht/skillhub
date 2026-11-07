@@ -31,7 +31,7 @@ Item {
                 Accessible.checked: on
                 background: Rectangle {
                     radius: 3
-                    color: seg.on ? Theme.bg4 : seg.hovered ? Theme.bg3 : "transparent"
+                    color: seg.on ? Theme.bg4 : seg.hovered ? Theme.bg3 : Theme.clear(Theme.bg3)
                     border.color: Theme.focus
                     border.width: seg.visualFocus ? 2 : 0
                     Behavior on color { ColorAnimation { duration: Theme.dFast } }

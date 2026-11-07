@@ -3,6 +3,7 @@ import QtQuick.Controls.Basic
 import "."
 
 // A short name shown on hover. A popup, so it draws above every panel, nothing clips it, and it stays inside the window.
+// With Liquid Glass it is glass (Glass.qml).
 ToolTip {
     id: root
     property string side: "below"   // below | right
@@ -16,5 +17,8 @@ ToolTip {
     enter: null
     exit: null
     contentItem: Text { textFormat: Text.PlainText; text: root.text; color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
-    background: Rectangle { radius: 4; color: Theme.bg3; border.color: Theme.line; border.width: 1 }
+    background: Item {
+        Glass { anchors.fill: parent; radius: 4; tint: Theme.bg3; shadow: 10 }
+        Rectangle { anchors.fill: parent; radius: 4; color: "transparent"; border.color: Theme.line; border.width: 1 }
+    }
 }

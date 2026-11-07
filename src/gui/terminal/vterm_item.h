@@ -12,6 +12,8 @@
 #include <QVector>
 #include <QWaitCondition>
 
+#include "gui/terminal/term_scroll.h"
+
 extern "C" {
 #include <vterm.h>
 
@@ -69,7 +71,11 @@ class VTermItem : public QQuickPaintedItem {
     Q_PROPERTY(QColor cursorColor MEMBER cursorColor_ NOTIFY settingsChanged)
     Q_PROPERTY(QColor selectionColor MEMBER selectionColor_ NOTIFY settingsChanged)
     Q_PROPERTY(QString cursorShape MEMBER cursorShape_ NOTIFY settingsChanged)   // block, bar or underline
-    Q_PROPERTY(int scrollback MEMBER scrollbackMax_ NOTIFY settingsChanged)
+    Q_PROPERTY(int scrollback READ scrollback WRITE setScrollback NOTIFY settingsChanged)   // lines of history kept
+    Q_PROPERTY(int scrollOffset READ scrollOffset NOTIFY scrollChanged)    // lines the view is moved up from the live screen
+    Q_PROPERTY(int scrollMax READ scrollMax NOTIFY scrollChanged)
+    Q_PROPERTY(bool atBottom READ atBottom NOTIFY scrollChanged)
+    Q_PROPERTY(bool ownsKeyboard READ ownsKeyboard CONSTANT)   // the window's shortcuts leave its keys to it (see event())
     Q_PROPERTY(QVariantList colorTable WRITE setPalette READ paletteList NOTIFY settingsChanged)  // 16 colours, empty: libvterm's own
     Q_PROPERTY(QString title READ title NOTIFY titleChanged)
     Q_PROPERTY(QString currentDirectory READ currentDirectory NOTIFY titleChanged)
@@ -100,6 +106,12 @@ public:
     QString currentDirectory() const { return cwd_; }
     bool running() const { return pty_ != nullptr; }
     QString error() const { return error_; }
+    int scrollback() const { return scrollbackMax_; }
+    void setScrollback(int lines);
+    int scrollOffset() const { return scroll_.offset; }
+    int scrollMax() const { return scroll_.max; }
+    bool atBottom() const { return scroll_.atBottom(); }
+    bool ownsKeyboard() const { return true; }
 
     void paint(QPainter *painter) override;
 
@@ -107,8 +119,10 @@ signals:
     void settingsChanged();
     void titleChanged();
     void runningChanged();
+    void scrollChanged();
 
 protected:
+    bool event(QEvent *e) override;
     void geometryChange(const QRectF &now, const QRectF &before) override;
     void keyPressEvent(QKeyEvent *e) override;
     void inputMethodEvent(QInputMethodEvent *e) override;
@@ -141,6 +155,9 @@ private:
     VTermScreenCell cellAt(int row, int col) const;
     bool selected(int row, int col) const;
     void applyColors();
+    void scrolled();             // the view moved: draw it, tell the window, show the indicator for a moment
+    bool scrollKey(QKeyEvent *e);  // Shift+PageUp, PageDown, Home, End move the view, and are not sent to the shell
+    bool appOwnsWheel(Qt::KeyboardModifiers mods) const;
 
     VTerm *vt_ = nullptr;
     VTermScreen *screen_ = nullptr;
@@ -158,7 +175,9 @@ private:
     QStringList arguments_;
     QStringList environment_;
     QByteArray osc_;
-    int scrollbackMax_ = 10000, scrolled_ = 0;
+    int scrollbackMax_ = 10000, mouseMode_ = 0;
+    TermScroll scroll_, appWheel_;   // the view of the history, and the wheel steps an application is owed
+    bool showBar_ = false;           // the scroll indicator, while the view is back and just after it moved
     QVector<Line> scrollback_;
     VTermPos cursor_ = {0, 0};
     bool cursorVisible_ = true, focused_ = false, selecting_ = false, altScreen_ = false, flash_ = false;

@@ -534,6 +534,28 @@ Rectangle {
                     Btn { kind: "ghost"; compact: true; iconName: "refresh"; text: qsTr("Restart background service"); enabled: !app.busy; onClicked: app.restartBackend() }
                 }
                 Line { text: qsTr("Backend %1").arg(app.backendInfo) }
+                Group {
+                    title: qsTr("Diagnostics")
+                    note: qsTr("For a bug report: a text file with versions, system, folders, settings, memory use and the end of the log. Nothing is sent anywhere; the home folder is written as ~ and user and host names are left out.")
+                    Flow {
+                        width: parent.width
+                        spacing: 8
+                        Btn { kind: "secondary"; compact: true; iconName: "download"; text: qsTr("Save a report"); enabled: reportDialogs.status === Loader.Ready; onClicked: reportDialogs.item.saveText("skillhub-report.txt", qsTr("Save the report")) }
+                        Btn { kind: "secondary"; compact: true; iconName: "copy"; text: qsTr("Copy the report"); onClicked: app.createReport("copy") }
+                        Btn { kind: "ghost"; compact: true; iconName: "terminal"; text: qsTr("Show the log"); onClicked: { root.closeRequested(); app.showLog() } }
+                        Btn { kind: "ghost"; compact: true; iconName: "folder"; text: qsTr("Open the log folder"); onClicked: app.logView.openFolder() }
+                    }
+                }
+                Group {
+                    title: qsTr("Memory dump")
+                    note: qsTr("A dump holds everything the program had in memory, which can include tokens and clipboard text: share it only with someone you trust. Skill Hub does not write one itself: your system's own tool does it, with steps below.")
+                    Btn { kind: "secondary"; compact: true; iconName: "tool"; text: qsTr("How to make a memory dump"); onClicked: dumpHelp.open() }
+                }
+                Loader {
+                    id: reportDialogs
+                    source: "FileDialogs.qml"
+                    onLoaded: { item.startFolder = app.documentsFolder; item.textChosen.connect(function (p) { app.createReport("save", p) }) }
+                }
             }
 
             // ---- about
@@ -552,6 +574,35 @@ Rectangle {
                     Btn { visible: app.appUpdate.available !== true; kind: "secondary"; iconName: "refresh"; text: qsTr("Look for a new version"); onClicked: app.checkAppUpdate(true) }
                 }
                 Btn { iconName: "refresh"; text: qsTr("Take the tour again"); onClicked: { root.closeRequested(); app.startTour(0, 0) } }
+            }
+        }
+    }
+    // how to make a memory dump with the system's own tool
+    Popup {
+        id: dumpHelp
+        property var ids: ({ window: 0, backend: 0 })
+        readonly property bool windows: Qt.platform.os === "windows"
+        readonly property bool mac: Qt.platform.os === "osx"
+        modal: true
+        focus: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        anchors.centerIn: Overlay.overlay
+        width: Math.min(540, root.width - 48)
+        padding: 22
+        onAboutToShow: ids = app.processIds()
+        background: Rectangle { radius: 6; color: Theme.bg3; border.color: Theme.line; border.width: 1 }
+        contentItem: Column {
+            spacing: 12
+            Text { textFormat: Text.PlainText; width: parent.width; text: qsTr("How to make a memory dump"); color: Theme.text; font.family: Theme.display; font.pixelSize: Theme.fsTitle; font.weight: Font.Bold }
+            Line { text: qsTr("The window is process %1 and the background service is process %2.").arg(dumpHelp.ids.window).arg(dumpHelp.ids.backend) }
+            Line { visible: dumpHelp.windows; text: qsTr("1. Open Task Manager and go to the Details tab.\n2. Find skillhub.exe (the window) or skillhubw.exe (the background service) by the number above.\n3. Right-click it and choose Create memory dump file. Windows shows where the .DMP file is saved.") }
+            Line { visible: dumpHelp.mac; text: qsTr("In a terminal, start the debugger on the process, and at its prompt save the core file:\n   sudo lldb -p %1\n   (lldb) process save-core skillhub.core").arg(dumpHelp.ids.window) }
+            Line { visible: !dumpHelp.windows && !dumpHelp.mac; text: qsTr("In a terminal, with gdb installed:\n   gcore %1\nAfter a crash, coredumpctl dump may already hold one.").arg(dumpHelp.ids.window) }
+            Line { text: qsTr("A dump can hold tokens and clipboard text. Share it only with someone you trust.") }
+            Row {
+                spacing: 8
+                Btn { visible: dumpHelp.windows; kind: "secondary"; iconName: "tool"; text: qsTr("Open Task Manager"); onClicked: app.openTaskManager() }
+                Btn { kind: "ghost"; text: qsTr("Close"); onClicked: dumpHelp.close() }
             }
         }
     }

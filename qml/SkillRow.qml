@@ -28,7 +28,7 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        color: row.selected ? Theme.bg4 : hover.hovered ? Theme.bg3 : "transparent"
+        color: row.selected ? Theme.bg4 : hover.hovered ? Theme.bg3 : Theme.clear(Theme.bg3)
         Behavior on color { ColorAnimation { duration: Theme.dFast } }
     }
     Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Theme.line }

@@ -570,6 +570,7 @@ char *log_line_json(const char *text) {
     yyjson_mut_val *o = yyjson_mut_obj(d);
     char *time = sh_local_hms(), *shown = sh_tilde(text);  // a line that starts with the home folder
     yyjson_mut_obj_add_strcpy(d, o, "time", time);
+    yyjson_mut_obj_add_int(d, o, "ts", sh_now_ms());   // for the window's log file, which sorts what several sources say
     yyjson_mut_obj_add_str(d, o, "level", level_of(text));
     yyjson_mut_obj_add_strcpy(d, o, "text", shown);
     char *json = json_of(d, o);

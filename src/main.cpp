@@ -17,6 +17,7 @@
 #include <memory>
 
 #include "app.h"
+#include "gui/app_log.h"
 #include "gui/terminal/vterm_item.h"
 #include "gui/window_effects.h"
 
@@ -48,6 +49,7 @@ int main(int argc, char **argv) {
     }
 
     if (args.isEmpty() || args.first() == QLatin1String("gui")) {
+        AppLog::install();   // first: what Qt says from here on is kept, also by a window with no console
         // headless self-test: skillhub gui --shot out.png [--theme dark|light] [--size WxH] [--select NAME]
         //   [--mode skill|agent|add|providers|transfer|review] [--scope FOLDER] [--agent ID] [--filter all|updates|local|problems] [--search TEXT]
         //   [--discover OWNER/REPO] [--console] [--animate] [--action update-all|check|adopt [--busy]] [--settle TICKS] [--import FILE]
@@ -147,6 +149,7 @@ int main(int argc, char **argv) {
                     if (opt("--mode") == QLatin1String("review")) controller.reviewAll();
                     if (opt("--mode") == QLatin1String("onboarding")) emit controller.startTour(opt("--step").toInt(), opt("--coach").toInt());
                     if (opt("--mode") == QLatin1String("terminal")) emit controller.showTerminal();
+                    if (opt("--mode") == QLatin1String("log")) emit controller.showLog();
                     if (!opt("--app-update").isEmpty()) controller.showAppUpdate(opt("--app-update"), !args.contains(QStringLiteral("--app-update-notice")));
                     if (opt("--mode") == QLatin1String("settings")) emit controller.showSettings(opt("--section").isEmpty() ? QStringLiteral("appearance") : opt("--section"));
                     if (opt("--action") == QLatin1String("update-all")) controller.updateAll();

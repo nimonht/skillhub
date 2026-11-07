@@ -23,8 +23,8 @@ AbstractButton {
         : kind === "ghost" ? (hovered ? Theme.text : Theme.text2) : Theme.text
     property color _fill: !enabled ? Theme.bg2
         : kind === "primary" ? (down ? Qt.darker(Theme.action, 1.18) : hovered ? Qt.lighter(Theme.action, Theme.dark ? 1.1 : 1.35) : Theme.action)
-        : kind === "danger" ? (down ? Theme.dangerLow : hovered ? Theme.dangerLow : "transparent")
-        : kind === "ghost" ? (down ? Theme.bg4 : hovered ? Theme.bg3 : "transparent")
+        : kind === "danger" ? (down ? Theme.dangerLow : hovered ? Theme.dangerLow : Theme.clear(Theme.dangerLow))
+        : kind === "ghost" ? (down ? Theme.bg4 : hovered ? Theme.bg3 : Theme.clear(Theme.bg3))
         : (down ? Theme.bg2 : hovered ? Theme.bg4 : Theme.bg3)
     Behavior on _fill { ColorAnimation { duration: Theme.dFast } }
 

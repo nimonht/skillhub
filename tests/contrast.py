@@ -48,6 +48,10 @@ for mode, name in ((0, "dark"), (1, "light")):
 # Blur and Liquid Glass: panels at their alpha floor over pure black and pure white, with the text they use then
 import colorsys
 FLOOR = {0: float(re.search(r"alphaFloor: dark \? ([0-9.]+)", src)[1]), 1: float(re.search(r"alphaFloor: dark \? [0-9.]+ : ([0-9.]+)", src)[1])}
+FLOOR_GLASS = {0: float(re.search(r"glassFloor: dark \? ([0-9.]+)", src)[1]), 1: float(re.search(r"glassFloor: dark \? [0-9.]+ : ([0-9.]+)", src)[1])}
+BACKDROP_HI = float(re.search(r"glassBackdropHi: ([0-9.]+)", src)[1])   # the system's glass in the dark theme: never lighter than this grey
+BACKDROP_LO = float(re.search(r"glassBackdropLo: ([0-9.]+)", src)[1])   # in the light theme: never darker
+TINT_ALPHA = float(re.search(r"glassTintAlpha: ([0-9.]+)", src)[1])     # a surface that floats over the program's own content
 DARKER = float(re.search(r"Qt\.darker\(c, ([0-9.]+)\)", src)[1])
 
 def hexof(c):
@@ -62,21 +66,42 @@ def strengthened(h, m):
     hh, s, v = colorsys.rgb_to_hsv(*rgb(h))
     return hexof(colorsys.hsv_to_rgb(hh, s, v / DARKER))
 
-def glass_checks(t, m, label):
+BLACK_WHITE = ((0, 0, 0), (1, 1, 1))
+def native_backdrops(m):   # the system's glass, whose appearance is the theme's: bounded on the side the text is not
+    return ((0, 0, 0), (BACKDROP_HI,) * 3) if m == 0 else ((BACKDROP_LO,) * 3, (1, 1, 1))
+
+def glass_checks(t, m, label, floor=None, overs=BLACK_WHITE, what="its floor"):
+    floor = FLOOR[m] if floor is None else floor
     miss = 0
     for bg in ("bg1", "bg2"):
-        for over in ((0, 0, 0), (1, 1, 1)):
-            base = hexof([FLOOR[m] * x + (1 - FLOOR[m]) * o for x, o in zip(rgb(t[bg]), over)])
+        for over in overs:
+            base = hexof([floor * x + (1 - floor) * o for x, o in zip(rgb(t[bg]), over)])
             for fg in ("text", "text2", "markText", "notifyText", "dangerText", "gainText"):
                 colour = t[fg] if fg in ("text", "text2") else strengthened(t[fg], m)
                 r = ratio(colour, base)
                 if r < TEXT:
-                    print(f"FAIL {label} {fg:10s} on {bg} at its floor over {over}: {r:5.2f} < {TEXT}")
+                    print(f"FAIL {label} {fg:10s} on {bg} at {what} over {over}: {r:5.2f} < {TEXT}")
                     miss += 1
     return miss
 
+def shader_glass_checks(t, m, label):   # a toast, a menu, a tooltip: tinted glass over the program's own surfaces, with a lit rim on top
+    miss = 0
+    for behind in ("bg0", "bg1", "bg2", "bg4"):
+        base = [TINT_ALPHA * x + (1 - TINT_ALPHA) * y for x, y in zip(rgb(t["bg3"]), rgb(t[behind]))]
+        base = hexof([min(1, v + 0.04) for v in base])   # the glow of the rim, as far in as text sits (the bevel is 18 px, text at least 12 from the edge)
+        for fg in ("text", "text2", "markText", "notifyText", "dangerText"):
+            colour = t[fg] if fg in ("text", "text2") else strengthened(t[fg], m)
+            r = ratio(colour, base)
+            if r < TEXT:
+                print(f"FAIL {label} {fg:10s} on shader glass over {behind}: {r:5.2f} < {TEXT}")
+                miss += 1
+    return miss
+
 for mode, name in ((0, "dark"), (1, "light")):
-    bad += glass_checks({k: v[mode] for k, v in tok.items()}, mode, name)
+    t = {k: v[mode] for k, v in tok.items()}
+    bad += glass_checks(t, mode, name)
+    bad += glass_checks(t, mode, name, FLOOR_GLASS[mode], native_backdrops(mode), "the system glass floor")
+    bad += shader_glass_checks(t, mode, name)
 
 def hsl(h, s, l):
     c = (1 - abs(2 * l - 1)) * s
@@ -99,6 +124,8 @@ if len(sys.argv) > 1:
             if r < need:
                 print(f"FAIL {p['seed']} {p['mode']:5s} {fg:10s} on {bg:9s} {r:5.2f} < {need}"); bad += 1
         bad += glass_checks(t, m, p["seed"] + " " + p["mode"])
+        bad += glass_checks(t, m, p["seed"] + " " + p["mode"], FLOOR_GLASS[m], native_backdrops(m), "the system glass floor")
+        bad += shader_glass_checks(t, m, p["seed"] + " " + p["mode"])
         for fg in ("text2", "markText"):   # tinted surfaces; text3 gives way to text2 there
             for bg in ("bg1", "bg2"):
                 tinted = hexof([0.97 * a + 0.03 * b for a, b in zip(rgb(t[bg]), rgb(t["mark"]))])

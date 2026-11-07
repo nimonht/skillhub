@@ -19,6 +19,8 @@
         <file alias="AddSheet.qml">qml/AddSheet.qml</file>
         <file alias="AgentTile.qml">qml/AgentTile.qml</file>
         <file alias="Btn.qml">qml/Btn.qml</file>
+        <file alias="LogViewer.qml">qml/LogViewer.qml</file>
+        <file alias="GlassEdge.qml">qml/GlassEdge.qml</file>
         <file alias="Chamfer.qml">qml/Chamfer.qml</file>
         <file alias="ConsoleFeed.qml">qml/ConsoleFeed.qml</file>
         <file alias="NumText.qml">qml/NumText.qml</file>

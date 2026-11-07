@@ -10,9 +10,11 @@ bool canBeTranslucent();                                                     // 
 void prepare();                                                              // before the first window exists
 void apply(QQuickWindow *window, const QString &material, bool dark);        // solid, blur or glass
 QString note(const QString &material);                                       // what this desktop does with it, in a sentence
+bool nativeGlass();                                                          // the system draws Liquid Glass itself (macOS 26 and later)
 }
 
 #ifdef Q_OS_MACOS
-void window_effects_apply_mac(QQuickWindow *window, int kind);               // 0 none, 1 blur, 2 glass
+void window_effects_apply_mac(QQuickWindow *window, int kind, bool dark);    // 0 none, 1 blur, 2 glass
 bool window_effects_reduce_transparency_mac();
+bool window_effects_native_glass_mac();
 #endif

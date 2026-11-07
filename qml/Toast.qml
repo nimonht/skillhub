@@ -30,7 +30,7 @@ Rectangle {
     Accessible.name: message
 
     InputShield {}
-    Glass { anchors.fill: parent; behind: root.behind; radius: root.radius; tint: Theme.bg3; tintAlpha: Theme.alphaFloor }
+    Glass { anchors.fill: parent; behind: root.behind; radius: root.radius; tint: Theme.bg3 }
     Rectangle { anchors.fill: parent; radius: root.radius; color: "transparent"; border.color: Theme.line; border.width: 1 }
     Row {
         id: row

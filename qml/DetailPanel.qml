@@ -5,6 +5,7 @@ import "."
 Rectangle {
     id: root
     color: Theme.bg1
+    GlassEdge { anchors.fill: parent }   // over the system's Liquid Glass: a lit rim
     signal closeRequested()
     property bool showClose: false
     readonly property string view: app.detailMode === "add" ? "add"

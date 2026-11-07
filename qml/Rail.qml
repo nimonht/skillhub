@@ -7,6 +7,7 @@ import "."
 Rectangle {
     id: root
     color: Theme.bg1
+    GlassEdge { anchors.fill: parent }   // over the system's Liquid Glass: a lit rim
     implicitWidth: Theme.railW
     signal settingsRequested()
     readonly property bool compact: width < 120
@@ -31,7 +32,7 @@ Rectangle {
         onClicked: asAction ? triggered() : app.filter.mode = mode
         background: Rectangle {
             radius: 4
-            color: item.on ? Theme.bg4 : item.hovered ? Theme.bg3 : "transparent"
+            color: item.on ? Theme.bg4 : item.hovered ? Theme.bg3 : Theme.clear(Theme.bg3)
             border.color: item.visualFocus ? Theme.focus : "transparent"
             border.width: 2
             Behavior on color { ColorAnimation { duration: Theme.dFast } }

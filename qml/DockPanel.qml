@@ -6,6 +6,7 @@ import "."
 Rectangle {
     id: root
     color: Theme.bg1
+    GlassEdge { anchors.fill: parent }   // over the system's Liquid Glass: a lit rim
     clip: true
     property string tab: "activity"
     property int nextSession: 1   // what tells sessions apart, never used twice; the number on a tab is another thing
@@ -35,7 +36,18 @@ Rectangle {
         for (let i = 0; i < sessions.count; i++) names.push(sessions.get(i).name)
         return names
     }
-    function sessionItem() { return stack.count > 0 ? stack.itemAt(stack.count - 1) : null }
+    readonly property bool onTerminal: tab !== "activity" && tab !== "log"
+    function activeSession() {   // the terminal that is shown
+        for (let i = 0; i < stack.count; i++) {
+            const it = stack.itemAt(i)
+            if (it && it.visible) return it
+        }
+        return null
+    }
+    function sessionItem() { return activeSession() || (stack.count > 0 ? stack.itemAt(stack.count - 1) : null) }
+    // The keyboard goes to the shell whenever its tab is shown: switching tabs, opening the dock, or starting a terminal.
+    function focusActive() { Qt.callLater(function () { const s = root.activeSession(); if (s) s.focusShell() }) }
+    onTabChanged: if (onTerminal) focusActive()
     ListModel { id: sessions }
 
     Item {
@@ -51,7 +63,7 @@ Rectangle {
             height: bar.height
             implicitWidth: label.implicitWidth + (closable ? 44 : 24)
             hoverEnabled: true
-            focusPolicy: Qt.StrongFocus
+            focusPolicy: Qt.TabFocus   // a click must not take the keyboard from the terminal
             Accessible.role: Accessible.PageTab
             Accessible.name: text
             background: Rectangle { color: t.on ? Theme.bg3 : t.hovered ? Theme.bg2 : "transparent"; border.color: Theme.focus; border.width: t.visualFocus ? 2 : 0 }
@@ -63,6 +75,7 @@ Rectangle {
         Row {
             height: parent.height
             Tab { text: qsTr("Activity"); on: root.tab === "activity"; onClicked: root.tab = "activity" }
+            Tab { text: qsTr("Log"); on: root.tab === "log"; onClicked: root.tab = "log" }
             Repeater {
                 model: sessions
                 delegate: Tab {
@@ -76,7 +89,7 @@ Rectangle {
                     onClosed: root.closeSession(index)
                 }
             }
-            Btn { kind: "ghost"; compact: true; iconName: "plus"; text: ""; Accessible.name: qsTr("New terminal"); anchors.verticalCenter: parent.verticalCenter; onClicked: root.addSession() }
+            Btn { kind: "ghost"; compact: true; iconName: "plus"; text: ""; focusPolicy: Qt.TabFocus; Accessible.name: qsTr("New terminal"); anchors.verticalCenter: parent.verticalCenter; onClicked: root.addSession() }
         }
         Row {
             anchors.right: parent.right
@@ -84,7 +97,7 @@ Rectangle {
             anchors.verticalCenter: parent.verticalCenter
             spacing: 4
             Repeater {
-                model: root.tab !== "activity" ? app.externalTerminals.slice(0, 3) : []
+                model: root.onTerminal ? app.externalTerminals.slice(0, 3) : []
                 delegate: Btn { required property var modelData; kind: "ghost"; compact: true; text: qsTr("Open in %1").arg(modelData.label); onClicked: app.openExternalTerminal(modelData.id) }
             }
         }
@@ -94,6 +107,12 @@ Rectangle {
         anchors.bottom: parent.bottom
         width: parent.width
         visible: root.tab === "activity"
+    }
+    LogViewer {
+        anchors.top: bar.bottom
+        anchors.bottom: parent.bottom
+        width: parent.width
+        visible: root.tab === "log"
     }
     Repeater {
         id: stack

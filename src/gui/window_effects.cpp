@@ -68,13 +68,20 @@ void apply(QQuickWindow *window, const QString &material, bool dark) {
     const MARGINS margins = see_through ? MARGINS{-1, -1, -1, -1} : MARGINS{0, 0, 0, 0};
     DwmExtendFrameIntoClientArea(hwnd, &margins);
 #elif defined(Q_OS_MACOS)
-    (void)dark;
     if (QGuiApplication::platformName() != QLatin1String("cocoa")) return;
-    window_effects_apply_mac(window, material == QLatin1String("glass") ? 2 : material == QLatin1String("blur") ? 1 : 0);
+    window_effects_apply_mac(window, material == QLatin1String("glass") ? 2 : material == QLatin1String("blur") ? 1 : 0, dark);
 #else
     (void)window;
     (void)material;
     (void)dark;  // the compositor blurs a translucent window when it is set up to
+#endif
+}
+
+bool nativeGlass() {
+#ifdef Q_OS_MACOS
+    return QGuiApplication::platformName() == QLatin1String("cocoa") && window_effects_native_glass_mac();
+#else
+    return false;
 #endif
 }
 

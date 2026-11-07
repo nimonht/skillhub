@@ -18,7 +18,7 @@ AbstractButton {
 
     background: Rectangle {
         radius: 4
-        color: root.hovered ? Theme.bg3 : "transparent"
+        color: root.hovered ? Theme.bg3 : Theme.clear(Theme.bg3)
         border.color: Theme.focus
         border.width: root.visualFocus ? 2 : 0
         Behavior on color { ColorAnimation { duration: Theme.dFast } }

@@ -17,6 +17,15 @@
 
 No telemetry, no accounts, no other endpoints.
 
+## What Skill Hub keeps on disk for troubleshooting
+
+`logs/skillhub.log` in the cache folder (five files of 1 MiB) holds what the window, Qt and the background service said: the same lines as the
+activity feed, Qt's warnings, and what the backend wrote on its standard error. The home folder is written as `~`. It holds no skill text and
+no credentials, and it is read by nobody but you: *Settings, Advanced, Diagnostics* and `skillhub diagnose` put the report and the end of the log in
+a file or on the clipboard only when you ask, and read no other program. Skill Hub does not write memory dumps and its programs import none of
+the functions that would (`tests/deployed_imports.py` checks it for every Windows build); a dump is made with the system's own tool, and can hold
+tokens and clipboard text, so share one only with someone you trust.
+
 ## Checking skills
 
 `skillhub scan`, the Checks section of a skill and Review read each skill's text files with fixed rules, offline: downloads

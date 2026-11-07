@@ -16,9 +16,11 @@
 
 #include <QQuickWindow>
 
+#include "gui/app_log.h"
 #include "gui/core_client.h"
 #include "gui/skill_row.h"
 #include "gui/translator.h"
+#include "gui/window_effects.h"
 
 // The skills, keyed by name: snapshot pages are appended, deltas change rows in place (one ranged dataChanged for all
 // of them) and insert or remove only what came or went. The model is never reset except for a fresh snapshot.
@@ -95,8 +97,8 @@ public:
     int rowCount(const QModelIndex &parent = {}) const override { return parent.isValid() ? 0 : int(lines_.size()); }
     QVariant data(const QModelIndex &index, int role) const override;
     QHash<int, QByteArray> roleNames() const override;
-    void add(const QJsonArray &lines);  // event.log lines: {time, level, text}
-    void addText(const QString &text, const QString &level = QStringLiteral("info"));
+    void add(const QJsonArray &lines, const QString &source = QStringLiteral("backend"));  // event.log lines: {time, ts, level, text}
+    void addText(const QString &text, const QString &level = QStringLiteral("info"));   // a line of the window's own
     Q_INVOKABLE void clear();
 
 private:
@@ -109,6 +111,7 @@ class AppController : public QObject {
     Q_PROPERTY(QAbstractItemModel *skills READ skillsView CONSTANT)
     Q_PROPERTY(SkillFilter *filter READ filter CONSTANT)
     Q_PROPERTY(QAbstractItemModel *log READ logModel CONSTANT)
+    Q_PROPERTY(LogFilter *logView READ logView CONSTANT)   // the log viewer: every line of the log file's session, filtered
     Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
     Q_PROPERTY(QString busyText READ busyText NOTIFY busyChanged)
     Q_PROPERTY(double progress READ progress NOTIFY busyChanged)
@@ -151,6 +154,7 @@ class AppController : public QObject {
     Q_PROPERTY(bool accentOn READ accentOn NOTIFY themeChanged)                  // false: the built-in mint
     Q_PROPERTY(QString material READ material NOTIFY themeChanged)               // solid, blur, glass: what the window really does
     Q_PROPERTY(bool glassReady READ glassReady CONSTANT)                         // the shader can run here
+    Q_PROPERTY(bool nativeGlass READ nativeGlass CONSTANT)                       // the system draws Liquid Glass behind the window (macOS 26)
     Q_PROPERTY(int settingsRev READ settingsRev NOTIFY settingsChanged)          // bindings on setting() read this too
     Q_PROPERTY(QVariantMap paletteDark READ paletteDark NOTIFY themeChanged)
     Q_PROPERTY(QVariantMap paletteLight READ paletteLight NOTIFY themeChanged)
@@ -190,6 +194,7 @@ public:
     QAbstractItemModel *skillsView() { return &filter_; }
     SkillFilter *filter() { return &filter_; }
     QAbstractItemModel *logModel() { return &log_; }
+    LogFilter *logView() { return &logView_; }
     bool busy() const { return busy_; }
     QString busyText() const { return busyText_; }
     double progress() const { return progress_; }
@@ -251,6 +256,7 @@ public:
     int settingsRev() const { return settingsRev_; }
     QString material() const;
     bool glassReady() const;
+    bool nativeGlass() const { return window_effects::nativeGlass(); }
     int lockSplit() const { return lockSplit_; }
     QVariantList pathSizes() const { return pathSizes_; }
     QVariantList shells() const { return shells_; }
@@ -340,6 +346,12 @@ public:
     Q_INVOKABLE void importInstall(const QStringList &names);
     Q_INVOKABLE void importClear();
     Q_INVOKABLE void openFolder();
+    Q_INVOKABLE void saveLog(const QString &path);
+    // the diagnostic report (the window's part, the background service's part, the end of the log); action is "copy" or "save" to `path`
+    Q_INVOKABLE void createReport(const QString &action, const QString &path = QString());
+    Q_INVOKABLE QVariantMap processIds() const;   // {window, backend}: for the memory dump dialog
+    Q_INVOKABLE void openTaskManager();           // Windows: where Create memory dump file is
+    Q_INVOKABLE void copyLog(const QVariantList &rows);
     Q_INVOKABLE void copyText(const QString &text);
     Q_INVOKABLE QString renderMarkdown(const QString &markdown, bool dark) const;  // styled HTML for the SKILL.md preview
 
@@ -370,6 +382,7 @@ signals:
     void startTour(int step, int coach);
     void bannerReady(const QString &text);
     void showTerminal();
+    void showLog();   // the dock, on its Log tab
     void settingsChanged();
     void pathSizesChanged();
     void showSettings(const QString &section);
@@ -404,11 +417,13 @@ private:
     void saveSetting(const QString &key, const QJsonValue &value);
     void setBusy(bool busy, const QString &text = {}, double progress = -1);
     QString tilde(const QString &path) const;
+    QString windowReport() const;
 
     CoreClient core_;
     SkillModel model_;
     SkillFilter filter_;
     LogModel log_;
+    LogFilter logView_;
     QJsonObject counts_;
     QVariantList agents_, providerList_;
     QVariantMap overflow_;

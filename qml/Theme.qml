@@ -27,7 +27,17 @@ QtObject {
     readonly property string material: typeof app !== "undefined" ? app.material : "solid"
     readonly property bool translucent: material !== "solid"
     readonly property real alphaFloor: dark ? 0.89 : 0.83
-    readonly property real surfaceAlpha: translucent ? 1 - setting("appearance", "intensity", 0.8) * (1 - alphaFloor) : 1
+    // Liquid Glass on macOS 26: the window's glass view takes the theme's appearance (src/gui/window_effects_mac.mm), so what shows
+    // through the panels stays between these greys (0 black, 1 white): never lighter than the first in the dark theme, never
+    // darker than the second in the light one. The panels may then be more see-through. tests/contrast.py holds the text to 4.5:1 at
+    // that floor; it is an assumption about the system's glass until a Mac has been looked at.
+    readonly property bool nativeGlass: typeof app !== "undefined" && material === "glass" && app.nativeGlass
+    readonly property real glassBackdropHi: 0.40
+    readonly property real glassBackdropLo: 0.60
+    readonly property real glassFloor: dark ? 0.74 : 0.62
+    readonly property real glassTintAlpha: 0.55    // the tint of a surface that floats over the program's own content (Glass.qml)
+    property Item glassBehind: null                // what such a surface looks at: the window's content, set by Main.qml
+    readonly property real surfaceAlpha: translucent ? 1 - setting("appearance", "intensity", 0.8) * (1 - (nativeGlass ? glassFloor : alphaFloor)) : 1
     readonly property bool tinted: typeof app !== "undefined" && setting("appearance", "tintSurfaces", false)
     function surface(c) {
         const t = tinted ? Qt.tint(c, Qt.rgba(mark.r, mark.g, mark.b, 0.03)) : c
@@ -65,6 +75,9 @@ QtObject {
     readonly property color markTextSolid: accent ? accent.markText : markTextDefault
     readonly property color markText: strengthen(markTextSolid)
     function strengthen(c) { return translucent && !dark ? Qt.darker(c, 1.4) : c }   // light surfaces can go dark behind: see alphaFloor
+    // `c` with no opacity: the "off" end of an animated fill. A ColorAnimation blends red, green, blue and alpha separately, so a
+    // fade to or from "transparent" (black at alpha 0) passes through grey: on a light surface every hover flashes dark.
+    function clear(c) { return Qt.rgba(c.r, c.g, c.b, 0) }
     readonly property color markLow: accent ? accent.markLow : markLowDefault
     readonly property color focus: accent ? accent.focus : focusDefault
     readonly property color inkOnMark: dark ? actionInk : "#FFFFFF"               // a knob or a tick on a lit fill

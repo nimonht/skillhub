@@ -8,6 +8,7 @@ TourTarget 1.0 TourTarget.qml
 DockPanel 1.0 DockPanel.qml
 TerminalSession 1.0 TerminalSession.qml
 Glass 1.0 Glass.qml
+GlassEdge 1.0 GlassEdge.qml
 GlassEffect 1.0 GlassEffect.qml
 Range 1.0 Range.qml
 SettingsPage 1.0 SettingsPage.qml
@@ -16,6 +17,7 @@ PaneHandle 1.0 PaneHandle.qml
 ReviewPage 1.0 ReviewPage.qml
 Chamfer 1.0 Chamfer.qml
 ConsoleFeed 1.0 ConsoleFeed.qml
+LogViewer 1.0 LogViewer.qml
 NumText 1.0 NumText.qml
 CurveShape 1.0 CurveShape.qml
 DetailAgent 1.0 DetailAgent.qml

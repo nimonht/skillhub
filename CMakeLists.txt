@@ -99,6 +99,7 @@ add_library(skillhub_core STATIC
     src/core/sh_catalog.c
     src/core/sh_auto.c
     src/core/sh_collate.c src/core/sh_collate.h
+    src/core/sh_diag.c src/core/sh_diag.h
     src/core/sh_history.c src/core/sh_history.h
     src/core/sh_state.c src/core/sh_state.h
     src/core/sh_toggle.c src/core/sh_toggle.h
@@ -210,7 +211,7 @@ if(SKILLHUB_TESTS)
     enable_testing()
     add_executable(skillhub_unit_tests tests/unit/test_main.c tests/unit/test.h tests/unit/test_text.c tests/unit/test_paths.c
                                        tests/unit/test_frontmatter.c tests/unit/test_lock.c tests/unit/test_git.c
-                                       tests/unit/test_store.c tests/unit/test_shellstart.c tests/unit/test_selfupdate.c tests/unit/test_scan.c)
+                                       tests/unit/test_store.c tests/unit/test_shellstart.c tests/unit/test_selfupdate.c tests/unit/test_scan.c tests/unit/test_diag.c)
     target_link_libraries(skillhub_unit_tests PRIVATE skillhub_core)
     target_compile_options(skillhub_unit_tests PRIVATE ${SKILLHUB_C_WARNINGS})
     target_compile_definitions(skillhub_unit_tests PRIVATE SKILLHUB_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
@@ -231,6 +232,7 @@ if(SKILLHUB_GUI)
 
     qt_add_executable(skillhub_gui WIN32 MACOSX_BUNDLE
         src/main.cpp src/app.cpp src/app.h
+        src/gui/app_log.cpp src/gui/app_log.h
         src/gui/core_client.cpp src/gui/core_client.h src/gui/skill_row.h
         src/gui/window_effects.cpp src/gui/window_effects.h
         src/gui/translator.cpp src/gui/translator.h
@@ -263,6 +265,23 @@ if(SKILLHUB_GUI)
         target_link_libraries(skillhub_pty_test PRIVATE Threads::Threads)
         target_compile_options(skillhub_pty_test PRIVATE ${SKILLHUB_C_WARNINGS})
         add_test(NAME pty COMMAND skillhub_pty_test)
+    endif()
+    if(SKILLHUB_TESTS AND NOT WIN32 AND NOT APPLE)   # a real terminal in a window, with real key and wheel events (optional: needs Qt Quick Test)
+        find_package(Qt6 QUIET COMPONENTS QuickTest)
+        if(Qt6QuickTest_FOUND)
+            qt_add_executable(skillhub_term_test tests/term_quicktest.cpp src/gui/terminal/vterm_item.cpp src/gui/terminal/vterm_item.h src/term/pty_posix.c)
+            target_include_directories(skillhub_term_test PRIVATE src src/term)
+            target_link_libraries(skillhub_term_test PRIVATE Qt6::QuickTest Qt6::Quick Qt6::Gui skillhub_vterm Threads::Threads)
+            target_compile_definitions(skillhub_term_test PRIVATE QUICK_TEST_SOURCE_DIR="${CMAKE_SOURCE_DIR}/tests/qml-term")
+            add_test(NAME terminal COMMAND skillhub_term_test)
+            set_tests_properties(terminal PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+        endif()
+    endif()
+    if(SKILLHUB_TESTS)   # the view of the history, and what the wheel becomes in libvterm
+        add_executable(skillhub_scroll_test tests/term_scroll.cpp)
+        target_include_directories(skillhub_scroll_test PRIVATE src)
+        target_link_libraries(skillhub_scroll_test PRIVATE skillhub_vterm)
+        add_test(NAME scroll COMMAND skillhub_scroll_test)
     endif()
     if(APPLE)
         target_sources(skillhub_gui PRIVATE src/gui/window_effects_mac.mm)

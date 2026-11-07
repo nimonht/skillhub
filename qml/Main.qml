@@ -17,6 +17,7 @@ ApplicationWindow {
     property bool consoleOpen: false
     property bool settingsOpen: false
     onSettingsOpenChanged: if (!settingsOpen) list.forceActiveFocus()
+    onConsoleOpenChanged: if (consoleOpen && activity.onTerminal) activity.focusActive()   // closed, the dock keeps no key: the shortcuts work again
     property bool dockChecked: false
     readonly property real centerMin: 140 + 36 + Theme.statusW + app.columnCount * app.portW + Theme.padR
     // docked as long as the center keeps its minimum; otherwise the panel floats over it
@@ -25,7 +26,8 @@ ApplicationWindow {
     readonly property bool bandCompact: Theme.setting("layout", "bandCompact", false)
     readonly property bool railFolded: Theme.setting("layout", "railAutoCollapse", false) && width < 1000
     onRailFoldedChanged: rail.SplitView.preferredWidth = railFolded ? 64 : Theme.railW
-    readonly property bool typing: activeFocusItem && activeFocusItem.hasOwnProperty("cursorPosition")
+    // a text field, or the terminal: keys that print a character are theirs ("/" is a letter to a shell)
+    readonly property bool typing: activeFocusItem && (activeFocusItem.hasOwnProperty("cursorPosition") || activeFocusItem.ownsKeyboard === true)
 
     // every panel resizes: Rail | (top bar over (Center | Detail) over the dock) | footer
     SplitView {
@@ -313,6 +315,7 @@ ApplicationWindow {
         saveLayout()
     }
     Component.onCompleted: {
+        Theme.glassBehind = outer   // what the glass of a toast, a menu or a tooltip looks at
         app.applyMaterial(win, Theme.dark)
         if (app.layoutState("outer")) outer.restoreState(app.layoutState("outer"))
         if (app.layoutState("vertical")) vertical.restoreState(app.layoutState("vertical"))
@@ -365,6 +368,7 @@ ApplicationWindow {
         target: app
         function onShowSettings(section) { win.settingsOpen = true }
         function onShowTerminal() { win.consoleOpen = true; activity.showTerminal() }
+        function onShowLog() { win.consoleOpen = true; activity.tab = "log" }
         function onOpenTerminalAt(folder, command) { win.consoleOpen = true; activity.addSession(folder, command) }
         function onSettingsChanged() {   // once, when the settings first arrive
             if (win.dockChecked) return
@@ -384,7 +388,8 @@ ApplicationWindow {
     Shortcut { sequence: "Ctrl+Shift+U"; onActivated: if (!app.busy && app.updateCount > 0) app.reviewAll() }
     Shortcut { sequences: ["F5", "Ctrl+R"]; onActivated: app.refresh() }   // i18n-ok
     Shortcut { sequence: "Ctrl+J"; onActivated: { if (win.consoleOpen && activity.tab !== "activity") activity.tab = "activity"; else win.consoleOpen = !win.consoleOpen } }
-    Shortcut { sequences: ["Ctrl+`"]; onActivated: { if (win.consoleOpen && activity.tab !== "activity") win.consoleOpen = false; else { win.consoleOpen = true; activity.showTerminal() } } }
+    Shortcut { sequences: ["Ctrl+`"]; onActivated: { if (win.consoleOpen && activity.onTerminal) win.consoleOpen = false; else { win.consoleOpen = true; activity.showTerminal() } } }
+    Shortcut { sequence: "Ctrl+Shift+L"; onActivated: { if (win.consoleOpen && activity.tab === "log") win.consoleOpen = false; else { win.consoleOpen = true; activity.tab = "log" } } }
     Shortcut { sequence: "Ctrl+Q"; onActivated: Qt.quit() }
     Shortcut { sequence: "Ctrl+,"; onActivated: win.settingsOpen = !win.settingsOpen }
     Shortcut { sequence: "F1"; onActivated: app.startTour(0, 0) }

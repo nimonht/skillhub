@@ -40,6 +40,8 @@ jobs:
         run: QT_QPA_PLATFORM=offscreen "$QT_ROOT_DIR/bin/qmltestrunner" -input tests/qml
       - name: Design token contrast (WCAG)
         run: python3 tests/contrast.py build/skillhub
+      - name: Every shortcut is decided (the terminal keeps the window's own chords and owns the rest)
+        run: python3 tests/shortcut_lint.py
       - name: Smoke test (offline, throw-away HOME)
         run: sh tests/smoke.sh build/skillhub
       - name: Portable CLI test (detection, links, git install/update, export/import)
@@ -246,6 +248,9 @@ jobs:
       - name: C unit tests
         run: ctest --test-dir build --output-on-failure
         shell: bash
+      - name: Our programs read no other program's memory and write no dump (an antivirus takes that for a credential stealer)
+        shell: bash
+        run: python3 tests/deployed_imports.py --forbidden-only build
       - name: Portable CLI test
         shell: bash
         run: python3 tests/portable_smoke.py build/skillhub-cli.exe

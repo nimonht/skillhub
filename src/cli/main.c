@@ -11,6 +11,7 @@
 #include <string.h>
 #include <time.h>
 
+#include "sh_diag.h"
 #include "sh_engine.h"
 #include "sh_exe.h"
 #include "sh_fetch.h"
@@ -124,6 +125,7 @@ static void usage(void) {
         "  skillhub [gui]                  open the manager window\n"
         "  skillhub list [--json]          installed skills, source, per-agent link state\n"
         "  skillhub doctor [--fix]         report (and repair) strays, dead links, Antigravity config\n"
+        "  skillhub diagnose [FILE]        a report for a bug: versions, system, folders, settings, memory use (nothing is sent)\n"
         "  skillhub adopt [--notify]       move stray skills from agent dirs into ~/.agents/skills\n"
         "  skillhub check                  fetch upstream, show available updates (exit 10 if any)\n"
         "  skillhub update [--all|NAME...] [--auto] [--notify]\n"
@@ -332,6 +334,24 @@ static int cmd_doctor(sh_store *st, const args_t *a) {
         return 0;
     }
     return problems ? 1 : 0;
+}
+
+static int cmd_diagnose(sh_store *st, const args_t *a) {
+    const char *file = first_plain(a);
+    char *report = sh_diag_report(st, "command line");
+    int rc = 0;
+    if (file) {
+        const size_t n = strlen(report);
+        if (sh_write_atomic(file, report, n)) outf("wrote %s\n", file);
+        else {
+            errf("cannot write %s\n", file);
+            rc = 1;
+        }
+    } else {
+        out(report);
+    }
+    free(report);
+    return rc;
 }
 
 static int cmd_export(sh_store *st, const args_t *a) {
@@ -1565,6 +1585,7 @@ static int run_cli(int argc, char **argv) {
     int rc;
     if (strcmp(cmd, "list") == 0) rc = cmd_list(&st, &a);
     else if (strcmp(cmd, "doctor") == 0) rc = cmd_doctor(&st, &a);
+    else if (strcmp(cmd, "diagnose") == 0) rc = cmd_diagnose(&st, &a);
     else if (strcmp(cmd, "export") == 0) rc = cmd_export(&st, &a);
     else if (strcmp(cmd, "import") == 0) rc = cmd_import(&st, &a);
     else if (strcmp(cmd, "providers") == 0) rc = cmd_providers(&st, &a);

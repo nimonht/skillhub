@@ -2,6 +2,7 @@
 
 #include "gui/terminal/term_look.h"
 #include "gui/window_effects.h"
+#include "sh_diag.h"
 #include "sh_palette.h"
 #include "sh_shellstart.h"
 
@@ -14,6 +15,7 @@
 #endif
 
 #include <QClipboard>
+#include <QCoreApplication>
 #include <QDate>
 #include <QDateTime>
 #include <QDesktopServices>
@@ -29,8 +31,10 @@
 #include <QProcess>
 #include <QPalette>
 #include <QRegularExpression>
+#include <QScreen>
 #include <QSettings>
 #include <QStandardPaths>
+#include <QSysInfo>
 #include <QTemporaryDir>
 #include <QTextBlock>
 #include <QTextCursor>
@@ -240,9 +244,14 @@ QVariant LogModel::data(const QModelIndex &index, int role) const {
     return role == TimeRole ? l.time : role == TextRole ? l.text : role == LevelRole ? l.level : QVariant();
 }
 
-// a batch of lines in one insert; the oldest go once there are more than 400
-void LogModel::add(const QJsonArray &lines) {
+// a batch of lines in one insert; the oldest go once there are more than 400. The log file and the viewer get every line.
+void LogModel::add(const QJsonArray &lines, const QString &source) {
     if (lines.isEmpty()) return;
+    for (const QJsonValue &v : lines) {
+        const QJsonObject o = v.toObject();
+        AppLog::write(source, o.value(QStringLiteral("level")).toString(QStringLiteral("info")), o.value(QStringLiteral("text")).toString(),
+                      o.value(QStringLiteral("ts")).toInteger());
+    }
     const int keep = 400;
     const int incoming = int(qMin<qsizetype>(lines.size(), keep));
     const int drop = int(qMax<qsizetype>(0, lines_.size() + incoming - keep));
@@ -263,7 +272,8 @@ void LogModel::add(const QJsonArray &lines) {
 void LogModel::addText(const QString &text, const QString &level) {
     add(QJsonArray{QJsonObject{{QStringLiteral("time"), QDateTime::currentDateTime().toString(QStringLiteral("HH:mm:ss"))},
                                {QStringLiteral("text"), text},
-                               {QStringLiteral("level"), level}}});
+                               {QStringLiteral("level"), level}}},
+        QStringLiteral("gui"));
 }
 
 void LogModel::clear() {
@@ -281,6 +291,7 @@ AppController::AppController(QObject *parent) : QObject(parent) {
     forcedStill_ = qEnvironmentVariableIntValue("SKILLHUB_REDUCE_MOTION") == 1;
     noHover_ = qEnvironmentVariableIntValue("SKILLHUB_NO_HOVER") == 1;
     filter_.setSourceModel(&model_);
+    logView_.setSourceModel(AppLog::instance());
     connect(&core_, &CoreClient::ready, this, &AppController::onReady);
     connect(&core_, &CoreClient::notification, this, &AppController::onNotification);
     connect(&core_, &CoreClient::failed, this, [this](const QString &why) {
@@ -604,7 +615,8 @@ QString AppController::material() const {
 
 bool AppController::glassReady() const {
 #ifdef SKILLHUB_HAVE_SHADERS
-    return !forcedStill_ && QQuickWindow::graphicsApi() != QSGRendererInterface::Software;
+    // SKILLHUB_GLASS_SHOT=1: a screenshot with the shader on a machine that has a GPU, without the animations that --animate brings
+    return (!forcedStill_ || qEnvironmentVariableIntValue("SKILLHUB_GLASS_SHOT") == 1) && QQuickWindow::graphicsApi() != QSGRendererInterface::Software;
 #else
     return false;
 #endif
@@ -1529,6 +1541,87 @@ void AppController::openFolder() {
 void AppController::copyText(const QString &text) {
     QGuiApplication::clipboard()->setText(text);
     emit toast(QStringLiteral("ok"), tr("Copied"));
+}
+
+void AppController::copyLog(const QVariantList &rows) {
+    logView_.copy(rows);
+    emit toast(QStringLiteral("ok"), tr("Copied"));
+}
+
+// the window's part of the report: plain English like the rest of it, since it is read by whoever gets the report
+QString AppController::windowReport() const {
+    sh_diag_memory mem;
+    QString memory = QStringLiteral("not available on this system");
+    if (sh_diag_memory_read(&mem)) {
+        char *words = sh_diag_memory_text(&mem);
+        memory = QString::fromUtf8(words);
+        free(words);
+    }
+    QString api;
+    switch (QQuickWindow::graphicsApi()) {
+    case QSGRendererInterface::OpenGL: api = QStringLiteral("OpenGL"); break;
+    case QSGRendererInterface::Direct3D11: api = QStringLiteral("Direct3D 11"); break;
+    case QSGRendererInterface::Direct3D12: api = QStringLiteral("Direct3D 12"); break;
+    case QSGRendererInterface::Vulkan: api = QStringLiteral("Vulkan"); break;
+    case QSGRendererInterface::Metal: api = QStringLiteral("Metal"); break;
+    case QSGRendererInterface::Software: api = QStringLiteral("Software"); break;
+    default: api = QStringLiteral("other"); break;
+    }
+    QStringList screens;
+    for (const QScreen *s : QGuiApplication::screens())
+        screens << QStringLiteral("%1 %2x%3 at %4x").arg(s->name()).arg(s->geometry().width()).arg(s->geometry().height()).arg(s->devicePixelRatio());
+    const auto row = [](const char *label, const QString &value) { return QStringLiteral("%1 %2\n").arg(QString::fromLatin1(label).leftJustified(11), value.isEmpty() ? QStringLiteral("-") : value); };
+    QString out = QStringLiteral("Window\n------\n");
+    out += row("Running", QStringLiteral("skillhub-gui %1, process %2").arg(QStringLiteral(SKILLHUB_VERSION)).arg(QCoreApplication::applicationPid()));
+    out += row("Memory", memory);
+    out += row("Qt", QStringLiteral("%1 (built with %2)").arg(QString::fromLatin1(qVersion()), QStringLiteral(QT_VERSION_STR)));
+    out += row("System", QSysInfo::prettyProductName() + QLatin1String(", ") + QSysInfo::currentCpuArchitecture());
+    out += row("Platform", QGuiApplication::platformName());
+    out += row("Graphics", api);
+    out += row("Screens", screens.join(QLatin1String("; ")));
+    out += row("Language", QStringLiteral("%1 (%2)").arg(languageChoice_, QLocale().name()));
+    out += row("Theme", themeMode_);
+    out += row("Material", QStringLiteral("%1 chosen, %2 in use, glass shader %3").arg(setting(QStringLiteral("appearance"), QStringLiteral("material"), QStringLiteral("solid")).toString(), material(), glassReady() ? QStringLiteral("on") : QStringLiteral("off")));
+    out += row("Backend", backendInfo());
+    return out;
+}
+
+void AppController::createReport(const QString &action, const QString &path) {
+    core_.call(QStringLiteral("diag.report"), {}, [this, action, path](const CoreReply &r) {
+        const QString service = r.ok() ? r.result.toObject().value(QStringLiteral("text")).toString()
+                                       : QStringLiteral("The background service did not answer: %1\n").arg(r.message());
+        const QString text = windowReport() + QLatin1Char('\n') + service + QStringLiteral("\nLog, the last 200 lines\n-----------------------\n") +
+                             (AppLog::instance() ? AppLog::instance()->tail(200) : QString()) + QLatin1Char('\n');
+        if (action == QLatin1String("copy")) {
+            QGuiApplication::clipboard()->setText(text);
+            emit toast(QStringLiteral("ok"), tr("Copied the report"));
+            return;
+        }
+        QFile out(path.startsWith(QLatin1String("file:")) ? QUrl(path).toLocalFile() : path);
+        if (out.open(QIODevice::WriteOnly | QIODevice::Truncate) && out.write(text.toUtf8()) >= 0)
+            emit toast(QStringLiteral("ok"), tr("Saved the report to %1").arg(tilde(path)));
+        else
+            emit toast(QStringLiteral("error"), tr("Could not write %1").arg(tilde(path)));
+    });
+}
+
+QVariantMap AppController::processIds() const {
+    return {{QStringLiteral("window"), QCoreApplication::applicationPid()}, {QStringLiteral("backend"), core_.init().value(QStringLiteral("pid")).toInt()}};
+}
+
+// Through the shell, not CreateProcess: Task Manager's manifest asks for the highest rights the account has, and a plain start of it fails
+// without a word when that needs the consent of User Account Control. The shell shows that prompt.
+void AppController::openTaskManager() {
+#ifdef Q_OS_WIN
+    const QString system = qEnvironmentVariable("SystemRoot", QStringLiteral("C:/Windows"));
+    if (!QDesktopServices::openUrl(QUrl::fromLocalFile(system + QStringLiteral("/System32/Taskmgr.exe"))))
+        emit toast(QStringLiteral("error"), tr("Could not open Task Manager"));
+#endif
+}
+
+void AppController::saveLog(const QString &path) {
+    if (logView_.saveTo(path)) emit toast(QStringLiteral("ok"), tr("Saved the log to %1").arg(tilde(path)));
+    else emit toast(QStringLiteral("error"), tr("Could not write %1").arg(tilde(path)));
 }
 
 // Qt's markdown defaults (huge headings, oversized fixed-pitch, blue links) look foreign next to the rest of the UI,

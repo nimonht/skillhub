@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include "serve.h"
+#include "sh_diag.h"
 #include "sh_exe.h"
 #include "sh_fetch.h"
 #include "sh_fs.h"
@@ -735,6 +736,28 @@ static void m_system_info(server *s, sh_rpc_msg *m) {
     sh_sysinfo_free(&info);
 }
 
+// the report of docs/protocol.md "diag.report": text for a person to read, and this process's own counters
+static void m_diag_report(server *s, sh_rpc_msg *m, const slow_call *c) {
+    (void)c;
+    sh_store st;
+    sh_store_init(&st, NULL, NULL);
+    char *text = sh_diag_report(&st, "background service");
+    sh_store_free(&st);
+    sh_diag_memory mem;
+    const bool known = sh_diag_memory_read(&mem);
+    yyjson_mut_doc *d = yyjson_mut_doc_new(NULL);
+    yyjson_mut_val *r = yyjson_mut_obj(d);
+    yyjson_mut_obj_add_strcpy(d, r, "text", text);
+    yyjson_mut_obj_add_int(d, r, "pid", sh_process_id());
+    if (known) {
+        yyjson_mut_obj_add_int(d, r, "residentKb", mem.rss_kb);
+        yyjson_mut_obj_add_int(d, r, "peakKb", mem.peak_kb);
+    }
+    send_result(s, m, d, r);
+    yyjson_mut_doc_free(d);
+    free(text);
+}
+
 static void m_history(server *s, sh_rpc_msg *m) {
     const char *name = param_str(m->params, "name");
     sh_store st;
@@ -1075,6 +1098,7 @@ static const struct {
     {"skills.safety", m_skill_safety, false},
     {"automation.status", m_automation_status, false},
     {"automation.set", m_automation_set, true},
+    {"diag.report", m_diag_report, false},
 };
 
 // returns true when it keeps `m`, until the call has answered

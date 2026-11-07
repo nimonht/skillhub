@@ -7,6 +7,7 @@
 #include <QGuiApplication>
 #include <QInputMethodEvent>
 #include <QKeyEvent>
+#include <QKeySequence>
 #include <QPainter>
 #include <QRegularExpression>
 #include <QTimer>
@@ -116,6 +117,26 @@ void VTermItem::measure() {
     resizeGrid();
 }
 
+void VTermItem::setScrollback(int lines) {
+    lines = qMax(0, lines);
+    if (lines == scrollbackMax_) return;
+    scrollbackMax_ = lines;
+    if (scrollback_.size() > lines) scrollback_.remove(0, scrollback_.size() - lines);
+    scroll_.setMax(int(scrollback_.size()));
+    scrolled();
+    emit settingsChanged();
+}
+
+void VTermItem::scrolled() {
+    showBar_ = true;
+    QTimer::singleShot(900, this, [this] {
+        showBar_ = false;
+        update();
+    });
+    update();
+    emit scrollChanged();
+}
+
 void VTermItem::resizeGrid() {
     const int cols = qMax(2, int(width() / cellW_)), rows = qMax(1, int(height() / cellH_));
     if (cols == cols_ && rows == rows_) return;
@@ -124,6 +145,7 @@ void VTermItem::resizeGrid() {
     vterm_set_size(vt_, rows_, cols_);
     vterm_screen_flush_damage(screen_);
     if (pty_) sh_pty_resize(pty_, cols_, rows_);
+    scroll_.setMax(int(scrollback_.size()));   // the resize may have pushed or taken back lines
     update();
 }
 
@@ -260,7 +282,6 @@ int VTermItem::onMoveCursor(VTermPos pos, VTermPos old, int visible, void *user)
     auto *self = static_cast<VTermItem *>(user);
     self->cursor_ = pos;
     self->cursorVisible_ = visible;
-    self->scrolled_ = 0;
     self->update(QRectF(old.col * self->cellW_, old.row * self->cellH_, self->cellW_ * 2, self->cellH_).toAlignedRect());
     self->update(QRectF(pos.col * self->cellW_, pos.row * self->cellH_, self->cellW_ * 2, self->cellH_).toAlignedRect());
     return 1;
@@ -276,6 +297,12 @@ int VTermItem::onProp(VTermProp prop, VTermValue *val, void *user) {
         self->cursorVisible_ = val->boolean;
     } else if (prop == VTERM_PROP_ALTSCREEN) {
         self->altScreen_ = val->boolean;
+        if (self->altScreen_ && !self->scroll_.atBottom()) {   // the application draws its own screen: the history is not what the view should show
+            self->scroll_.toBottom();
+            emit self->scrollChanged();
+        }
+    } else if (prop == VTERM_PROP_MOUSE) {
+        self->mouseMode_ = val->number;
     } else if (prop == VTERM_PROP_CURSORSHAPE) {
         self->cursorShape_ = val->number == VTERM_PROP_CURSORSHAPE_UNDERLINE ? QStringLiteral("underline") : val->number == VTERM_PROP_CURSORSHAPE_BAR_LEFT ? QStringLiteral("bar") : QStringLiteral("block");
     }
@@ -295,10 +322,15 @@ int VTermItem::onBell(void *user) {   // a flash, not a sound
 
 int VTermItem::onPushLine(int cols, const VTermScreenCell *cells, void *user) {
     auto *self = static_cast<VTermItem *>(user);
+    if (self->scrollbackMax_ <= 0) return 1;
     Line line;
     line.cells = QVector<VTermScreenCell>(cells, cells + cols);
     self->scrollback_.append(line);
-    if (self->scrollback_.size() > self->scrollbackMax_) self->scrollback_.removeFirst();
+    if (self->scrollback_.size() > self->scrollbackMax_) self->scrollback_.remove(0, self->scrollback_.size() - self->scrollbackMax_);
+    const int before = self->scroll_.offset;
+    self->scroll_.pushed();   // a view that looks back keeps what it shows while the shell goes on writing
+    self->scroll_.setMax(int(self->scrollback_.size()));
+    if (self->scroll_.offset != before) emit self->scrollChanged();
     return 1;
 }
 
@@ -306,6 +338,7 @@ int VTermItem::onPopLine(int cols, VTermScreenCell *cells, void *user) {
     auto *self = static_cast<VTermItem *>(user);
     if (self->scrollback_.isEmpty()) return 0;
     const Line line = self->scrollback_.takeLast();
+    self->scroll_.setMax(int(self->scrollback_.size()));
     for (int i = 0; i < cols; ++i) {
         if (i < line.cells.size()) {
             cells[i] = line.cells[i];
@@ -336,7 +369,7 @@ VTermScreenCell VTermItem::cellAt(int row, int col) const {
     VTermScreenCell cell;
     memset(&cell, 0, sizeof cell);
     cell.width = 1;
-    const int shown = row - scrolled_;
+    const int shown = row - scroll_.offset;
     if (shown < 0) {
         const int index = scrollback_.size() + shown;
         if (index >= 0 && index < scrollback_.size() && col < scrollback_[index].cells.size()) return scrollback_[index].cells[col];
@@ -398,7 +431,14 @@ void VTermItem::paint(QPainter *p) {
             col += span;
         }
     }
-    if (cursorVisible_ && scrolled_ == 0) {
+    if (showBar_ && scroll_.max > 0) {   // where the view is in the history
+        const qreal h = rows_ * cellH_, bar = qMax<qreal>(24, h * rows_ / (rows_ + scroll_.max));
+        const qreal top = (h - bar) * (scroll_.max - scroll_.offset) / scroll_.max;
+        QColor c = foreground_;
+        c.setAlphaF(0.35);
+        p->fillRect(QRectF(width() - 5, top, 3, bar), c);
+    }
+    if (cursorVisible_ && scroll_.atBottom()) {
         const QRectF box(cursor_.col * cellW_, cursor_.row * cellH_, cellW_, cellH_);
         if (cursorShape_ == QLatin1String("bar")) p->fillRect(QRectF(box.x(), box.y(), 2, box.height()), cursorColor_);
         else if (cursorShape_ == QLatin1String("underline")) p->fillRect(QRectF(box.x(), box.bottom() - 2, box.width(), 2), cursorColor_);
@@ -407,15 +447,68 @@ void VTermItem::paint(QPainter *p) {
     }
 }
 
+// The chords that belong to the window. A focused terminal owns every other key, so "/" and Escape and Ctrl+R reach the shell
+// (the window's search, its dismiss key and the like would otherwise take them: a Shortcut is tried before the key goes to the item).
+// Ctrl+Shift+C and V are the terminal's own, and so are Command+C and V on macOS, where Qt calls Command "Control".
+static bool windowKeeps(const QKeyEvent &e) {
+#ifdef Q_OS_MACOS
+    if ((e.modifiers() & Qt::ControlModifier) && e.key() != Qt::Key_C && e.key() != Qt::Key_V) return true;   // Command: all of it is the window's
+#endif
+    static const QList<QKeySequence> chords = {
+        QKeySequence(Qt::CTRL | Qt::Key_QuoteLeft), QKeySequence(Qt::CTRL | Qt::Key_Comma),   // the dock, the settings
+        QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_Left), QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_Right), QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_Up),
+        QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_Down), QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_0),   // the panels
+        QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_E), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_A), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_U),
+        QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_L),   // transfer, agents, review all updates, the log
+    };
+    const Qt::KeyboardModifiers mods = e.modifiers() & (Qt::ShiftModifier | Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier);   // not the keypad's
+    return chords.contains(QKeySequence(QKeyCombination(mods, Qt::Key(e.key()))));
+}
+
+bool VTermItem::event(QEvent *e) {
+    if (e->type() == QEvent::ShortcutOverride) {
+        if (windowKeeps(*static_cast<QKeyEvent *>(e))) return QQuickPaintedItem::event(e);
+        e->accept();   // the key is the terminal's: it arrives as a key press, and no Shortcut takes it
+        return true;
+    }
+    return QQuickPaintedItem::event(e);
+}
+
+// Shift+PageUp, PageDown, Home and End move the view over the history, as in other terminals
+bool VTermItem::scrollKey(QKeyEvent *e) {
+    if (altScreen_ || e->modifiers() != Qt::ShiftModifier) return false;
+    switch (e->key()) {
+    case Qt::Key_PageUp: scroll_.by(rows_ - 1); break;
+    case Qt::Key_PageDown: scroll_.by(-(rows_ - 1)); break;
+    case Qt::Key_Home: scroll_.toTop(); break;
+    case Qt::Key_End: scroll_.toBottom(); break;
+    default: return false;
+    }
+    scrolled();
+    return true;
+}
+
 void VTermItem::keyPressEvent(QKeyEvent *e) {
     const auto mods = e->modifiers();
-    if ((mods & Qt::ControlModifier) && (mods & Qt::ShiftModifier)) {
+#ifdef Q_OS_MACOS
+    const bool ctrl = mods & Qt::MetaModifier;   // the Control key: Qt swaps it with Command
+    if (mods & Qt::ControlModifier) {
+        if (e->key() == Qt::Key_C) copy();
+        else if (e->key() == Qt::Key_V) paste();
+        else e->ignore();
+        return;
+    }
+#else
+    const bool ctrl = mods & Qt::ControlModifier;
+    if (ctrl && (mods & Qt::ShiftModifier)) {
         if (e->key() == Qt::Key_C) { copy(); return; }
         if (e->key() == Qt::Key_V) { paste(); return; }
     }
+#endif
+    if (scrollKey(e)) return;
     int mod = VTERM_MOD_NONE;
     if (mods & Qt::ShiftModifier) mod |= VTERM_MOD_SHIFT;
-    if (mods & Qt::ControlModifier) mod |= VTERM_MOD_CTRL;
+    if (ctrl) mod |= VTERM_MOD_CTRL;
     if (mods & Qt::AltModifier) mod |= VTERM_MOD_ALT;
     const auto m = VTermModifier(mod);
     VTermKey key = VTERM_KEY_NONE;
@@ -437,15 +530,25 @@ void VTermItem::keyPressEvent(QKeyEvent *e) {
     default: break;
     }
     if (e->key() >= Qt::Key_F1 && e->key() <= Qt::Key_F12) key = VTermKey(VTERM_KEY_FUNCTION(e->key() - Qt::Key_F1 + 1));
-    selStart_ = QPoint(-1, -1);
-    scrolled_ = 0;
+    bool sent = true;
     if (key != VTERM_KEY_NONE) {
         vterm_keyboard_key(vt_, key, m);
-    } else if ((mods & Qt::ControlModifier) && e->key() >= Qt::Key_A && e->key() <= Qt::Key_Z) {
+    } else if (ctrl && e->key() >= Qt::Key_A && e->key() <= Qt::Key_Z) {
         vterm_keyboard_unichar(vt_, uint32_t(e->key() - Qt::Key_A + 'a'), m);
     } else {
-        for (const uint cp : e->text().toUcs4())
-            if (cp >= 0x20 && cp != 0x7F) vterm_keyboard_unichar(vt_, cp, (mods & Qt::AltModifier) ? VTERM_MOD_ALT : VTERM_MOD_NONE);
+        sent = false;
+        for (const uint cp : e->text().toUcs4()) {
+            if (cp < 0x20 || cp == 0x7F) continue;
+            vterm_keyboard_unichar(vt_, cp, (mods & Qt::AltModifier) ? VTERM_MOD_ALT : VTERM_MOD_NONE);
+            sent = true;
+        }
+    }
+    if (sent) {   // what is typed goes to the live screen; a modifier on its own does not
+        selStart_ = QPoint(-1, -1);
+        if (!scroll_.atBottom()) {
+            scroll_.toBottom();
+            scrolled();
+        }
     }
     update();
 }
@@ -495,10 +598,36 @@ void VTermItem::mouseReleaseEvent(QMouseEvent *) {
     update();
 }
 
+// With the mouse mode on, or on the alternate screen (less, vim, a full-screen agent), the wheel belongs to the program: to its mouse
+// reports, or as arrow keys when it asked for none. Shift takes it back to scroll the history.
+bool VTermItem::appOwnsWheel(Qt::KeyboardModifiers mods) const {
+    return !(mods & Qt::ShiftModifier) && (mouseMode_ != VTERM_PROP_MOUSE_NONE || altScreen_);
+}
+
 void VTermItem::wheelEvent(QWheelEvent *e) {
-    const int lines = e->angleDelta().y() / 40;
-    scrolled_ = qBound(0, scrolled_ + lines, int(scrollback_.size()));
-    update();
+    const QPoint pixels = e->pixelDelta();
+    const double lines = !pixels.isNull() ? TermScroll::fromPixels(pixels.y(), cellH_) : TermScroll::fromAngle(e->angleDelta().y());
+    if (lines == 0) {   // a sideways step
+        e->ignore();
+        return;
+    }
+    if (appOwnsWheel(e->modifiers())) {
+        scroll_.carry = 0;
+        const int steps = appWheel_.takeWhole(lines);
+        const QPoint at = cellAt(e->position());
+        for (int i = 0; i < qMin(qAbs(steps), 12); ++i) {
+            if (mouseMode_ != VTERM_PROP_MOUSE_NONE) {
+                vterm_mouse_move(vt_, at.y(), at.x(), VTERM_MOD_NONE);
+                vterm_mouse_button(vt_, steps > 0 ? 4 : 5, true, VTERM_MOD_NONE);   // 4 is the wheel up, 5 down
+            } else {
+                vterm_keyboard_key(vt_, steps > 0 ? VTERM_KEY_UP : VTERM_KEY_DOWN, VTERM_MOD_NONE);
+            }
+        }
+    } else {
+        appWheel_.carry = 0;
+        if (scroll_.wheel(lines) != 0) scrolled();
+    }
+    e->accept();
 }
 
 void VTermItem::focusInEvent(QFocusEvent *e) {
