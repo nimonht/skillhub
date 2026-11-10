@@ -1,5 +1,33 @@
 # Changelog
 
+## 2.0.0 - 2026-11-11
+
+Skill Hub 2.0, final: what the six betas below brought, and a way to choose between final versions and betas. From beta3 or later it
+arrives through the Update button. 1.x and the first two betas have no updater, so install this one by hand once, over what you have;
+from here on it updates itself.
+
+New since beta6:
+
+- **Stable or beta, and back.** *Settings, About* has an update channel: *Stable* is offered final versions only, *Beta* test versions as
+  well. `skillhub self-update --channel stable|beta` sets the same thing in a terminal. Switch in either direction whenever you like: on
+  Beta the next test version arrives through the same button, and a beta that is switched back to Stable is offered the newest final
+  version with *Go back to X*, one click, the same signed download and the same checks as any update. Nothing has to be downloaded by hand
+  again. Going back is the one case where an older version is installed, only when you ask, and never to a version before this one. Until
+  you choose, nothing changes: a final version follows final versions and a beta follows betas.
+- **Every installed copy keeps being reached.** A copy updates itself with the code it was shipped with, so a release it cannot read
+  would leave it behind for good (that is why "beta 4.1" became beta5). Before anything is published, the release now checks that its
+  version is one every copy since beta3 can read and that the installer, the disk image and the tarballs carry the names those copies ask for.
+- **A selection in the terminal stays on its text.** Selected text used to stay where it was on screen while the text moved under it:
+  after scrolling, or while the shell went on writing, other text was selected, and that is what Copy took. The selection now moves with
+  its text, into the history too.
+- **The old `backend.log` is gone.** Versions before beta6 kept it in the cache folder; `logs/skillhub.log` replaced it, and the window now
+  removes the file that stayed behind.
+
+Known and unchanged: the macOS and Windows programs are not code-signed, so the system asks once at the first start, and Microsoft
+Defender can take the Windows programs for a threat by mistake; the README says what to do. With Liquid Glass, the floating detail panel
+and the dock have a lit rim and not the lens that toasts and menus have; that is on the roadmap. Liquid Glass on macOS 26 was written
+without a Mac: reports are welcome.
+
 ## 2.0.0-beta6 - 2026-11-07
 
 The last beta before 2.0.0: tools for finding out what went wrong, a terminal that keeps its keys, and the glass of macOS 26. From

@@ -1,3 +1,11 @@
+skillhub (2.0.0) unstable; urgency=medium
+
+  * The final 2.0.0. Update channels: stable or beta, and a beta can go
+    back to the newest final version. A selection in the terminal stays on
+    its text.
+
+ -- nimonht <181256175+nimonht@users.noreply.github.com>  Wed, 11 Nov 2026 10:00:00 +0700
+
 skillhub (2.0.0~beta6) unstable; urgency=medium
 
   * A log viewer and a diagnostic report; the terminal keeps the keyboard

@@ -1,10 +1,10 @@
 Name:           skillhub
-Version:        2.0.0~beta6
+Version:        2.0.0
 Release:        1%{?dist}
 Summary:        One skills folder for every coding agent
 License:        MIT AND OFL-1.1 AND CC0-1.0
 URL:            https://github.com/nimonht/skillhub
-Source0:        %{url}/archive/refs/tags/v2.0.0-beta6/%{name}-%{version}.tar.gz
+Source0:        %{url}/archive/refs/tags/v2.0.0/%{name}-%{version}.tar.gz
 
 BuildRequires:  cmake
 BuildRequires:  gcc
@@ -60,6 +60,9 @@ appstream-util validate-relax --nonet %{buildroot}%{_metainfodir}/io.github.nimo
 %{_datadir}/icons/hicolor/scalable/apps/skillhub.svg
 
 %changelog
+* Wed Nov 11 2026 nimonht <181256175+nimonht@users.noreply.github.com> - 2.0.0-1
+- The final 2.0.0: update channels (stable or beta, and back); a terminal selection stays on its text
+
 * Sat Nov 07 2026 nimonht <181256175+nimonht@users.noreply.github.com> - 2.0.0~beta6-1
 - Log viewer and diagnostic report; terminal keyboard and scrolling; Liquid Glass; light-theme hover
 
