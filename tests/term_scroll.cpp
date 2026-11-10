@@ -88,6 +88,62 @@ static void application_steps() {
     CHECK(s.takeWhole(-0.2) == -1); // -0.8 - 0.2 = -1.0, stored 0.8 earlier
 }
 
+// A selection is kept in lines of the text. Kept in rows of the view, it stayed on the glass while the text moved under it.
+static void selection_stays_on_its_text() {
+    TermScroll view;
+    view.setMax(100);
+    TermSelection sel;
+    CHECK(!sel.active() && sel.empty() && !sel.contains(0, 0));
+    sel.begin(4, TermSelection::lineOf(10, view.offset));    // dragged on the live screen, from row 10 to row 12
+    sel.extend(7, TermSelection::lineOf(12, view.offset));
+    CHECK(sel.active() && !sel.empty());
+    CHECK(sel.contains(10, 4) && !sel.contains(10, 3) && sel.contains(11, 0) && sel.contains(11, 500) && sel.contains(12, 7) && !sel.contains(12, 8));
+    view.wheel(3);                                           // the view moves up three lines: the text is three rows lower
+    CHECK(sel.contains(TermSelection::lineOf(13, view.offset), 4));
+    CHECK(!sel.contains(TermSelection::lineOf(10, view.offset), 4));
+    view.toBottom();
+    for (int i = 0; i < 12; ++i) sel.pushed(100 + i + 1);    // the shell writes twelve lines: the text goes up, into the history
+    CHECK(sel.contains(-2, 4) && sel.contains(0, 7) && !sel.contains(10, 4));
+    sel.popped();                                            // the terminal grew by a row: one line came back
+    CHECK(sel.contains(-1, 4) && sel.contains(1, 7));
+}
+
+static void selection_backwards_and_empty() {
+    TermSelection sel;
+    sel.begin(9, 5);
+    CHECK(sel.empty());                                      // a click selects nothing
+    sel.extend(2, 3);                                        // dragged up and to the left
+    int fromCol, fromLine, toCol, toLine;
+    sel.ordered(fromCol, fromLine, toCol, toLine);
+    CHECK(fromCol == 2 && fromLine == 3 && toCol == 9 && toLine == 5);
+    CHECK(sel.contains(4, 0) && sel.contains(3, 2) && !sel.contains(3, 1) && !sel.contains(5, 10));
+    sel.clear();
+    CHECK(!sel.active() && !sel.contains(4, 0));
+}
+
+static void selection_leaves_with_its_history() {
+    TermSelection sel;
+    sel.begin(3, -8);
+    sel.extend(5, -2);
+    sel.trimmed(5);                                          // the history holds five lines now: the selection starts at its oldest
+    int fromCol, fromLine, toCol, toLine;
+    sel.ordered(fromCol, fromLine, toCol, toLine);
+    CHECK(fromCol == 0 && fromLine == -5 && toCol == 5 && toLine == -2);
+    sel.trimmed(1);                                          // and now none of it is left
+    CHECK(!sel.active());
+    sel.begin(5, -2);                                        // the same, selected backwards
+    sel.extend(3, -8);
+    sel.trimmed(5);
+    sel.ordered(fromCol, fromLine, toCol, toLine);
+    CHECK(fromCol == 0 && fromLine == -5 && toCol == 5 && toLine == -2);
+    sel.begin(0, -3);                                        // a full history drops its oldest line for each new one
+    sel.extend(4, -3);
+    for (int i = 0; i < 2; ++i) sel.pushed(5);
+    CHECK(sel.contains(-5, 2));
+    sel.pushed(5);
+    CHECK(!sel.active());
+}
+
 // what the wheel is to a program that asked for mouse reports, in the encoding it asked for
 static std::string output;
 static void collect(const char *s, size_t len, void *) { output.append(s, len); }
@@ -138,6 +194,9 @@ int main() {
     anchored_while_output_arrives();
     clamps_when_history_shrinks();
     application_steps();
+    selection_stays_on_its_text();
+    selection_backwards_and_empty();
+    selection_leaves_with_its_history();
     mouse_reports();
     arrow_keys_for_the_alternate_screen();
     std::printf("%s\n", failures ? "term scroll: FAILED" : "term scroll: all passed");

@@ -89,6 +89,7 @@ public:
     Q_INVOKABLE void feed(const QString &text);    // shown as if the shell had said it; the banner comes this way
     Q_INVOKABLE void type(const QString &text);    // as if typed
     Q_INVOKABLE void copy();
+    Q_INVOKABLE QString selectedText() const;      // what copy() would take
     void paste();
     Q_INVOKABLE QString screenText() const;        // what is on screen, for tests
 
@@ -181,5 +182,5 @@ private:
     QVector<Line> scrollback_;
     VTermPos cursor_ = {0, 0};
     bool cursorVisible_ = true, focused_ = false, selecting_ = false, altScreen_ = false, flash_ = false;
-    QPoint selStart_{-1, -1}, selEnd_{-1, -1};
+    TermSelection sel_;   // in lines of the text, so it follows the text when the view moves
 };

@@ -4,6 +4,7 @@ import SkillHub.Terminal
 
 // The window's shortcuts must not take the keys of a focused terminal ("/" opens the search, Escape dismisses, Ctrl+R refreshes),
 // and the terminal must scroll with a wheel or a touchpad, stay where the user left it while output arrives, and follow typing.
+// What is selected must stay on its text while all that happens.
 Item {
     id: top
     width: 640; height: 400
@@ -97,6 +98,24 @@ Item {
             compare(term.scrollOffset, term.scrollMax, "Shift+Home goes to the oldest line")
             keyClick(Qt.Key_End, Qt.ShiftModifier)
             compare(term.scrollOffset, 0)
+        }
+        function test_9_a_selection_stays_on_its_text() {
+            mousePress(term, 2, 5)
+            mouseMove(term, term.width - 5, 60)
+            mouseRelease(term, term.width - 5, 60)
+            const picked = term.selectedText()
+            verify(picked.trim() !== "", "a drag over the top rows selects their text")
+            mouseWheel(term, 100, 100, 0, 240)   // the view moves into the history
+            verify(!term.atBottom)
+            compare(term.selectedText(), picked, "the selection is on the same text after scrolling")
+            const max = term.scrollMax
+            term.type("more\n")                  // and the shell writes
+            tryVerify(function () { return term.scrollMax > max }, 3000)
+            compare(term.selectedText(), picked, "and after the shell wrote a line")
+            keyClick(Qt.Key_End, Qt.ShiftModifier)
+            compare(term.selectedText(), picked)
+            keyClick("b")                        // typing ends it, as before
+            tryVerify(function () { return term.selectedText() === "" }, 3000)
         }
     }
 }

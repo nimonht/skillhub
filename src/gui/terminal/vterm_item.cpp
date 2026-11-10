@@ -123,6 +123,7 @@ void VTermItem::setScrollback(int lines) {
     scrollbackMax_ = lines;
     if (scrollback_.size() > lines) scrollback_.remove(0, scrollback_.size() - lines);
     scroll_.setMax(int(scrollback_.size()));
+    sel_.trimmed(int(scrollback_.size()));
     scrolled();
     emit settingsChanged();
 }
@@ -330,6 +331,7 @@ int VTermItem::onPushLine(int cols, const VTermScreenCell *cells, void *user) {
     const int before = self->scroll_.offset;
     self->scroll_.pushed();   // a view that looks back keeps what it shows while the shell goes on writing
     self->scroll_.setMax(int(self->scrollback_.size()));
+    self->sel_.pushed(int(self->scrollback_.size()));   // and what is selected stays on its text
     if (self->scroll_.offset != before) emit self->scrollChanged();
     return 1;
 }
@@ -339,6 +341,7 @@ int VTermItem::onPopLine(int cols, VTermScreenCell *cells, void *user) {
     if (self->scrollback_.isEmpty()) return 0;
     const Line line = self->scrollback_.takeLast();
     self->scroll_.setMax(int(self->scrollback_.size()));
+    self->sel_.popped();
     for (int i = 0; i < cols; ++i) {
         if (i < line.cells.size()) {
             cells[i] = line.cells[i];
@@ -389,15 +392,7 @@ QColor VTermItem::resolve(VTermColor c, bool fg) const {
     return QColor(c.rgb.red, c.rgb.green, c.rgb.blue);
 }
 
-bool VTermItem::selected(int row, int col) const {
-    if (selStart_.x() < 0) return false;
-    QPoint a = selStart_, b = selEnd_;
-    if (std::make_pair(a.y(), a.x()) > std::make_pair(b.y(), b.x())) std::swap(a, b);
-    if (row < a.y() || row > b.y()) return false;
-    if (row == a.y() && col < a.x()) return false;
-    if (row == b.y() && col > b.x()) return false;
-    return true;
-}
+bool VTermItem::selected(int row, int col) const { return sel_.contains(TermSelection::lineOf(row, scroll_.offset), col); }
 
 void VTermItem::paint(QPainter *p) {
     p->fillRect(boundingRect(), flash_ ? selectionColor_ : background_);
@@ -544,7 +539,7 @@ void VTermItem::keyPressEvent(QKeyEvent *e) {
         }
     }
     if (sent) {   // what is typed goes to the live screen; a modifier on its own does not
-        selStart_ = QPoint(-1, -1);
+        sel_.clear();
         if (!scroll_.atBottom()) {
             scroll_.toBottom();
             scrolled();
@@ -569,18 +564,19 @@ QPoint VTermItem::cellAt(const QPointF &p) const { return QPoint(qBound(0, int(p
 
 void VTermItem::mousePressEvent(QMouseEvent *e) {
     forceActiveFocus();
-    selStart_ = selEnd_ = cellAt(e->position());
+    const QPoint at = cellAt(e->position());
+    sel_.begin(at.x(), TermSelection::lineOf(at.y(), scroll_.offset));
     selecting_ = true;
     if (e->modifiers() & Qt::ControlModifier) {   // a link in the text opens outside
         QString line;
         for (int c = 0; c < cols_; ++c) {
-            const VTermScreenCell cell = cellAt(selStart_.y(), c);
+            const VTermScreenCell cell = cellAt(at.y(), c);
             line += cell.chars[0] ? charOf(cell.chars[0]) : QStringLiteral(" ");
         }
         static const QRegularExpression url(QStringLiteral(R"(https?://[^\s"'<>]+)"));
         for (auto it = url.globalMatch(line); it.hasNext();) {
             const auto m = it.next();
-            if (selStart_.x() >= m.capturedStart() && selStart_.x() < m.capturedEnd()) QDesktopServices::openUrl(QUrl(m.captured()));
+            if (at.x() >= m.capturedStart() && at.x() < m.capturedEnd()) QDesktopServices::openUrl(QUrl(m.captured()));
         }
     }
     update();
@@ -588,13 +584,14 @@ void VTermItem::mousePressEvent(QMouseEvent *e) {
 
 void VTermItem::mouseMoveEvent(QMouseEvent *e) {
     if (!selecting_) return;
-    selEnd_ = cellAt(e->position());
+    const QPoint at = cellAt(e->position());
+    sel_.extend(at.x(), TermSelection::lineOf(at.y(), scroll_.offset));
     update();
 }
 
 void VTermItem::mouseReleaseEvent(QMouseEvent *) {
     selecting_ = false;
-    if (selStart_ == selEnd_) selStart_ = QPoint(-1, -1);
+    if (sel_.empty()) sel_.clear();
     update();
 }
 
@@ -643,21 +640,26 @@ void VTermItem::focusOutEvent(QFocusEvent *e) {
 }
 
 void VTermItem::copy() {
-    if (selStart_.x() < 0) return;
-    QPoint a = selStart_, b = selEnd_;
-    if (std::make_pair(a.y(), a.x()) > std::make_pair(b.y(), b.x())) std::swap(a, b);
+    if (sel_.active()) QGuiApplication::clipboard()->setText(selectedText());
+}
+
+QString VTermItem::selectedText() const {
+    if (!sel_.active()) return {};
+    int fromCol, fromLine, toCol, toLine;
+    sel_.ordered(fromCol, fromLine, toCol, toLine);
+    toLine = qMin(toLine, rows_ - 1);   // the terminal may have shrunk since
     QString text;
-    for (int row = a.y(); row <= b.y(); ++row) {
+    for (int at = fromLine; at <= toLine; ++at) {
         QString line;
-        for (int col = row == a.y() ? a.x() : 0; col <= (row == b.y() ? b.x() : cols_ - 1); ++col) {
-            const VTermScreenCell cell = cellAt(row, col);
+        for (int col = at == fromLine ? fromCol : 0; col <= (at == toLine ? toCol : cols_ - 1) && col < cols_; ++col) {
+            const VTermScreenCell cell = cellAt(at + scroll_.offset, col);   // cellAt takes a row of the view
             line += cell.chars[0] ? charOf(cell.chars[0]) : QStringLiteral(" ");
         }
         while (line.endsWith(QLatin1Char(' '))) line.chop(1);
         text += line;
-        if (row != b.y()) text += QLatin1Char('\n');
+        if (at != toLine) text += QLatin1Char('\n');
     }
-    QGuiApplication::clipboard()->setText(text);
+    return text;
 }
 
 void VTermItem::paste() {
