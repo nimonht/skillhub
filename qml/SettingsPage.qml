@@ -566,10 +566,33 @@ Rectangle {
                 Logo { size: 48 }
                 Text { textFormat: Text.PlainText; text: "Skill Hub " + app.version; color: Theme.text; font.family: Theme.display; font.pixelSize: Theme.fsHead; font.weight: Font.Bold }   // i18n-ok
                 Line { text: qsTr("One skills folder for every coding agent. MIT licence. Third-party licences are listed in NOTICE.md, next to the program.") }
-                Line { visible: app.appUpdate.available === true; text: qsTr("Skill Hub %1 is out.").arg(app.appUpdate.latest || "") + " " + (app.appUpdate.advice || "") }
+                Group {
+                    id: channel
+                    // nobody chose: a beta follows betas, a final version follows final versions (sh_update_channel_of)
+                    readonly property string saved: Theme.setting("updates", "channel", "")
+                    readonly property string current: saved === "stable" || saved === "beta" ? saved : app.version.indexOf("-") > 0 ? "beta" : "stable"
+                    title: qsTr("Update channel")
+                    note: current === "beta" ? qsTr("Beta: test versions arrive before they are final, and may have rough edges. Final versions arrive too.")
+                                             : qsTr("Stable: final versions only.")
+                    Segmented {
+                        width: Math.min(parent.width, 240)
+                        options: [ { value: "stable", label: qsTr("Stable") }, { value: "beta", label: qsTr("Beta") } ]
+                        current: channel.current
+                        onPicked: (v) => { if (v !== channel.current) app.setUpdateChannel(v) }
+                    }
+                }
+                Line {
+                    visible: app.appUpdate.available === true
+                    text: (app.appUpdate.downgrade === true ? qsTr("Skill Hub %1 is the newest stable version. Going back to it replaces this beta; your skills and settings stay.") : qsTr("Skill Hub %1 is out.")).arg(app.appUpdate.latest || "")
+                          + " " + (app.appUpdate.advice || "")
+                }
                 Row {
                     spacing: 8
-                    Btn { visible: app.appUpdate.canInstall === true; enabled: !app.busy; iconName: "upgrade"; text: qsTr("Update to %1").arg(app.appUpdate.latest || ""); onClicked: app.installAppUpdate() }
+                    Btn {
+                        visible: app.appUpdate.canInstall === true; enabled: !app.busy; iconName: "upgrade"
+                        text: (app.appUpdate.downgrade === true ? qsTr("Go back to %1") : qsTr("Update to %1")).arg(app.appUpdate.latest || "")
+                        onClicked: app.installAppUpdate()
+                    }
                     Btn { visible: app.appUpdate.available === true; kind: "ghost"; text: qsTr("What is new"); onClicked: Qt.openUrlExternally(app.appUpdate.page) }
                     Btn { visible: app.appUpdate.available !== true; kind: "secondary"; iconName: "refresh"; text: qsTr("Look for a new version"); onClicked: app.checkAppUpdate(true) }
                 }

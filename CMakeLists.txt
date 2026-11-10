@@ -216,9 +216,9 @@ if(SKILLHUB_TESTS)
     target_compile_options(skillhub_unit_tests PRIVATE ${SKILLHUB_C_WARNINGS})
     target_compile_definitions(skillhub_unit_tests PRIVATE SKILLHUB_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
     add_test(NAME unit COMMAND skillhub_unit_tests)
-    # tests/selfupdate_smoke.py: an old version that trusts a test key, whose private half is in that file. Never install or ship this.
+    # tests/selfupdate_smoke.py: a beta, above the oldest version a beta goes back to, that trusts a test key, whose private half is in that file. Never install or ship this.
     add_executable(skillhub_update_test src/cli/main.c)
-    target_compile_definitions(skillhub_update_test PRIVATE SKILLHUB_UPDATE_VERSION="1.0.0-beta1" SKILLHUB_SELF_UPDATE=1
+    target_compile_definitions(skillhub_update_test PRIVATE SKILLHUB_UPDATE_VERSION="3.0.0-beta1" SKILLHUB_SELF_UPDATE=1
                                SKILLHUB_UPDATE_KEY="d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a")
     skillhub_cli_target(skillhub_update_test skillhub-update-test)
 endif()

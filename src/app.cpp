@@ -1408,10 +1408,27 @@ void AppController::checkAppUpdate(bool asked) {
     });
 }
 
+// The backend reads the channel from settings.json, so it looks only once the file is written.
+void AppController::setUpdateChannel(const QString &channel) {
+    if (channel != QLatin1String("stable") && channel != QLatin1String("beta")) return;
+    QJsonObject part = settings_.value(QStringLiteral("updates")).toObject();
+    part.insert(QStringLiteral("channel"), channel);
+    QJsonObject next = settings_;
+    next.insert(QStringLiteral("updates"), part);
+    applySettings(next);
+    appUpdate_.clear();   // what was on offer belonged to the other channel
+    emit appUpdateChanged();
+    core_.call(QStringLiteral("settings.set"), {{QStringLiteral("patch"), QJsonObject{{QStringLiteral("updates"), part}}}}, [this](const CoreReply &r) {
+        if (r.ok()) checkAppUpdate(true);
+        else emit toast(QStringLiteral("error"), r.message());
+    });
+}
+
 void AppController::installAppUpdate() { startJob(QStringLiteral("app.update"), {}, tr("Updating Skill Hub"), QStringLiteral("selfUpdate"), false); }
 
-void AppController::showAppUpdate(const QString &latest, bool canInstall) {
+void AppController::showAppUpdate(const QString &latest, bool canInstall, bool back) {
     appUpdate_ = {{QStringLiteral("available"), true}, {QStringLiteral("canInstall"), canInstall}, {QStringLiteral("latest"), latest}, {QStringLiteral("page"), QStringLiteral("https://github.com/nimonht/skillhub/releases")},
+                  {QStringLiteral("downgrade"), back},
                   {QStringLiteral("advice"), canInstall ? QString() : tr("Built from source: pull, rebuild and install again.")}};
     emit appUpdateChanged();
 }

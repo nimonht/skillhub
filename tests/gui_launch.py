@@ -244,7 +244,8 @@ try:
              ("checks", ["--theme", "dark", "--size", "1280x1000", "--select", "delta", "--settle", "10"]),
              ("safety", ["--theme", "light", "--size", "1280x800", "--mode", "settings", "--section", "safety"]),
              ("app-update", ["--theme", "dark", "--size", "1280x800", "--app-update", "9.9.9"]),
-             ("app-update-notice", ["--theme", "light", "--size", "1280x800", "--app-update", "9.9.9", "--app-update-notice", "--mode", "settings", "--section", "about"])]
+             ("app-update-notice", ["--theme", "light", "--size", "1280x800", "--app-update", "9.9.9", "--app-update-notice", "--mode", "settings", "--section", "about"]),
+             ("app-update-back", ["--theme", "dark", "--size", "1280x800", "--app-update", "2.0.0", "--app-update-back", "--mode", "settings", "--section", "about"])]
     for name, args in shots:
         png = os.path.join(OUT, name + ".png")
         p = subprocess.run([BIN, "gui", "--shot", png, *args], env=env, capture_output=True, text=True, timeout=240)

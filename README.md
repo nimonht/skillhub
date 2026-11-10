@@ -124,7 +124,12 @@ Packages are attached to every [release](https://github.com/nimonht/skillhub/rel
 **Updating.** The Windows installer, the macOS app and the Linux tarball update themselves: the window shows *Update to X* when a new version
 is out, and one click downloads it, checks its signature and restarts. `skillhub self-update` does the same in a terminal. The `.deb`, `.rpm`
 and PKGBUILD are not in a repository, so `apt` and `dnf` will not find a new version by themselves; those installs, source builds and the
-Windows zip show a notice with what to do. A final version never moves to a beta. See [SECURITY.md](SECURITY.md).
+Windows zip show a notice with what to do. See [SECURITY.md](SECURITY.md).
+
+**Stable or beta.** *Settings, About* chooses what you are offered: *Stable*, final versions only, or *Beta*, test versions as well
+(`skillhub self-update --channel stable|beta` in a terminal). Switch whenever you like, in either direction: on Beta the next test version
+arrives through the same button, and back on Stable a beta is offered the newest final version with *Go back to X*, the same signed
+download. Nothing has to be downloaded by hand again. Until you choose, a final version stays on Stable and a beta on Beta.
 
 **The macOS and Windows builds are not code-signed** (that needs paid developer accounts), so the system asks you once:
 
@@ -282,7 +287,7 @@ are never touched.
 | `remove NAME` | remove a skill everywhere (a copy is kept in the backup folder) |
 | `track NAME OWNER/REPO [PATH]` | set the upstream of a skill you already have |
 | `scan [NAME...] [--json] [--reports]` | the offline check of skills: findings with file and line, exit 11 when something is high. `--reports` adds skills.sh's security reports for public GitHub skills for this run |
-| `self-update [--check] [--json]` | Skill Hub itself, where it can replace itself; otherwise it says what to do. `update` and `autoupdate` are about skills |
+| `self-update [--check] [--json] [--channel stable\|beta]` | Skill Hub itself, where it can replace itself; otherwise it says what to do. `--channel` switches between final versions only and betas too, and is remembered. `update` and `autoupdate` are about skills |
 | `autoupdate on\|off\|status` | daily update: systemd user timer, launchd agent, or a scheduled task. Automatic runs leave out skills on hold and updates that add or change scripts |
 | `watch on\|off\|status` | stray-skill watcher: systemd path unit, launchd agent, or a task that starts `skillhub watch --run` at logon |
 | `clean [--cache] [--versions] [--removed] [--conflicts] [--dry-run] [--yes]` | free space; the newest backup of each skill stays, and conflicts, your own edits, go only when named |

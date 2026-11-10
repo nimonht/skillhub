@@ -2,6 +2,7 @@
 
 #include <stdlib.h>
 
+#include "sh_fs.h"
 #include "sh_json.h"
 #include "sh_path.h"
 #include "sh_str.h"
@@ -70,4 +71,46 @@ long long sh_setting_int(const char *section, const char *key, long long fallbac
     }
     free(path);
     return value;
+}
+
+char *sh_setting_str(const char *section, const char *key) {
+    char *config = sh_config_dir();
+    char *path = sh_path_join(config, "settings.json");
+    free(config);
+    yyjson_doc *doc = NULL;
+    char *value = NULL;
+    if (sh_json_read(path, 0, &doc) == SH_JSON_OK) {
+        yyjson_val *part = yyjson_obj_get(yyjson_doc_get_root(doc), section);
+        yyjson_val *v = part ? yyjson_obj_get(part, key) : NULL;
+        if (yyjson_is_str(v)) value = sh_strdup(yyjson_get_str(v));
+        yyjson_doc_free(doc);
+    }
+    free(path);
+    return value ? value : sh_strdup("");
+}
+
+bool sh_setting_set_str(const char *section, const char *key, const char *value) {
+    char *config = sh_config_dir();
+    char *path = sh_path_join(config, "settings.json");
+    yyjson_doc *doc = NULL;
+    const sh_json_status st = sh_json_read(path, 0, &doc);
+    bool ok = st == SH_JSON_OK || st == SH_JSON_MISSING;
+    if (ok) {
+        yyjson_mut_doc *m = doc ? yyjson_doc_mut_copy(doc, NULL) : yyjson_mut_doc_new(NULL);
+        if (!yyjson_mut_is_obj(yyjson_mut_doc_get_root(m))) yyjson_mut_doc_set_root(m, yyjson_mut_obj(m));
+        yyjson_mut_val *root = yyjson_mut_doc_get_root(m), *part = yyjson_mut_obj_get(root, section);
+        if (!yyjson_mut_is_obj(part)) {
+            yyjson_mut_obj_remove_str(root, section);
+            part = yyjson_mut_obj(m);
+            yyjson_mut_obj_add_val(m, root, section, part);
+        }
+        yyjson_mut_obj_remove_str(part, key);
+        yyjson_mut_obj_add_strcpy(m, part, key, value);
+        ok = sh_mkpath(config) && sh_json_write(path, m, true, true);
+        yyjson_mut_doc_free(m);
+    }
+    yyjson_doc_free(doc);
+    free(path);
+    free(config);
+    return ok;
 }

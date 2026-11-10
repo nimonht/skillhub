@@ -54,13 +54,14 @@ Rectangle {
         Btn {   // a new version of Skill Hub itself: one click where it can replace itself, what to do where it cannot
             id: appUpdate
             readonly property bool can: app.appUpdate.canInstall === true
+            readonly property bool back: app.appUpdate.downgrade === true   // a beta that follows stable: the newest final version is older
             visible: app.appUpdate.available === true
             enabled: !app.busy
             kind: "ghost"; compact: true; iconName: "upgrade"
-            text: can ? qsTr("Update to %1").arg(app.appUpdate.latest) : qsTr("%1 is out").arg(app.appUpdate.latest)
+            text: back ? (can ? qsTr("Go back to %1") : qsTr("Stable is %1")).arg(app.appUpdate.latest) : can ? qsTr("Update to %1").arg(app.appUpdate.latest) : qsTr("%1 is out").arg(app.appUpdate.latest)
             onClicked: can ? app.installAppUpdate() : app.showSettings("about")
             anchors.verticalCenter: parent.verticalCenter
-            Accessible.description: can ? qsTr("Downloads the new version of Skill Hub and restarts") : qsTr("Shows how to get the new version of Skill Hub")
+            Accessible.description: !can ? qsTr("Shows how to get that version of Skill Hub") : back ? qsTr("Downloads the newest stable version of Skill Hub, replaces this beta and restarts") : qsTr("Downloads the new version of Skill Hub and restarts")
         }
         Btn {
             kind: "ghost"; compact: true; iconName: "terminal"

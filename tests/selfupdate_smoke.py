@@ -3,7 +3,7 @@
 
 usage: python3 tests/selfupdate_smoke.py PATH/TO/skillhub-update-test [PATH/TO/THE/WINDOW]
 
-That program calls itself 1.0.0-beta1 and trusts the test key below (RFC 8032, section 7.1, TEST 1), never the project's key. A local
+That program calls itself 3.0.0-beta1 and trusts the test key below (RFC 8032, section 7.1, TEST 1), never the project's key. A local
 git repository plays the tags and a local web server plays the release, so no network is needed. Used by CI on Linux, macOS and Windows.
 With the window's program, it also presses the window's update button (Linux and Windows).
 """
@@ -26,7 +26,9 @@ WINDOW = os.path.abspath(sys.argv[2]) if len(sys.argv) > 2 else None
 SEED = bytes.fromhex("9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60")
 OTHER_SEED = bytes.fromhex("4ccd089b28ff96da9db6c346ec114e0f5b8a319f35aba624da8cf6ed4fb8a6fb")
 PUBLIC = "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"
-NEW = "1.0.0-beta2"
+OLD = "3.0.0-beta1"     # the program under test: a beta, so it can follow either channel
+NEW = "3.0.0-beta2"
+STABLE = "2.5.0"        # the newest final version: older than the beta, and not below the oldest one a beta goes back to
 
 # ---- Ed25519 signing, RFC 8032 section 6: the standard library has none, and the macOS openssl cannot do it ----
 P = 2**255 - 19
@@ -139,23 +141,23 @@ def machine():
     return "aarch64" if m in ("aarch64", "arm64") else "x86_64"
 
 
-def linux_asset(says_version):
+def linux_asset(says_version, version=NEW):
     folder = os.path.join(top, "build-asset")
     shutil.rmtree(folder, ignore_errors=True)
     executable(os.path.join(folder, "bin", "skillhub"), says(says_version))
     executable(os.path.join(folder, "bin", "skillhub-gui"), '#!/bin/sh\necho started > "$HOME/new-window-started"\n')
-    name = "skillhub-%s-linux-%s.tar.gz" % (NEW, machine())
+    name = "skillhub-%s-linux-%s.tar.gz" % (version, machine())
     path = os.path.join(top, name)
     with tarfile.open(path, "w:gz") as t:
-        t.add(folder, arcname="skillhub-" + NEW)
+        t.add(folder, arcname="skillhub-" + version)
     return name, path
 
 
-def macos_asset(says_version):
+def macos_asset(says_version, version=NEW):
     folder = os.path.join(top, "build-asset")
     shutil.rmtree(folder, ignore_errors=True)
     executable(os.path.join(folder, "Skill Hub.app", "Contents", "MacOS", "skillhub"), says(says_version))
-    name = "SkillHub-%s-macos-universal.dmg" % NEW
+    name = "SkillHub-%s-macos-universal.dmg" % version
     path = os.path.join(top, name)
     if os.path.exists(path):
         os.remove(path)
@@ -163,9 +165,9 @@ def macos_asset(says_version):
     return name, path
 
 
-def windows_asset(says_version):
+def windows_asset(says_version, version=NEW):
     # a harmless real program in the installer's place: it runs, ignores what it is told, and ends
-    name = "SkillHub-%s-windows-x64-setup.exe" % NEW
+    name = "SkillHub-%s-windows-x64-setup.exe" % version
     path = os.path.join(top, name)
     shutil.copyfile(os.path.join(os.environ.get("SystemRoot", "C:\\Windows"), "System32", "whoami.exe"), path)
     return name, path
@@ -187,11 +189,11 @@ elif sys.platform == "darwin":
     shutil.copyfile(BIN, program)
     os.chmod(program, 0o755)
 else:
-    program = os.path.join(install, "1.0.0-beta1", "bin", "skillhub")
+    program = os.path.join(install, OLD, "bin", "skillhub")
     os.makedirs(os.path.dirname(program))
     shutil.copyfile(BIN, program)
     os.chmod(program, 0o755)
-    os.symlink("1.0.0-beta1", os.path.join(install, "current"))
+    os.symlink(OLD, os.path.join(install, "current"))
 
 
 def publish(asset=None, sums=None, signature="good", content=None, version=NEW):
@@ -227,8 +229,16 @@ def run(*args, program_path=None, extra=None, expect=0):
     return p
 
 
-def check():
-    return json.loads(run("--check", "--json").stdout)
+def check(*more):
+    return json.loads(run("--check", "--json", *more).stdout)
+
+
+SETTINGS = os.path.join(top, "config", "settings.json")
+
+
+def settings():
+    with open(SETTINGS) as f:
+        return json.load(f)
 
 
 def snapshot():
@@ -258,12 +268,14 @@ def refused(label, wanted_note):
 
 try:
     asset = make_asset(NEW)
-    env["SKILLHUB_UPDATE_REMOTE"] = tags_repo("tags", ["v0.9.0", "v1.0.0-beta1", "v" + NEW, "v3.0.0-dev", "something-else"])
+    env["SKILLHUB_UPDATE_REMOTE"] = tags_repo("tags", ["v0.9.0", "v" + STABLE, "v" + OLD, "v" + NEW, "v9.0.0-dev", "something-else"])
 
     publish(asset)
     got = check()
-    if not got["available"] or not got["canInstall"] or got["latest"] != NEW or got["current"] != "1.0.0-beta1":
+    if not got["available"] or not got["canInstall"] or got["latest"] != NEW or got["current"] != OLD:
         fail("a good release was not offered: %s" % got)
+    if got["channel"] != "beta" or got["downgrade"]:
+        fail("a beta whose channel nobody chose follows the betas: %s" % got)
     wanted_kind = "setup" if os.name == "nt" else "app" if sys.platform == "darwin" else "portable"
     if got["kind"] != wanted_kind:
         fail("this install was taken for %s, not %s" % (got["kind"], wanted_kind))
@@ -305,12 +317,70 @@ try:
         asset = make_asset(NEW)
 
     saved = env["SKILLHUB_UPDATE_REMOTE"]
-    env["SKILLHUB_UPDATE_REMOTE"] = tags_repo("older", ["v0.9.0", "v1.0.0-beta1"])
-    publish(asset, version="0.9.0")
+    env["SKILLHUB_UPDATE_REMOTE"] = tags_repo("older", ["v0.9.0", "v" + STABLE, "v" + OLD])
+    stable_asset = make_asset(STABLE, STABLE)
+    publish(stable_asset, version=STABLE)
     got = check()
     if got["available"] or got["latest"]:
         fail("it offered a downgrade: %s" % got)
-    print("ok  never a downgrade")
+    print("ok  never a downgrade while it follows the betas")
+
+    # ---- switching channels: stable while on a beta goes back to the newest final version, and beta comes forward again ----
+    os.makedirs(os.path.dirname(SETTINGS), exist_ok=True)
+    with open(SETTINGS, "w") as f:
+        json.dump({"appearance": {"theme": "dark"}, "updates": {"appCheck": False}}, f)
+    got = check("--channel", "stable")
+    if not got["available"] or not got["canInstall"] or got["latest"] != STABLE or not got["downgrade"] or got["channel"] != "stable":
+        fail("the newest final version was not offered to a beta that switched to stable: %s" % got)
+    if settings() != {"appearance": {"theme": "dark"}, "updates": {"appCheck": False, "channel": "stable"}}:
+        fail("the channel was not saved beside the other settings: %s" % settings())
+    if check() != got:
+        fail("the channel was not remembered: %s" % check())
+    print("ok  stable, chosen on a beta, offers the way back to %s and is remembered" % STABLE)
+    publish(stable_asset, version=STABLE, signature="other key")
+    refused("a way back signed by another key", "signature")
+    publish(stable_asset, version=STABLE, signature=None)
+    refused("a way back without a signature", "SHA256SUMS.sig")
+    publish(stable_asset, version=STABLE)
+    if os.name == "nt":
+        if "installer is running" not in run().stdout:
+            fail("the installer of %s was not started" % STABLE)
+        print("ok  going back starts the installer of %s" % STABLE)
+    elif sys.platform != "darwin":   # on macOS it would replace the program under test; the steps are those of an update, below
+        p = run()
+        current = os.path.join(install, "current")
+        said = subprocess.run([os.path.join(current, "bin", "skillhub"), "--version"], capture_output=True, text=True).stdout.strip()
+        if os.readlink(current) != STABLE or said != "skillhub " + STABLE or "went back to " + STABLE not in p.stdout:
+            fail("it did not go back to %s: %s, %s\n%s" % (STABLE, os.readlink(current), said, p.stdout))
+        if not os.path.isfile(program):
+            fail("the beta that went back must stay until the next update")
+        os.remove(current)
+        os.symlink(OLD, current)
+        shutil.rmtree(os.path.join(install, STABLE))
+        print("ok  going back installs %s" % STABLE)
+    env["SKILLHUB_UPDATE_REMOTE"] = tags_repo("ancient", ["v0.9.0", "v1.0.1", "v" + OLD])
+    publish(make_asset("1.0.1", "1.0.1"), version="1.0.1")
+    got = check()
+    if got["available"] or got["latest"] or got["channel"] != "stable":
+        fail("it offered a version too old to update itself: %s" % got)
+    print("ok  never back to a version that could not come forward again")
+    env["SKILLHUB_UPDATE_REMOTE"] = saved
+    publish(stable_asset, version=STABLE)
+    got = check()
+    if not got["available"] or got["latest"] != STABLE or not got["downgrade"]:
+        fail("with a newer beta out, stable still means the newest final version: %s" % got)
+    publish(asset)
+    got = check("--channel", "beta")
+    if not got["available"] or not got["canInstall"] or got["latest"] != NEW or got["downgrade"] or got["channel"] != "beta":
+        fail("back on beta, the newer beta was not offered: %s" % got)
+    if settings()["updates"] != {"appCheck": False, "channel": "beta"}:
+        fail("the channel was not saved: %s" % settings())
+    p = run("--check", "--channel", "nightly", expect=2)
+    if "stable or beta" not in p.stderr or settings()["updates"]["channel"] != "beta":
+        fail("a channel that does not exist: %s" % p.stderr)
+    os.remove(SETTINGS)
+    print("ok  and beta, chosen again, offers %s" % NEW)
+
     env["SKILLHUB_UPDATE_REMOTE"] = "http://127.0.0.1:1/nothing.git"
     p = run("--check", expect=1)
     if "could not reach" not in p.stderr:
@@ -361,7 +431,7 @@ try:
         if shutil.which("wget") and shutil.which("tar"):
             # the same with wget, on a machine without curl
             os.remove(current)
-            os.symlink("1.0.0-beta1", current)
+            os.symlink(OLD, current)
             shutil.rmtree(os.path.join(install, NEW))
             tools = os.path.join(top, "tools")
             os.makedirs(tools)
@@ -384,7 +454,7 @@ try:
             shutil.copyfile(BIN, os.path.join(folder, "skillhubw.exe"))  # what the window starts as its backend
         else:
             os.remove(os.path.join(install, "current"))
-            os.symlink("1.0.0-beta1", os.path.join(install, "current"))
+            os.symlink(OLD, os.path.join(install, "current"))
             shutil.rmtree(os.path.join(install, NEW))
         shot = os.path.join(top, "window.png")
         p = subprocess.run([os.path.join(folder, os.path.basename(WINDOW)), "gui", "--shot", shot, "--size", "800x600", "--action", "app-update", "--settle", "200"],

@@ -973,7 +973,7 @@ static void m_app_check(server *s, sh_rpc_msg *m, const slow_call *c) {
     sh_update_build_info(&b);
     char *cache = sh_cache_dir(), *err = NULL;
     sh_update_info u;
-    if (sh_update_check(&b, cache, &u, &err)) {
+    if (sh_update_check(&b, cache, NULL, &u, &err)) {
         yyjson_mut_doc *d = yyjson_mut_doc_new(NULL);
         yyjson_mut_val *r = yyjson_mut_obj(d);
         sh_update_info_json(d, r, &u);

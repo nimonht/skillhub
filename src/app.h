@@ -319,9 +319,10 @@ public:
     Q_INVOKABLE void restartBackend();
     Q_INVOKABLE void checkAppUpdate(bool asked);   // asked: says so when there is nothing new, and ignores the setting
     Q_INVOKABLE void installAppUpdate();
+    Q_INVOKABLE void setUpdateChannel(const QString &channel);   // "stable" or "beta": saved, then looks again
     Q_INVOKABLE void readSafety(const QString &name);
     Q_INVOKABLE void askSecondOpinion(const QString &agent);  // of the selected skill, in a terminal tab
-    void showAppUpdate(const QString &latest, bool canInstall);   // the screenshots
+    void showAppUpdate(const QString &latest, bool canInstall, bool back = false);   // the screenshots; back: an older, final version
     Q_INVOKABLE void setScope(const QString &path);
     Q_INVOKABLE void addProject(const QString &path);
     Q_INVOKABLE void copyToProject(const QString &name, const QString &project);

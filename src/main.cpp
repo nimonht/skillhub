@@ -150,7 +150,7 @@ int main(int argc, char **argv) {
                     if (opt("--mode") == QLatin1String("onboarding")) emit controller.startTour(opt("--step").toInt(), opt("--coach").toInt());
                     if (opt("--mode") == QLatin1String("terminal")) emit controller.showTerminal();
                     if (opt("--mode") == QLatin1String("log")) emit controller.showLog();
-                    if (!opt("--app-update").isEmpty()) controller.showAppUpdate(opt("--app-update"), !args.contains(QStringLiteral("--app-update-notice")));
+                    if (!opt("--app-update").isEmpty()) controller.showAppUpdate(opt("--app-update"), !args.contains(QStringLiteral("--app-update-notice")), args.contains(QStringLiteral("--app-update-back")));
                     if (opt("--mode") == QLatin1String("settings")) emit controller.showSettings(opt("--section").isEmpty() ? QStringLiteral("appearance") : opt("--section"));
                     if (opt("--action") == QLatin1String("update-all")) controller.updateAll();
                     if (opt("--action") == QLatin1String("check")) controller.checkUpdates();

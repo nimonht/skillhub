@@ -21,6 +21,7 @@
 #include "sh_http.h"
 #include "sh_path.h"
 #include "sh_proc.h"
+#include "sh_state.h"
 #include "sh_utf.h"
 
 #define PROJECT "https://github.com/nimonht/skillhub"
@@ -92,20 +93,36 @@ int sh_version_compare(const char *a, const char *b) {
 
 static int newest_first(const char *a, const char *b) { return sh_version_compare(b, a); }
 
-void sh_update_candidates(const sh_strv *tags, const char *running, size_t max, sh_strv *out) {
+const char *sh_update_channel_name(sh_update_channel channel) { return channel == SH_CHANNEL_BETA ? "beta" : "stable"; }
+
+sh_update_channel sh_update_channel_of(const char *running, const char *chosen) {
+    if (chosen && strcmp(chosen, "beta") == 0) return SH_CHANNEL_BETA;
+    if (chosen && strcmp(chosen, "stable") == 0) return SH_CHANNEL_STABLE;
+    version me;
+    return parse_version(running, &me) && *me.label ? SH_CHANNEL_BETA : SH_CHANNEL_STABLE;
+}
+
+void sh_update_candidates(const sh_strv *tags, const char *running, sh_update_channel channel, size_t max, sh_strv *out) {
     version me;
     if (!parse_version(running, &me) || strcmp(me.label, "dev") == 0) return;
-    sh_strv found = SH_STRV_INIT;
+    sh_strv newer = SH_STRV_INIT, back = SH_STRV_INIT;
     for (size_t i = 0; i < tags->len; ++i) {
         const char *tag = sh_starts_with(tags->items[i], "refs/tags/") ? tags->items[i] + 10 : tags->items[i];
         version v;
         if (*tag != 'v' || !parse_version(tag + 1, &v) || strcmp(v.label, "dev") == 0) continue;
-        if (*v.label && !*me.label) continue;  // someone on a final version never lands on a pre-release
-        if (sh_version_compare(tag + 1, running) > 0 && !sh_strv_contains(&found, tag + 1)) sh_strv_push(&found, tag + 1);
+        if (*v.label && channel == SH_CHANNEL_STABLE) continue;  // stable never lands on a pre-release
+        const int c = sh_version_compare(tag + 1, running);
+        // going back is for a pre-release only, to a final version that can itself come forward again
+        const bool may_go_back = c < 0 && *me.label && channel == SH_CHANNEL_STABLE && sh_version_compare(tag + 1, SH_UPDATE_FLOOR) >= 0;
+        sh_strv *list = c > 0 ? &newer : may_go_back ? &back : NULL;
+        if (list && !sh_strv_contains(list, tag + 1)) sh_strv_push(list, tag + 1);
     }
-    sh_strv_sort(&found, newest_first);
-    for (size_t i = 0; i < found.len && i < max; ++i) sh_strv_push(out, found.items[i]);
-    sh_strv_free(&found);
+    const sh_strv *found = newer.len ? &newer : &back;  // while anything newer is out, nothing goes back
+    sh_strv_sort(&newer, newest_first);
+    sh_strv_sort(&back, newest_first);
+    for (size_t i = 0; i < found->len && i < max; ++i) sh_strv_push(out, found->items[i]);
+    sh_strv_free(&newer);
+    sh_strv_free(&back);
 }
 
 // ---- signatures ----
@@ -318,6 +335,8 @@ void sh_update_info_json(yyjson_mut_doc *d, yyjson_mut_val *o, const sh_update_i
     yyjson_mut_obj_add_strcpy(d, o, "page", u->page);
     yyjson_mut_obj_add_strcpy(d, o, "advice", u->advice);
     yyjson_mut_obj_add_strcpy(d, o, "note", u->note);
+    yyjson_mut_obj_add_str(d, o, "channel", u->channel ? u->channel : "stable");
+    yyjson_mut_obj_add_bool(d, o, "downgrade", u->downgrade);
 }
 
 #if defined(__linux__)
@@ -329,22 +348,22 @@ static const char *package_command(void) {
 }
 #endif
 
-// why this install cannot replace itself, "" when it can
-static char *blocked(const sh_update_build *b, sh_install_kind kind, const char *exe, const char *page) {
+// why this install cannot replace itself with `v`, "" when it can
+static char *blocked(const sh_update_build *b, sh_install_kind kind, const char *exe, const char *v, const char *page) {
     (void)exe;
     switch (kind) {
     case SH_INSTALL_PACKAGE: {
 #if defined(__linux__)
         const char *command = package_command();
-        if (command) return sh_strfmt("Installed as a system package, so it cannot replace itself. Get the new package from %s, then run: %s", page, command);
+        if (command) return sh_strfmt("Installed as a system package, so it cannot replace itself. Get the package of %s from %s, then run: %s", v, page, command);
 #endif
-        return sh_strfmt("Installed as a system package, so it cannot replace itself. Get the new package from %s", page);
+        return sh_strfmt("Installed as a system package, so it cannot replace itself. Get the package of %s from %s", v, page);
     }
-    case SH_INSTALL_ZIP: return sh_strfmt("The portable version does not replace itself. Get the new zip from %s", page);
-    case SH_INSTALL_SOURCE: return sh_strfmt("Built from source: pull, rebuild and install again, or use a package from %s", page);
+    case SH_INSTALL_ZIP: return sh_strfmt("The portable version does not replace itself. Get the zip of %s from %s", v, page);
+    case SH_INSTALL_SOURCE: return sh_strfmt("Built from source: check out v%s, rebuild and install again, or use a package from %s", v, page);
     default: break;
     }
-    if (!*b->public_key) return sh_strfmt("This build cannot verify new versions. Get the new version from %s", page);
+    if (!*b->public_key) return sh_strfmt("This build cannot verify other versions. Get %s from %s", v, page);
     if (!sh_http_available()) return sh_strfmt("Neither curl nor wget was found, so it cannot download the update. Install one of them, or get it from %s", page);
 #ifdef __APPLE__
     if (kind == SH_INSTALL_APP) {
@@ -353,7 +372,7 @@ static char *blocked(const sh_update_build *b, sh_install_kind kind, const char 
         const bool writable = access(parent, W_OK) == 0;
         free(app);
         free(parent);
-        if (!writable) return sh_strfmt("This account cannot change the folder Skill Hub is in. Get the new version from %s", page);
+        if (!writable) return sh_strfmt("This account cannot change the folder Skill Hub is in. Get %s from %s", v, page);
     }
 #endif
     return sh_strdup("");
@@ -365,9 +384,10 @@ static void set_latest(sh_update_info *u, const char *v) {
     u->latest = sh_strdup(v);
     u->page = sh_strfmt(PROJECT "/releases/tag/v%s", v);
     u->available = true;
+    u->downgrade = sh_version_compare(v, u->current) < 0;
 }
 
-bool sh_update_check(const sh_update_build *b, const char *cache, sh_update_info *out, char **err) {
+bool sh_update_check(const sh_update_build *b, const char *cache, const char *chosen, sh_update_info *out, char **err) {
     memset(out, 0, sizeof *out);
     char *exe = running_program();
     out->kind = sh_update_detect(b, exe);
@@ -376,12 +396,16 @@ bool sh_update_check(const sh_update_build *b, const char *cache, sh_update_info
     out->page = sh_strdup("");
     out->advice = sh_strdup("");
     out->note = sh_strdup("");
+    char *saved = chosen ? NULL : sh_setting_str("updates", "channel");
+    const sh_update_channel channel = sh_update_channel_of(b->version, chosen ? chosen : saved);
+    free(saved);
+    out->channel = sh_update_channel_name(channel);
     sh_strv tags = SH_STRV_INIT, candidates = SH_STRV_INIT;
     const bool reached = remote_versions(&tags, err);
-    if (reached) sh_update_candidates(&tags, b->version, MAX_CANDIDATES, &candidates);
+    if (reached) sh_update_candidates(&tags, b->version, channel, MAX_CANDIDATES, &candidates);
     if (candidates.len) {
         char *page = sh_strfmt(PROJECT "/releases/tag/v%s", candidates.items[0]);
-        char *why = blocked(b, out->kind, exe, page);
+        char *why = blocked(b, out->kind, exe, candidates.items[0], page);
         free(page);
         if (*why) {
             set_latest(out, candidates.items[0]);
@@ -495,7 +519,7 @@ static bool apply_portable(const char *exe, const char *file, const char *v, boo
     if (!ok) *err = sh_strfmt("cannot write to %s", root);
     ok = ok && run_tool(tar, BIG_FILE_MS, err) && runs_as(program, v, err);
     if (ok) {
-        sh_remove_tree(target);  // an earlier try; never the running version, which is older
+        sh_remove_tree(target);  // an earlier try, or the version before this one; never the running one, which is another version
         ok = sh_rename(fresh, target);
         if (!ok) *err = sh_strfmt("could not move the new version to %s", target);
     }
@@ -565,7 +589,7 @@ static bool apply_app(const char *exe, const char *file, const char *dir, const 
 bool sh_update_install(const sh_update_build *b, const sh_update_info *u, const char *cache, bool relaunch, sh_update_log log, void *user,
                        sh_strv *then, char **err) {
     if (!u->available || !u->can_install) {
-        *err = sh_strdup(*u->advice ? u->advice : "no new version to install");
+        *err = sh_strdup(*u->advice ? u->advice : "no version to install");
         return false;
     }
     char *asset = asset_for(u->kind, u->latest), *dir = download_dir(cache, u->latest), *exe = running_program();

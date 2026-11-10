@@ -52,7 +52,11 @@ checks nothing. The updater does it instead:
   an installed copy accept them.
 - A release without a good signature is treated as if it did not exist. The file must match the signed list exactly, and its name carries
   the version, so an old release cannot pass for a new one.
-- It never moves to an older version. A final version never moves to a pre-release.
+- It follows a channel: *Stable* is offered final versions only, *Beta* pre-releases too. Until you choose one (*Settings, About*, or
+  `skillhub self-update --channel stable|beta`), a final version follows Stable and a pre-release follows Beta.
+- It never moves to an older version, with one exception that only you can start: a pre-release that you switch to Stable is offered the
+  newest final version, which is older than it. That version is checked like any update, nothing is installed until you ask, and it is
+  never a version before 2.0.0, the first that can switch back.
 - Before replacing anything, the new program must start and name the version that was signed (Linux and macOS; on Windows the installer does the
   replacing). The old version stays until the next update, or until the next start on macOS.
 - A package below `/usr`, a copy built from source and the portable Windows zip are never touched: they get a notice with what to do.

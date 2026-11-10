@@ -26,6 +26,7 @@
 #include "sh_scan.h"
 #include "sh_selfupdate.h"
 #include "sh_serve.h"
+#include "sh_state.h"
 #include "sh_store.h"
 #include "sh_storage.h"
 #include "sh_str.h"
@@ -159,7 +160,9 @@ static void usage(void) {
         "  skillhub uninstall [--dry-run] [--yes] [--keep-cache]\n"
         "                                  remove units, installed files below $HOME and the cache (keeps your skills)\n"
         "  skillhub scan [NAME...] [--json] [--reports]   the offline check of skills (exit 11: something high); --reports adds skills.sh\n"
-        "  skillhub self-update [--check] [--json]   update Skill Hub itself, or only see whether a new version is out\n"
+        "  skillhub self-update [--check] [--json] [--channel stable|beta]\n"
+        "                                  update Skill Hub itself, or only see whether a new version is out; --channel switches\n"
+        "                                  between final versions only and betas too, and is remembered\n"
         "  skillhub serve --stdio          the window's background service (JSON-RPC on standard input and output)\n");
     fflush(stdout);
 }
@@ -1444,10 +1447,21 @@ static int cmd_self_update(sh_store *st, const args_t *a) {
     sh_update_build b;
     sh_update_build_info(&b);
     const bool only_check = has(a, "--check"), json = has(a, "--json");
+    if (has(a, "--channel")) {  // the window reads the same setting (Settings, About)
+        const char *channel = after(a, "--channel");
+        if (!channel || (strcmp(channel, "stable") != 0 && strcmp(channel, "beta") != 0)) {
+            errf("--channel takes stable or beta\n");
+            return 2;
+        }
+        if (!sh_setting_set_str("updates", "channel", channel)) {
+            errf("could not write settings.json, so the channel was not changed\n");
+            return 1;
+        }
+    }
     sh_update_tidy(st->cache);
     sh_update_info u;
     char *err = NULL;
-    if (!sh_update_check(&b, st->cache, &u, &err)) {
+    if (!sh_update_check(&b, st->cache, NULL, &u, &err)) {
         errf("%s\n", err ? err : "");
         free(err);
         sh_update_info_free(&u);
@@ -1467,9 +1481,10 @@ static int cmd_self_update(sh_store *st, const args_t *a) {
     }
     int rc = 0;
     if (!u.available) {
-        if (!json) outf("skillhub %s is the newest version\n", u.current);
+        if (!json) outf("skillhub %s is the newest version on the %s channel\n", u.current, u.channel);
     } else {
-        if (!json) outf("skillhub %s is out (this is %s)\n  %s\n", u.latest, u.current, u.page);
+        if (!json && u.downgrade) outf("skillhub %s is the newest stable version (this is %s); updating goes back to it\n  %s\n", u.latest, u.current, u.page);
+        else if (!json) outf("skillhub %s is out (this is %s)\n  %s\n", u.latest, u.current, u.page);
         if (!u.can_install) {
             if (!json) outf("%s\n", u.advice);
             rc = only_check ? 0 : 1;
@@ -1485,7 +1500,7 @@ static int cmd_self_update(sh_store *st, const args_t *a) {
                 else errf("could not start the installer\n");
                 rc = started ? 0 : 1;
             } else {
-                outf("updated to %s\n", u.latest);
+                outf("%s %s\n", u.downgrade ? "went back to" : "updated to", u.latest);
             }
             sh_strv_free(&then);
         }

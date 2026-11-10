@@ -564,7 +564,7 @@ static void body_self_update(job *j, sh_store *st) {
     sh_update_info u;
     sh_strv then = SH_STRV_INIT;
     char *err = NULL;
-    if (sh_update_check(&b, st->cache, &u, &err) && sh_update_install(&b, &u, st->cache, true, job_log, j, &then, &err)) {
+    if (sh_update_check(&b, st->cache, NULL, &u, &err) && sh_update_install(&b, &u, st->cache, true, job_log, j, &then, &err)) {
         yyjson_mut_val *list = yyjson_mut_arr(j->out);
         for (size_t i = 0; i < then.len; ++i) yyjson_mut_arr_add_strcpy(j->out, list, then.items[i]);
         yyjson_mut_obj_add_val(j->out, j->extra, "then", list);

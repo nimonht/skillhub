@@ -16,6 +16,9 @@ yyjson_mut_doc *sh_state_load(char **err);
 bool sh_state_save(yyjson_mut_doc *m);
 long long sh_setting_int(const char *section, const char *key, long long fallback);  // from settings.json; never fails
 bool sh_setting_bool(const char *section, const char *key, bool fallback);           // the same for a true or false
+char *sh_setting_str(const char *section, const char *key);                         // the same for a text: malloc'd, "" when there is none
+// Writes one text into settings.json, keeping the rest. False when the file cannot be read (it is then left alone) or written.
+bool sh_setting_set_str(const char *section, const char *key, const char *value);
 
 #ifdef __cplusplus
 }

@@ -337,6 +337,8 @@ Everything that both the command line and the window need. Missing keys mean the
   `vi`. The window keeps a copy in its own QSettings (`ui/language`) so that it starts in that language. The command line and the
   background service speak English. A language is a file in `i18n/`, from English text to its translation.
 - `updates.appCheck`: the window looks for a new version of Skill Hub itself. `updates.checkAtLaunch` is about skills.
+- `updates.channel`: `"stable"` (final versions of Skill Hub only) or `"beta"` (pre-releases too). Absent, or any other word: a final
+  version follows stable and a pre-release follows beta. Written by *Settings, About* and by `skillhub self-update --channel`.
 - `updates.autoSkipFindings`: automatic runs leave out an update that brings a high finding of the offline check
   (`skillhub scan`) the installed version lacks, and, with reports on, one whose security report got worse since the last
   install or update (`reports` in `state.json`). A report that cannot be had holds nothing. A manual update is never held.

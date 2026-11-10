@@ -37,13 +37,15 @@ void sh_update_build_info(sh_update_build *b);
 
 typedef struct {
     sh_install_kind kind;
-    bool available;     // a newer version is out
+    bool available;     // there is a version to move to: a newer one, or see `downgrade`
     bool can_install;   // and this program can install it by itself
     char *current;      // this version
-    char *latest;       // the newer version, "" when there is none
+    char *latest;       // that version, "" when there is none
     char *page;         // the release page of `latest`, "" when there is none
     char *advice;       // what to do when it cannot install it, "" otherwise
     char *note;         // why a newer release was passed over (no good signature), "" otherwise
+    const char *channel;  // "stable" or "beta": what this install follows
+    bool downgrade;     // `latest` is older than this version: the newest final one, for a pre-release that was told to follow stable
 } sh_update_info;
 void sh_update_info_free(sh_update_info *u);
 void sh_update_info_json(yyjson_mut_doc *d, yyjson_mut_val *o, const sh_update_info *u);
@@ -53,9 +55,21 @@ void sh_update_info_json(yyjson_mut_doc *d, yyjson_mut_val *o, const sh_update_i
 bool sh_version_valid(const char *v);
 int sh_version_compare(const char *a, const char *b);  // <0, 0 or >0; both must be valid
 
-// The versions in `tags` (v2.0.0 or refs/tags/v2.0.0) that `running` may move to, newest first, at most `max`. Never an older
-// one. A final version follows final versions only, a pre-release follows both, and a -dev build follows nothing.
-void sh_update_candidates(const sh_strv *tags, const char *running, size_t max, sh_strv *out);
+// Which versions an install is offered. Stable: final versions only. Beta: pre-releases too.
+typedef enum { SH_CHANNEL_STABLE, SH_CHANNEL_BETA } sh_update_channel;
+const char *sh_update_channel_name(sh_update_channel channel);
+// `chosen` is "stable" or "beta"; anything else (NULL, "") means nobody chose, and the install follows what it is: a pre-release
+// follows beta, a final version stable. That is what every version before 2.0.0 does, with no choice.
+sh_update_channel sh_update_channel_of(const char *running, const char *chosen);
+
+// The oldest version a pre-release goes back to: the first one that can switch channels. Anything older would be a dead end.
+#define SH_UPDATE_FLOOR "2.0.0"
+
+// The versions in `tags` (v2.0.0 or refs/tags/v2.0.0) that `running` may move to on `channel`, newest first, at most `max`.
+// Beta: every newer version. Stable: every newer final version; and when there is none and `running` is a pre-release, the
+// final versions below it, down to SH_UPDATE_FLOOR, which is the one way anything moves to an older version. A -dev build
+// follows nothing.
+void sh_update_candidates(const sh_strv *tags, const char *running, sh_update_channel channel, size_t max, sh_strv *out);
 
 // `signature` is 64 raw bytes by the key `public_key` (64 hex digits) over `sums`.
 bool sh_update_signature_ok(const void *sums, size_t sums_len, const void *signature, size_t signature_len, const char *public_key);
@@ -65,8 +79,9 @@ bool sh_update_sum_of(const char *sums, const char *name, char out[65]);
 const char *sh_update_kind_name(sh_install_kind kind);
 sh_install_kind sh_update_detect(const sh_update_build *b, const char *exe);  // `exe`: the path of the running program
 
-// Looks for a newer version. False only when the repository cannot be reached; `err` then says why. `cache`: the cache folder.
-bool sh_update_check(const sh_update_build *b, const char *cache, sh_update_info *out, char **err);
+// Looks for a version to move to. False only when the repository cannot be reached; `err` then says why. `cache`: the cache
+// folder. `chosen`: the channel as for sh_update_channel_of, NULL for what settings.json says (updates.channel).
+bool sh_update_check(const sh_update_build *b, const char *cache, const char *chosen, sh_update_info *out, char **err);
 
 typedef void (*sh_update_log)(void *user, const char *line);
 // Downloads and verifies `u->latest` and puts it in place. `then` receives the program to start once this one has stopped,

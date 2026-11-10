@@ -26,18 +26,23 @@ static void test_invalid_versions(void) {
     CHECK(sh_version_valid("2.0.0-dev"));
 }
 
-static char *candidates_of(const char *running, size_t max) {
-    static const char *const raw[] = {"refs/tags/v1.0.0", "refs/tags/v1.0.1", "refs/tags/v2.0.0-beta1", "refs/tags/v2.0.0-beta2", "refs/tags/v2.0.0-beta10",
-                                      "refs/tags/v2.0.0", "refs/tags/v2.1.0-beta1", "refs/tags/v2.2.0-dev", "refs/tags/archive-1", "refs/tags/vnext",
-                                      "refs/tags/2.9.9", "v2.0.0"};
+static char *candidates_in(const char *const *raw, size_t n, const char *running, const char *chosen, size_t max) {
     sh_strv tags = SH_STRV_INIT, out = SH_STRV_INIT;
-    for (size_t i = 0; i < sizeof raw / sizeof raw[0]; ++i) sh_strv_push(&tags, raw[i]);
-    sh_update_candidates(&tags, running, max, &out);
+    for (size_t i = 0; i < n; ++i) sh_strv_push(&tags, raw[i]);
+    sh_update_candidates(&tags, running, sh_update_channel_of(running, chosen), max, &out);
     char *joined = sh_strv_join(&out, " ");
     sh_strv_free(&tags);
     sh_strv_free(&out);
     return joined;
 }
+
+static const char *const TAGS[] = {"refs/tags/v1.0.0", "refs/tags/v1.0.1", "refs/tags/v2.0.0-beta1", "refs/tags/v2.0.0-beta2", "refs/tags/v2.0.0-beta10",
+                                   "refs/tags/v2.0.0", "refs/tags/v2.1.0-beta1", "refs/tags/v2.2.0-dev", "refs/tags/archive-1", "refs/tags/vnext",
+                                   "refs/tags/2.9.9", "v2.0.0"};
+
+// what an install does when nobody chose a channel: every version before 2.0.0, and every one after it until someone chooses
+static char *candidates_of(const char *running, size_t max) { return candidates_in(TAGS, sizeof TAGS / sizeof TAGS[0], running, NULL, max); }
+static char *chosen_of(const char *running, const char *chosen) { return candidates_in(TAGS, sizeof TAGS / sizeof TAGS[0], running, chosen, 10); }
 
 static void test_channels(void) {
     CHECK_STR(candidates_of("2.0.0-beta2", 10), "2.1.0-beta1 2.0.0 2.0.0-beta10");  // a beta follows both; v2.0.0 twice counts once
@@ -48,6 +53,45 @@ static void test_channels(void) {
     CHECK_STR(candidates_of("9.0.0", 10), "");                 // never a downgrade
     CHECK_STR(candidates_of("2.0.0-dev", 10), "");             // a build between releases follows nothing
     CHECK_STR(candidates_of("dev", 10), "");
+}
+
+static void test_channel_names(void) {
+    CHECK(sh_update_channel_of("2.0.0", NULL) == SH_CHANNEL_STABLE);
+    CHECK(sh_update_channel_of("2.0.0-beta6", NULL) == SH_CHANNEL_BETA);
+    CHECK(sh_update_channel_of("2.0.0-beta6", "") == SH_CHANNEL_BETA);
+    CHECK(sh_update_channel_of("2.0.0-beta6", "nightly") == SH_CHANNEL_BETA);   // a word from a newer version's settings: as if nobody chose
+    CHECK(sh_update_channel_of("2.0.0", "Beta") == SH_CHANNEL_STABLE);
+    CHECK(sh_update_channel_of("2.0.0", "beta") == SH_CHANNEL_BETA);
+    CHECK(sh_update_channel_of("2.0.0-beta6", "stable") == SH_CHANNEL_STABLE);
+    CHECK_STR(sh_strdup(sh_update_channel_name(SH_CHANNEL_STABLE)), "stable");
+    CHECK_STR(sh_strdup(sh_update_channel_name(SH_CHANNEL_BETA)), "beta");
+}
+
+static void test_switching(void) {
+    // stable to beta: the betas are offered too
+    CHECK_STR(chosen_of("2.0.0", "beta"), "2.1.0-beta1");
+    CHECK_STR(chosen_of("1.0.1", "beta"), "2.1.0-beta1 2.0.0 2.0.0-beta10 2.0.0-beta2 2.0.0-beta1");
+    CHECK_STR(chosen_of("2.0.0", "stable"), "");
+    // beta to stable, with a newer final version out: that one, and no beta
+    CHECK_STR(chosen_of("2.0.0-beta2", "stable"), "2.0.0");
+    // beta to stable, on a beta past the newest final version: back to it, and to nothing below the floor
+    CHECK_STR(chosen_of("2.1.0-beta1", "stable"), "2.0.0");
+    CHECK_STR(chosen_of("2.1.0-beta1", "beta"), "");
+    // going back is for a pre-release only: a final version stays where it is on either channel
+    CHECK_STR(chosen_of("9.0.0", "stable"), "");
+    CHECK_STR(chosen_of("9.0.0", "beta"), "");
+    CHECK_STR(chosen_of("2.2.0-dev", "stable"), "");
+    // while a newer final version is out, nothing goes back, however many older ones there are
+    static const char *const more[] = {"v1.0.1", "v2.0.0", "v2.0.1", "v2.1.0-beta1", "v2.1.0-beta2", "v2.1.0", "v3.0.0-beta1"};
+    const size_t n = sizeof more / sizeof more[0];
+    CHECK_STR(candidates_in(more, n, "2.1.0-beta2", "stable", 10), "2.1.0");
+    CHECK_STR(candidates_in(more, n, "3.0.0-beta1", "stable", 10), "2.1.0 2.0.1 2.0.0");   // newest first; 1.0.1 has no updater to come forward with
+    CHECK_STR(candidates_in(more, n, "3.0.0-beta1", "stable", 1), "2.1.0");
+    CHECK_STR(candidates_in(more, n, "3.0.0-beta1", NULL, 10), "");
+    // below the floor there is nothing to go back to
+    static const char *const old[] = {"v1.0.0", "v1.0.1", "v2.0.0-beta1", "v2.0.0-beta2"};
+    CHECK_STR(candidates_in(old, sizeof old / sizeof old[0], "2.0.0-beta2", "stable", 10), "");
+    CHECK(sh_version_compare(SH_UPDATE_FLOOR, "2.0.0") == 0);   // moving it strands whoever went back to a version below it
 }
 
 static void test_sums(void) {
@@ -105,6 +149,8 @@ const sh_test_case sh_tests_selfupdate[] = {
     {"selfupdate order", test_order},
     {"selfupdate invalid versions", test_invalid_versions},
     {"selfupdate channels", test_channels},
+    {"selfupdate channel names", test_channel_names},
+    {"selfupdate switching", test_switching},
     {"selfupdate sums", test_sums},
     {"selfupdate signature", test_signature},
     {"selfupdate detect", test_detect},
