@@ -296,6 +296,7 @@ jobs:
         run: |
           cd artifacts && sha256sum * > SHA256SUMS && cat SHA256SUMS && cd ..
           V="${GITHUB_REF_NAME#v}"
+          sh packaging/check-release-files.sh "$V" artifacts/SHA256SUMS   # the names installed copies update themselves from
           awk -v v="$V" '$0 ~ "^## "v" " {on=1; next} /^## / {on=0} on' CHANGELOG.md > notes.md
           test -s notes.md
           cat >> notes.md <<'NOTES'

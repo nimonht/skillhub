@@ -24,6 +24,11 @@ same data/io.github.nimonht.skillhub.metainfo.xml "$(sed -n 's/.*<release versio
 same CHANGELOG.md "$(sed -n 's/^## \([0-9][0-9A-Za-z.-]*\) .*/\1/p' CHANGELOG.md | head -n 1)" "$V${PRE:+-$PRE}"
 if [ $# -gt 0 ]; then
     same "the tag" "$1" "$V$SUFFIX"
+    # what every installed copy can read as a version (sh_selfupdate.c): 2.1.0, or 2.1.0-beta2 with lowercase letters and an optional number
+    if ! printf '%s\n' "$1" | grep -Eq '^[0-9]{1,9}\.[0-9]{1,9}\.[0-9]{1,9}(-[a-z]{1,15}[0-9]{0,9})?$'; then
+        echo "'$1' is not a version installed copies can read, so none of them would be offered it (2.1.0, 2.1.0-beta2 and 2.1.0-rc1 are)" >&2
+        bad=1
+    fi
     if ! grep -Eq '^[0-9a-f]{64}$' data/update-key.pub; then
         echo "data/update-key.pub holds no key, so this release could not update itself: run tools/update-key.sh once" >&2
         bad=1

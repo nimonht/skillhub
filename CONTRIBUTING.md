@@ -39,6 +39,25 @@ Fedora and AppStream files so that it sorts before 2.0.0, and `2.0.0beta1` in th
 After a release is published, `sh tools/sign-release.sh vVERSION` signs its `SHA256SUMS` with the offline key (`tools/update-key.sh` made it, once):
 until then the updater ignores the release. `tests/selfupdate_smoke.py` runs against `skillhub-update-test`, a build that trusts a test key and must never ship.
 
+### What installed copies depend on
+
+Every copy since 2.0.0-beta3 updates itself with the code it was shipped with, which no later release can change. A release reaches all
+of them only while these stay as they are:
+
+- **The tag** is `vX.Y.Z` or `vX.Y.Z-labelN` (lowercase letters, then an optional number): `v2.1.0-beta2`, `v2.1.0-rc1`. Anything else, such as
+  `v2.1.0-beta4.1`, is invisible to every installed copy. `packaging/check-version.sh VERSION` refuses it.
+- **The files** keep their names: `SkillHub-VERSION-windows-x64-setup.exe`, `SkillHub-VERSION-macos-universal.dmg`,
+  `skillhub-VERSION-linux-x86_64.tar.gz` and `skillhub-VERSION-linux-aarch64.tar.gz`, listed in `SHA256SUMS` beside `SHA256SUMS.sig`.
+  `packaging/check-release-files.sh` fails the release workflow when one is missing.
+- **The key** is the one in `data/update-key.pub`. A release signed with another key does not exist for them.
+- **The programs**: `skillhub --version` prints `skillhub VERSION`; the tarball unpacks to one folder with `bin/skillhub` and
+  `bin/skillhub-gui`; the disk image holds `Skill Hub.app`; the installer keeps its `AppId` and accepts
+  `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /FORCECLOSEAPPLICATIONS /RELAUNCH=1`.
+- **Every release installs over any older one**, since a copy moves straight to the newest version without the ones between.
+- **A final version reads what a later beta wrote**: from 2.0.0 on, someone on the beta channel can go back to the newest final version
+  (never below `SH_UPDATE_FLOOR`, 2.0.0), so a beta that changes `settings.json`, `state.json` or the lock file must leave them readable
+  by the final version before it: add keys, do not change the meaning of old ones.
+
 Look at the UI without a display: `QT_QPA_PLATFORM=offscreen build/skillhub gui --shot out.png --theme light --size 1000x640
 --select NAME` (also `--agent ID`, `--mode add|review|settings|terminal|onboarding`, `--section NAME`, `--step N`, `--coach N`,
 `--scope FOLDER`, `--layout rail=64,detail=460,dock=260`, `--filter problems`, `--search TEXT`, `--discover OWNER/REPO`, `--console`, `--mode log`).
