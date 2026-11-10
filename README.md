@@ -235,8 +235,10 @@ skillhub watch on          # auto-adopt strays dropped into agent folders
 | `Ctrl+Shift+C`, `Ctrl+Shift+V` | copy and paste in the terminal (`Cmd+C`, `Cmd+V` on macOS) |
 | `Shift+PageUp`, `Shift+PageDown`, `Shift+Home`, `Shift+End` | scroll the terminal's history |
 | `Esc` | clear the filter or close the panel |
+| `Ctrl+Q` | quit |
 
-While the terminal has the keyboard it owns it: `/`, `Esc`, `F1`, `F5` and `Ctrl+F`, `N`, `R`, `U`, `J` go to the shell. Only the chords that
+While the terminal has the keyboard it owns it: `/`, `Esc`, `F1`, `F5` and `Ctrl+F`, `N`, `R`, `U`, `J` go to the shell, and outside macOS `Ctrl+Q`
+too (it is the shell's flow control there; `Cmd+Q` still quits on macOS). Only the chords that
 cannot clash stay with the window (`` Ctrl+` ``, `Ctrl+,`, `Ctrl+Alt+Arrows`, `Ctrl+Alt+0`, `Ctrl+Shift+E`, `A`, `U`, `L`, and `Cmd` chords on macOS).
 `` Ctrl+` `` always leaves the terminal. The wheel scrolls the history; in a full-screen program (less, vim, an agent) it belongs to the program, and
 `Shift` takes it back.
@@ -331,6 +333,7 @@ What is planned, in order. Nothing here has a date.
 - [ ] An AUR package, then Copr or an apt repository, so package managers find new versions by themselves.
 - [ ] The Windows portable zip replaces itself, as the installer does.
 - [ ] An optional setting to install new versions without asking, once the updater has proven itself through several releases.
+- [ ] Liquid Glass as a lens for the floating detail panel and the dock too. They sit inside the picture the lens looks at, so for now they get a lit rim.
 
 ## Contributing
 

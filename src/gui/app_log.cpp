@@ -91,6 +91,7 @@ AppLog::AppLog(QObject *parent) : QAbstractListModel(parent) {
     const QString dir = directory();
     if (dir.isEmpty() || !QDir().mkpath(dir)) return;   // no folder: the viewer still works, from memory
     path_ = dir + QStringLiteral("/skillhub.log");
+    QFile::remove(dir + QStringLiteral("/../backend.log"));   // where versions before 2.0.0-beta6 kept the backend's standard error: nothing reads it now
     readPrevious();
     openFile();
     if (size_ > kFileMax) rotate();
