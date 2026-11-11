@@ -10,7 +10,8 @@ if command -v apt-get >/dev/null; then
 elif command -v dnf >/dev/null; then
     dnf install -y -q python3 git-core mesa-libGL mesa-libEGL fontconfig dbus-libs glib2 libxkbcommon libX11 shadow-utils
 elif command -v pacman >/dev/null; then
-    pacman -Sy --noconfirm --needed python git libglvnd fontconfig dbus glib2 libxkbcommon libx11 >/dev/null
+    # -u: Arch supports no partial upgrade. A new package beside an image that is a few days old once claimed a file the old one still owned.
+    pacman -Syu --noconfirm --needed python git libglvnd fontconfig dbus glib2 libxkbcommon libx11 >/dev/null
 fi
 if ldconfig -p | grep -q libQt6Core; then
     echo "this system has Qt, so the test proves nothing" >&2
