@@ -50,6 +50,18 @@ const char *sh_git_program(void);
 
 long sh_process_id(void);  // this process
 
+// Moves this process into the system's class for work nobody waits for: the automatic runs (the daily update, the watcher).
+// Call it before any thread starts: on Linux these settings belong to the calling thread, and the threads and programs
+// started after it inherit them. Best effort: what the system refuses stays as it was.
+//   Linux:   SCHED_BATCH at nice 10 or lower, the lowest best-effort I/O priority, 50 ms of timer slack so that wakeups
+//            can be batched, and a utilisation cap (uclamp) that lets the scheduler keep the work on small cores at a low clock
+//   macOS:   PRIO_DARWIN_BG: efficiency cores on Apple silicon, throttled disk and network
+//   Windows: below normal priority, which git inherits; background mode for this process's I/O and memory; EcoQoS for this
+//            process and every program it starts from then on (efficiency cores, a low clock)
+// Not SCHED_IDLE or the idle I/O class: a run holds the skills lock, and those can starve it behind a busy machine.
+void sh_proc_background(void);
+bool sh_proc_in_background(void);
+
 #ifdef __cplusplus
 }
 #endif

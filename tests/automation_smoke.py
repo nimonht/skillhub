@@ -31,6 +31,7 @@ def launchd(home, env):
     check(plist["Label"] == "io.github.nimonht.skillhub.update" and plist["ProgramArguments"][1:] == ["update", "--all", "--auto", "--notify"], "the plist: %s" % plist)
     check(plist["ProgramArguments"][0] == BIN or "skillhub" in plist["ProgramArguments"][0], "it runs the command line: %s" % plist)
     check(9 <= plist["StartCalendarInterval"]["Hour"] <= 20 and plist["Nice"] == 10, "the schedule: %s" % plist)
+    check(plist.get("ProcessType") == "Background" and plist.get("LowPriorityIO") is True, "a background job: %s" % plist)
     check("Library/Logs/skillhub" in plist["StandardOutPath"].replace("\\", "/"), "the log: %s" % plist)
     check("launchctl bootstrap gui/" in p.stdout and path.replace("\\", "/") in p.stdout.replace("\\", "/"), "loaded:\n" + p.stdout)
     check("enabled" in run(env, "autoupdate", "status").stdout, "status")
@@ -43,6 +44,7 @@ def launchd(home, env):
     with open(watcher, "rb") as f:
         plist = plistlib.load(f)
     check(plist["ThrottleInterval"] == 10 and plist["ProgramArguments"][1:] == ["adopt", "--notify"], "the watcher: %s" % plist)
+    check(plist.get("ProcessType") == "Background", "the watcher is a background job: %s" % plist)
     check(any(w.replace("\\", "/").endswith("/.claude/skills") for w in plist["WatchPaths"]), "what it watches: %s" % plist["WatchPaths"])
     p = run(env, "providers", "add", "Mine", home + "/mine/skills")
     with open(watcher, "rb") as f:

@@ -1521,7 +1521,10 @@ static int run_cli(int argc, char **argv) {
     // a scheduled run lacks the login environment; what automation recorded fills in. Before anything reads a path.
     bool scheduled = argc > 2 && strcmp(argv[1], "watch") == 0 && strcmp(argv[2], "--run") == 0;
     for (int i = 2; i < argc; ++i) scheduled = scheduled || strcmp(argv[i], "--auto") == 0 || (argc > 1 && strcmp(argv[1], "adopt") == 0 && strcmp(argv[i], "--notify") == 0);
-    if (scheduled) sh_automation_apply_env();
+    if (scheduled) {
+        sh_automation_apply_env();
+        sh_proc_background();  // nobody waits for it: the system's background class, before any thread starts
+    }
     if (argc > 2 && strcmp(argv[1], "watch") == 0 && strcmp(argv[2], "--run") == 0) return sh_watch_run();
     // --wait SECONDS (how long a changing command waits for another one to finish) is taken out before the commands see
     // their arguments
