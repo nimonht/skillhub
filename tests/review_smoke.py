@@ -238,6 +238,22 @@ def main():
     (_, done) = rpc(env, ("skills.restore", {"name": "alpha"}))[0]
     check(done["ok"] and os.path.isdir(home + "/.agents/skills/alpha"), "restore: %s" % done)
 
+    # ---- setup an update brings: a manifest it adds or changes wants its install again, which Skill Hub never runs ----
+    write(hub + "/skills/alpha/scripts/package.json", '{"name": "alpha", "dependencies": {"left-pad": "1.3.0"}}')
+    write(hub + "/skills/alpha/scripts/pnpm-lock.yaml", "lockfileVersion: 9\n")
+    commit(hub)
+    (_, done) = rpc(env, ("skills.diff", {"names": ["alpha"]}))[0]
+    needs = done["reviews"][0]["setup"]
+    check(needs == [{"kind": "dependencies", "file": "scripts/package.json", "folder": "scripts", "command": "pnpm install"}], "setup in a review: %s" % needs)
+    p = run(env, "diff", "alpha", "--stat")
+    check("needs setup after it" in p.stdout and "run `pnpm install` in scripts" in p.stdout, "setup in `skillhub diff`:\n" + p.stdout)
+    run(env, "update", "alpha")
+    check(not os.path.isdir(home + "/.agents/skills/alpha/scripts/node_modules"), "something installed the dependencies")
+    write(hub + "/skills/alpha/notes.md", "an update that leaves the manifest alone\n")
+    commit(hub)
+    (_, done) = rpc(env, ("skills.diff", {"names": ["alpha"]}))[0]
+    check(done["reviews"][0]["setup"] == [], "a manifest that did not change: %s" % done["reviews"][0]["setup"])
+
     print("review smoke test passed (%s)" % sys.platform)
 
 

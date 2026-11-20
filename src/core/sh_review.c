@@ -29,6 +29,7 @@ void sh_review_free(sh_review *r) {
     free(r->tree);
     free(r->err);
     sh_findings_free(&r->added);
+    sh_setup_free(&r->setup);
     memset(r, 0, sizeof *r);
 }
 
@@ -189,6 +190,25 @@ static void read_patches(sh_review *r, const char *out, size_t len) {
 // stderr says nothing either way: Windows prints line-ending warnings there.
 static bool diff_finished(const sh_git_result *g) { return g->ok || g->exit_code == 1; }
 
+// the notes of the new version whose file this update adds or changes
+static void setup_changed(const char *fresh, sh_review *r) {
+    sh_setup all;
+    sh_setup_dir(fresh, &all);
+    memset(&r->setup, 0, sizeof r->setup);
+    for (size_t i = 0; i < all.len; ++i) {
+        bool changed = false;
+        for (size_t k = 0; k < r->n && !changed; ++k) changed = r->files[k].status != 'D' && strcmp(r->files[k].path, all.items[i].file) == 0;
+        if (!changed) continue;
+        if (r->setup.len == r->setup.cap) {
+            r->setup.cap = r->setup.cap ? r->setup.cap * 2 : 4;
+            r->setup.items = sh_xrealloc(r->setup.items, r->setup.cap * sizeof *r->setup.items);
+        }
+        r->setup.items[r->setup.len++] = all.items[i];  // moved: `all` lets go of it below
+        memset(&all.items[i], 0, sizeof all.items[i]);
+    }
+    sh_setup_free(&all);
+}
+
 void sh_review_compare(const char *stage, sh_review *r) {
     static const char *const list[] = {"-c", "core.quotepath=false", "diff", "--no-index", "--no-color", "--no-ext-diff", "--no-textconv", "--no-renames", "--raw", "--numstat", "-z", "--", "old", "new", NULL};
     static const char *const patches[] = {"-c", "core.quotepath=false", "diff", "--no-index", "--no-color", "--no-ext-diff", "--no-textconv", "--no-renames", "-p", "--", "old", "new", NULL};
@@ -203,6 +223,7 @@ void sh_review_compare(const char *stage, sh_review *r) {
         sh_git_result_free(&p);
         char *old = sh_path_join(stage, "old"), *fresh = sh_path_join(stage, "new");
         sh_scan_added(old, fresh, &r->added);
+        setup_changed(fresh, r);
         free(old);
         free(fresh);
     }

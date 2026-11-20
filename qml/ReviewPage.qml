@@ -173,6 +173,16 @@ Rectangle {
                           + found.slice(0, 3).map(function (f) { return f.title.toLowerCase() + " (" + f.file + ":" + f.line + ")" }).join("; ")
                           + (found.length > 3 ? qsTr("; and more") : "") + "."
                 }
+                Note {   // a manifest or a script the update adds or changes: the install it needs again, which Skill Hub does not run
+                    readonly property var needs: notes.r !== null && notes.r.setup ? notes.r.setup : []
+                    visible: needs.length > 0
+                    icon: "tool"; tone: Theme.notifyText; fill: Theme.notifyLow
+                    text: qsTr("Needs setup after this update, which Skill Hub does not run: %1.").arg(needs.map(function (n) {
+                        return n.kind === "dependencies" ? qsTr("%1 changed, run %2 there").arg(n.file).arg(n.command)
+                             : n.kind === "script" ? qsTr("%1 changed, an install script to read").arg(n.file)
+                             : qsTr("%1 reads files of its Claude Code plugin").arg(n.file)
+                    }).join("; "))
+                }
                 Note {
                     visible: notes.r !== null && notes.r.available && notes.r.localEdits
                     icon: "alert"; tone: Theme.notifyText; fill: Theme.notifyLow

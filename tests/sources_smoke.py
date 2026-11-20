@@ -370,7 +370,38 @@ def main():
     check(rows["beta"]["sourceType"] == "gitlab" and not rows["beta"]["live"], "the row: %s" % rows["beta"])
 
     list_limit()
+    setup_notes()
     print("sources smoke test passed (%s)" % sys.platform)
+
+
+def setup_notes():
+    """What a skill needs beyond its files is said where it is installed, offered, checked and scanned, and never run."""
+    home, env = make_home("setup-home")
+    src = ROOT + "/setup-src"
+    skill(src + "/skills/tools", "tools")
+    write(src + "/skills/tools/scripts/package.json", '{"name": "t", "dependencies": {"left-pad": "1.3.0"}}')
+    write(src + "/skills/tools/scripts/yarn.lock", "# yarn lockfile v1\n")
+    write(src + "/skills/tools/install.sh", "#!/bin/sh\ntouch " + ROOT + "/install-ran\n")
+    write(src + "/skills/tools/meta/package.json", '{"name": "metadata-only"}')
+    skill(src + "/skills/plugged", "plugged", "Read ${CLAUDE_PLUGIN_ROOT}/prompts/review.md first.")
+    skill(src + "/skills/plain", "plain")
+    (_, found) = rpc(env, ("sources.discover", {"input": src}))[0]
+    by = {c["name"]: c for c in found["candidates"]}
+    check(by["tools"]["setup"] == [
+        {"kind": "dependencies", "file": "scripts/package.json", "folder": "scripts", "command": "yarn install"},
+        {"kind": "script", "file": "install.sh", "folder": ""}], "the setup of an offered skill: %s" % by["tools"]["setup"])
+    check(by["plugged"]["setup"] == [{"kind": "pluginRoot", "file": "SKILL.md", "folder": "", "detail": "prompts/review.md"}], "plugin: %s" % by["plugged"])
+    check(by["plain"]["setup"] == [], "a plain skill: %s" % by["plain"])
+    p = run(env, "add", src, "--all")
+    check("tools needs setup" in p.stdout and "run `yarn install` in " in p.stdout and "install.sh is the author's install script" in p.stdout,
+          "what `add` says:\n" + p.stdout)
+    check("${CLAUDE_PLUGIN_ROOT}/prompts/review.md" in p.stdout and "plain needs setup" not in p.stdout, "what `add` says:\n" + p.stdout)
+    check(not os.path.exists(ROOT + "/install-ran") and not os.path.isdir(home + "/.agents/skills/tools/scripts/node_modules"), "something ran")
+    (reply, _) = rpc(env, ("skills.safety", {"name": "tools"}))[0]
+    check([n["file"] for n in reply["result"]["setup"]] == ["scripts/package.json", "install.sh"], "safety: %s" % reply["result"]["setup"])
+    scanned = {s["name"]: s for s in json.loads(run(env, "scan", "--json").stdout)}
+    check(len(scanned["tools"]["setup"]) == 2 and scanned["plain"]["setup"] == [], "scan --json: %s" % scanned["tools"])
+
 
 
 def list_limit():

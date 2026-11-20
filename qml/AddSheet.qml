@@ -5,6 +5,14 @@ import "."
 // Add skills from a repository or a folder: read it, tick the skills, install. Inline, not a modal.
 Item {
     id: root
+    // a skill's setup notes in a few words: the command for dependencies, a script to read, files of its Claude Code plugin
+    function setupText(notes) {
+        return notes.map(function (n) {
+            if (n.kind === "dependencies") return n.folder !== "" ? qsTr("needs %1 in %2").arg(n.command).arg(n.folder) : qsTr("needs %1").arg(n.command)
+            if (n.kind === "script") return qsTr("comes with an install script, %1").arg(n.file)
+            return qsTr("reads files of its Claude Code plugin")
+        }).filter(function (t, i, all) { return all.indexOf(t) === i }).join("  ·  ")
+    }
     property var chosen: ({})
     property bool live: false
     readonly property int chosenCount: Object.keys(chosen).length
@@ -120,12 +128,14 @@ Item {
                 id: cand
                 required property var modelData
                 readonly property bool on: root.chosen[modelData.name] === true
+                readonly property var setup: modelData.setup ? modelData.setup : []
                 width: list.width
-                height: 62
+                height: setup.length > 0 ? 80 : 62
                 hoverEnabled: true
                 focusPolicy: Qt.StrongFocus
                 Accessible.role: Accessible.CheckBox
                 Accessible.name: modelData.name
+                Accessible.description: setup.length > 0 ? root.setupText(setup) : ""
                 Accessible.checked: on
                 onClicked: root.toggle(modelData.name)
                 background: Rectangle {
@@ -150,6 +160,13 @@ Item {
                         spacing: 2
                         Text { textFormat: Text.PlainText; width: parent.width; text: cand.modelData.name; elide: Text.ElideRight; color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold }
                         Text { textFormat: Text.PlainText; width: parent.width; text: cand.modelData.description; elide: Text.ElideRight; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
+                        Row {   // what it needs beyond its files: Skill Hub installs the files and runs nothing
+                            visible: cand.setup.length > 0
+                            width: parent.width
+                            spacing: 6
+                            Icon { id: needsIcon; name: "tool"; size: 13; color: Theme.notifyText; anchors.verticalCenter: parent.verticalCenter }
+                            Text { textFormat: Text.PlainText; width: parent.width - needsIcon.width - 6; text: root.setupText(cand.setup); elide: Text.ElideRight; color: Theme.notifyText; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
+                        }
                     }
                     Tag { id: installed; visible: cand.modelData.installed; kind: "current"; label: qsTr("Installed"); anchors.right: parent.right; anchors.rightMargin: 24; anchors.verticalCenter: parent.verticalCenter }
                 }

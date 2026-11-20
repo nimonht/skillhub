@@ -58,3 +58,4 @@ extern const sh_test_case sh_tests_scan[];
 extern const sh_test_case sh_tests_diag[];
 extern const sh_test_case sh_tests_thread[];
 extern const sh_test_case sh_tests_proc[];
+extern const sh_test_case sh_tests_setup[];

@@ -587,5 +587,22 @@
   "Only the first %1 skills of this repository are listed. Settings, Updates sets how many": "Chỉ liệt kê %1 kỹ năng đầu tiên của kho mã này. Số lượng được đặt trong Cài đặt, Cập nhật",
   "Skills listed per repository": "Số kỹ năng liệt kê cho mỗi kho mã",
   "Add skills lists this many of a repository's skills at first, and the rest when you ask. A skill named on the command line is found among all of them.": "Thêm kỹ năng liệt kê trước ngần này kỹ năng của một kho mã, phần còn lại khi bạn yêu cầu. Kỹ năng được gọi tên trên dòng lệnh sẽ được tìm trong tất cả.",
-  "At first": "Ban đầu"
+  "At first": "Ban đầu",
+  "needs %1 in %2": "cần %1 trong %2",
+  "needs %1": "cần %1",
+  "comes with an install script, %1": "kèm script cài đặt, %1",
+  "reads files of its Claude Code plugin": "đọc tệp của plugin Claude Code chứa nó",
+  "Setup": "Thiết lập",
+  "Some of this skill works only after a step Skill Hub does not take for you: it never runs what a skill ships.": "Một phần của kỹ năng này chỉ hoạt động sau một bước mà Skill Hub không làm thay bạn: Skill Hub không bao giờ chạy những gì kỹ năng mang theo.",
+  "%1 lists dependencies. Install them with %2 in %3.": "%1 liệt kê các phụ thuộc. Cài chúng bằng %2 trong %3.",
+  "the skill's folder": "thư mục của kỹ năng",
+  "%1 is the author's install script. Read it before you run it.": "%1 là script cài đặt của tác giả. Hãy đọc trước khi chạy.",
+  "%1 reads %2 from the Claude Code plugin it came from. Outside that plugin the file is not there.": "%1 đọc %2 từ plugin Claude Code chứa nó. Bên ngoài plugin đó, tệp này không tồn tại.",
+  "%1 names %2, which only a Claude Code plugin sets.": "%1 dùng %2, biến mà chỉ plugin Claude Code mới đặt.",
+  "Set up in terminal": "Thiết lập trong terminal",
+  "Opens a terminal in that folder with %1 typed. Press Enter to run it.": "Mở terminal trong thư mục đó, gõ sẵn %1. Nhấn Enter để chạy.",
+  "Needs setup after this update, which Skill Hub does not run: %1.": "Cần thiết lập sau bản cập nhật này, Skill Hub không tự chạy: %1.",
+  "%1 changed, run %2 there": "%1 đã thay đổi, hãy chạy %2 ở đó",
+  "%1 changed, an install script to read": "%1 đã thay đổi, là script cài đặt cần đọc",
+  "%1 reads files of its Claude Code plugin": "%1 đọc tệp của plugin Claude Code chứa nó"
 }

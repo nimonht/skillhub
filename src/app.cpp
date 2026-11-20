@@ -1308,7 +1308,8 @@ void AppController::jobDone(const QJsonObject &done, const QString &kind, const 
             const QJsonObject c = v.toObject();
             candidates_ << QVariantMap{{QStringLiteral("name"), c.value(QStringLiteral("name")).toString()},
                                        {QStringLiteral("description"), c.value(QStringLiteral("description")).toString()},
-                                       {QStringLiteral("installed"), c.value(QStringLiteral("installed")).toBool()}};
+                                       {QStringLiteral("installed"), c.value(QStringLiteral("installed")).toBool()},
+                                       {QStringLiteral("setup"), c.value(QStringLiteral("setup")).toArray().toVariantList()}};
         }
         candidateError_ = error;
         candidateMore_ = done.value(QStringLiteral("more")).toInt();
@@ -1421,6 +1422,19 @@ void AppController::askSecondOpinion(const QString &agent) {
     if (a->flag) command += QLatin1Char(' ') + QString::fromLatin1(a->flag);
     command += QStringLiteral(" \"") + QString::fromLatin1(SECOND_OPINION_PROMPT) + QLatin1Char('"');
     emit openTerminalAt(work.path(), command);
+}
+
+// Skill Hub runs nothing a skill ships: the person reads the command in the terminal and presses Enter, or does not. Only
+// commands of the backend's own table (sh_setup.c) are typed, never text from a skill, and only inside the skill's folder.
+void AppController::setUpInTerminal(const QString &folder, const QString &command) {
+    static const QStringList known = {QStringLiteral("npm install"), QStringLiteral("pnpm install"), QStringLiteral("yarn install"),
+                                      QStringLiteral("bun install"), QStringLiteral("pip install -r requirements.txt"),
+                                      QStringLiteral("pip install ."), QStringLiteral("uv sync"), QStringLiteral("poetry install"),
+                                      QStringLiteral("pipenv install"), QStringLiteral("bundle install"), QStringLiteral("composer install")};
+    const QString skill = QDir::cleanPath(safety_.value(QStringLiteral("folder")).toString());
+    const QString at = QDir::cleanPath(folder.isEmpty() ? skill : skill + QLatin1Char('/') + folder);
+    if (!known.contains(command) || skill.isEmpty() || QDir::isAbsolutePath(folder) || (at != skill && !at.startsWith(skill + QLatin1Char('/')))) return;
+    emit openTerminalAt(at, command);
 }
 
 void AppController::checkAppUpdate(bool asked) {

@@ -37,6 +37,12 @@ Reports from skills.sh are three outside scanners' views. They often disagree (S
 critical where the others say safe or low) and describe the skill upstream on their date, not necessarily your version, so
 they are shown each on its own and never added up into one verdict.
 
+Skill Hub installs a skill's files and runs nothing it ships: no install script, no `npm install`, no hook. What a skill
+needs beyond its files is shown instead: dependencies a manifest lists, an install script to read, paths into the Claude Code
+plugin it came from. The command offered for dependencies comes from a fixed table (`src/core/sh_setup.c`), chosen by the
+manifest's name and lock file, never from the skill's text, so a skill cannot pick what you are offered to run; *Set up in
+terminal* only types it, in a folder inside the skill, and you press Enter or not.
+
 *Second opinion* opens your own coding agent in the built-in terminal, never in the skill's folder: an agent treats its
 working folder as a project and would take the skill's `.claude/`, `.mcp.json` or `AGENTS.md` as its own settings. It works
 in a fresh folder that holds a copy of the skill, with the command typed but not run, so the agent asks before it does
