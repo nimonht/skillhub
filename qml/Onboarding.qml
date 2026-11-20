@@ -95,7 +95,7 @@ FocusScope {
             onPhaseChanged: requestPaint()
             onWidthChanged: requestPaint()
             renderStrategy: Canvas.Cooperative
-            NumberAnimation on phase { from: 0; to: 6.283; duration: 4200; loops: Animation.Infinite; running: root.step === 0 && !Theme.still }
+            NumberAnimation on phase { from: 0; to: 6.283; duration: 4200; loops: Animation.Infinite; running: root.step === 0 && Theme.looping }
             onPaint: {
                 var c = getContext("2d")
                 c.reset()
@@ -212,7 +212,7 @@ FocusScope {
                     property real dash: 0
                     onDashChanged: requestPaint()
                     onVisibleChanged: requestPaint()
-                    NumberAnimation on dash { from: 0; to: 16; duration: 900; loops: Animation.Infinite; running: wires.visible && !Theme.still }
+                    NumberAnimation on dash { from: 0; to: 16; duration: 900; loops: Animation.Infinite; running: wires.visible && Theme.looping }
                     onPaint: {
                         var c = getContext("2d")
                         c.reset()

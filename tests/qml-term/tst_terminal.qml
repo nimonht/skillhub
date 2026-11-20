@@ -18,6 +18,13 @@ Item {
         arguments: ["-c", "stty raw -echo; seq 1 300; exec cat -v"]   // 300 lines of history, then what is typed is shown as it arrives
         scrollback: 5000
     }
+    VTermItem {   // no shell: what is fed is drawn; shown on top only while a drawing test looks at it
+        id: paper
+        x: 0; y: 0; width: 320; height: 60
+        visible: false
+        foreground: "#ffffff"
+        background: "#000000"
+    }
     Shortcut { sequence: "/"; onActivated: top.taken++ }
     Shortcut { sequence: "Escape"; onActivated: top.taken++ }
     Shortcut { sequence: "Ctrl+R"; onActivated: top.taken++ }
@@ -116,6 +123,23 @@ Item {
             compare(term.selectedText(), picked)
             keyClick("b")                        // typing ends it, as before
             tryVerify(function () { return term.selectedText() === "" }, 3000)
+        }
+        // Cells of one style are drawn as one run of glyphs; underline and strike-out are drawn by the terminal itself,
+        // under and through every cell of the run, spaces too
+        function test_decorations_cover_spaces() {
+            paper.visible = true
+            paper.feed("\x1b[4m          \x1b[0m\r\n\x1b[9m          \x1b[0m")
+            waitForRendering(paper)
+            const img = grabImage(paper)
+            const lit = []   // rows where a line runs across the first spaces
+            for (let y = 0; y < 50; ++y) {
+                let across = true
+                for (let x = 4; x < 60 && across; x += 4) across = img.pixel(x, y).r > 0.5
+                if (across) lit.push(y)
+            }
+            paper.visible = false
+            verify(lit.length >= 2, "an underline and a strike-out line: rows " + JSON.stringify(lit))
+            verify(lit[lit.length - 1] - lit[0] > 4, "two lines, not one: rows " + JSON.stringify(lit))
         }
     }
 }
