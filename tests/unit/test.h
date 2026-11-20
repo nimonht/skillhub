@@ -56,3 +56,4 @@ extern const sh_test_case sh_tests_shellstart[];
 extern const sh_test_case sh_tests_selfupdate[];
 extern const sh_test_case sh_tests_scan[];
 extern const sh_test_case sh_tests_diag[];
+extern const sh_test_case sh_tests_thread[];
