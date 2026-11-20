@@ -333,6 +333,9 @@ static char *plist_text(const sh_store *st, bool timer) {
         sh_strv_free(&dirs);
         sh_buf_puts(&b, "    <key>ThrottleInterval</key>\n    <integer>10</integer>\n");
     }
+    // launchd's own word for work nobody waits for: it is held to the resources a background job gets
+    plist_string(&b, "ProcessType", "Background");
+    sh_buf_puts(&b, "    <key>LowPriorityIO</key>\n    <true/>\n");
     plist_string(&b, "StandardOutPath", log);
     plist_string(&b, "StandardErrorPath", log);
     sh_buf_puts(&b, "</dict>\n</plist>\n");
