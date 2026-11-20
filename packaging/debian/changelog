@@ -1,3 +1,12 @@
+skillhub (2.0.1) unstable; urgency=medium
+
+  * Two jobs at once when one of them only reads. Repositories in a better
+    order: new clones first, hosts in turn, local folders where a host is
+    full. The terminal draws only what changed. Automatic runs use the
+    system's background class.
+
+ -- nimonht <181256175+nimonht@users.noreply.github.com>  Fri, 20 Nov 2026 10:00:00 +0700
+
 skillhub (2.0.0) unstable; urgency=medium
 
   * The final 2.0.0. Update channels: stable or beta, and a beta can go
