@@ -15,7 +15,7 @@ if(NOT CMAKE_BUILD_TYPE AND NOT _skillhub_multi_config)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
 endif()
 
-project(skillhub VERSION 2.0.0
+project(skillhub VERSION 2.0.1
         DESCRIPTION "One skills folder for every coding agent"
         HOMEPAGE_URL "https://github.com/nimonht/skillhub"
         LANGUAGES C CXX)
