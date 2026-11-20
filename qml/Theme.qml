@@ -14,6 +14,10 @@ QtObject {
                                        ? Application.styleHints.colorScheme !== Qt.Light : sysPalette.window.hslLightness < 0.5
     property SystemPalette sysPalette: SystemPalette { colorGroup: SystemPalette.Active }
     readonly property bool still: typeof app !== "undefined" ? app.stillMotion : false
+    property bool asleep: false   // the window is minimised or hidden (Main.qml): nothing on it is seen
+    // endless animations (spinners, skeletons) run only while someone can see them: a hidden window still woke the
+    // processor 60 times a second for each one
+    readonly property bool looping: !still && !asleep
     property var tourTargets: ({})   // what the first-run tour can point at, by name (TourTarget.qml)
     // a setting, in a way bindings notice when it changes
     function setting(section, key, fallback) { return app.settingsRev >= 0 ? app.setting(section, key, fallback) : fallback }

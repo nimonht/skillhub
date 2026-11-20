@@ -7,6 +7,7 @@
 #include <QMutex>
 #include <QPointer>
 #include <QQuickPaintedItem>
+#include <QRawFont>
 #include <QSemaphore>
 #include <QThread>
 #include <QVector>
@@ -147,6 +148,8 @@ private:
     static void onOutput(const char *s, size_t len, void *user);
 
     void measure();
+    void restyle();              // the fonts of each style, after font_ changed
+    void paintRow(QPainter *p, int row);
     void resizeGrid();
     void received(const QByteArray &data);
     void ended();
@@ -168,7 +171,12 @@ private:
     PtyWriter *writer_ = nullptr;
     int cols_ = 80, rows_ = 24;
     qreal cellW_ = 8, cellH_ = 16, ascent_ = 12;
+    qreal underlinePos_ = 2, strikePos_ = 4, lineW_ = 1;   // the middle of each line below and above the baseline, and how thick
     QFont font_;
+    QFont styled_[16];   // font_ in each style: bold 1, italic 2, underline 4, strike 8
+    QRawFont raw_[4];    // the font of each bold and italic for runs of glyphs; invalid where the platform gives none
+    QVector<quint32> runGlyphs_;   // the run of glyphs being gathered by paintRow
+    QVector<QPointF> runAt_;
     QColor foreground_ = QColor(0xE8, 0xEC, 0xF1), background_ = QColor(0x10, 0x14, 0x1A), cursorColor_ = QColor(0x34, 0xE0, 0xA6), selectionColor_ = QColor(0x3A, 0x44, 0x52);
     QString cursorShape_ = QStringLiteral("block");
     QVector<QColor> palette_;

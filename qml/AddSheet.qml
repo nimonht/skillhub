@@ -76,7 +76,7 @@ Item {
                 color: Theme.bg2
                 opacity: Theme.still ? 0.8 : 0.5
                 SequentialAnimation on opacity {
-                    running: app.discovering && !Theme.still
+                    running: app.discovering && Theme.looping
                     loops: Animation.Infinite
                     NumberAnimation { to: 0.9; duration: 700 }
                     NumberAnimation { to: 0.45; duration: 700 }
