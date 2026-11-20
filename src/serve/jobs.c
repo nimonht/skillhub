@@ -259,6 +259,9 @@ static yyjson_mut_val *review_json(job *j, const sh_review *r, size_t *budget) {
     yyjson_mut_val *found = yyjson_mut_arr(j->out);
     sh_findings_json(j->out, found, &r->added);
     yyjson_mut_obj_add_val(j->out, o, "newFindings", found);
+    yyjson_mut_val *needs = yyjson_mut_arr(j->out);
+    sh_setup_json(j->out, needs, &r->setup);
+    yyjson_mut_obj_add_val(j->out, o, "setup", needs);
     return o;
 }
 
@@ -423,6 +426,9 @@ static void body_discover(job *j, sh_store *st) {
             yyjson_mut_obj_add_strcpy(j->out, o, "description", c->description);
             yyjson_mut_obj_add_strcpy(j->out, o, "dir", c->dir);
             yyjson_mut_obj_add_bool(j->out, o, "installed", sh_exists(dest));
+            yyjson_mut_val *needs = yyjson_mut_arr(j->out);
+            sh_setup_json(j->out, needs, &c->setup);
+            yyjson_mut_obj_add_val(j->out, o, "setup", needs);
             yyjson_mut_arr_append(list, o);
             free(dest);
         }

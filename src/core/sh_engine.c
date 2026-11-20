@@ -14,6 +14,7 @@
 #include "sh_path.h"
 #include "sh_reports.h"
 #include "sh_scan.h"
+#include "sh_setup.h"
 #include "sh_state.h"
 #include "sh_thread.h"
 #include "sh_time.h"
@@ -35,6 +36,7 @@ typedef struct {
     char *path;  // of SKILL.md
     char *name;  // from its front matter ("" when it has none)
     char *description;
+    char *plugin_path;  // what it names after ${CLAUDE_PLUGIN_ROOT}/ ("" for the variable alone), NULL when it names none
 } skill_file;
 
 // A place skills come from: a cache clone, or a local folder read directly.
@@ -142,6 +144,7 @@ static void slot_free(repo_slot *s) {
         free(s->skills[i].path);
         free(s->skills[i].name);
         free(s->skills[i].description);
+        free(s->skills[i].plugin_path);
     }
     free(s->skills);
 }
@@ -372,6 +375,10 @@ static void fm_end(void *user, size_t i) {
     r->files[i].name = sh_strdup(sh_fm_value(&fm, "name"));
     r->files[i].description = sh_left_utf16(sh_fm_value(&fm, "description"), 600);  // a repository can hold thousands of these
     sh_fm_free(&fm);
+    sh_setup plugin = SH_SETUP_INIT;  // the SKILL.md as far as it was read: a path into the plugin it came from
+    sh_setup_text(&plugin, "SKILL.md", sh_buf_str(&r->text), r->text.len);
+    if (plugin.len) r->files[i].plugin_path = sh_strdup(plugin.items[0].detail);
+    sh_setup_free(&plugin);
 }
 
 static size_t rank_skill_files(const repo_slot *s, ranked_entry *ranked) {
@@ -1169,6 +1176,31 @@ static bool usable_name(const char *name) {
     return text;
 }
 
+// What a skill of a repository needs beyond its files, before it is installed: in git, by the names in its folder and what its
+// SKILL.md names; in a local folder, from the files themselves.
+static void setup_of(const repo_slot *s, const skill_file *f, const char *dir, sh_setup *out) {
+    memset(out, 0, sizeof *out);
+    if (is_local(s)) {
+        char *full = local_path(s, dir);
+        sh_setup_dir(full, out);
+        free(full);
+        return;
+    }
+    char *prefix = *dir ? sh_strfmt("%s/", dir) : sh_strdup("");
+    const size_t pn = strlen(prefix);
+    size_t lo = 0, hi = s->repo.n;  // the first entry at or after the prefix: entries are sorted by path
+    while (lo < hi) {
+        const size_t mid = lo + (hi - lo) / 2;
+        if (strcmp(s->repo.entries[mid].path, prefix) < 0) lo = mid + 1;
+        else hi = mid;
+    }
+    for (size_t i = lo; i < s->repo.n && strncmp(s->repo.entries[i].path, prefix, pn) == 0; ++i)
+        if (s->repo.entries[i].mode != SH_MODE_TREE) sh_setup_file(out, s->repo.entries[i].path + pn);
+    if (f->plugin_path) sh_setup_plugin_root(out, "SKILL.md", f->plugin_path);
+    sh_setup_finish(out);
+    free(prefix);
+}
+
 // What a repository offers below `subpath`, best location first: at most `limit` skills (0: all), and how many more there are.
 static void candidates_of(const repo_slot *s, const char *subpath, size_t limit, sh_discovery *d) {
     sh_strv seen = SH_STRV_INIT;
@@ -1192,6 +1224,7 @@ static void candidates_of(const repo_slot *s, const char *subpath, size_t limit,
         c->name = sh_strdup(name);
         c->description = sh_strdup(f->description);
         c->dir = dir;
+        setup_of(s, f, dir, &c->setup);
         c->slug = sh_strdup(s->o.source);
         c->url = sh_strdup(s->o.url);
         c->key = sh_strdup(s->key);

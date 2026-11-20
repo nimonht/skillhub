@@ -310,11 +310,52 @@ Flickable {
         // the offline check, what outside scanners said, and a second opinion: findings to read, never a verdict
         Column {
             id: checks
-            readonly property var s: Object.assign({ loaded: false, findings: [], high: 0, medium: 0, truncated: false,
+            readonly property var s: Object.assign({ loaded: false, findings: [], high: 0, medium: 0, truncated: false, setup: [],
                                                      reports: { state: "off", source: "", scanners: [] } }, app.safety)
             readonly property var rep: checks.s.reports
             width: parent.width
             spacing: 6
+            // what the skill needs beyond its files: Skill Hub runs none of it, and types a command only when asked
+            SectionLabel { width: parent.width; text: qsTr("Setup"); visible: checks.s.loaded && checks.s.setup.length > 0; trailing: String(checks.s.setup.length) }
+            Text {
+                textFormat: Text.PlainText
+                visible: checks.s.loaded && checks.s.setup.length > 0
+                width: parent.width
+                wrapMode: Text.Wrap
+                text: qsTr("Some of this skill works only after a step Skill Hub does not take for you: it never runs what a skill ships.")
+                color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall; lineHeight: 1.2
+            }
+            Repeater {
+                model: checks.s.loaded ? checks.s.setup : []
+                delegate: Column {
+                    required property var modelData
+                    width: checks.width
+                    spacing: 4
+                    Row {
+                        width: parent.width
+                        spacing: 8
+                        Icon { id: setupIcon; name: modelData.kind === "pluginRoot" ? "alert" : "tool"; size: 14; color: Theme.notifyText; anchors.top: parent.top; anchors.topMargin: 2 }
+                        Text {
+                            textFormat: Text.PlainText
+                            width: parent.width - setupIcon.width - 8
+                            wrapMode: Text.Wrap
+                            text: modelData.kind === "dependencies" ? qsTr("%1 lists dependencies. Install them with %2 in %3.").arg(modelData.file).arg(modelData.command).arg(modelData.folder !== "" ? modelData.folder : qsTr("the skill's folder"))
+                                : modelData.kind === "script" ? qsTr("%1 is the author's install script. Read it before you run it.").arg(modelData.file)
+                                : modelData.detail ? qsTr("%1 reads %2 from the Claude Code plugin it came from. Outside that plugin the file is not there.").arg(modelData.file).arg("${CLAUDE_PLUGIN_ROOT}/" + modelData.detail)   // i18n-ok
+                                : qsTr("%1 names %2, which only a Claude Code plugin sets.").arg(modelData.file).arg("${CLAUDE_PLUGIN_ROOT}")   // i18n-ok
+                            color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsSmall; lineHeight: 1.2
+                        }
+                    }
+                    Btn {
+                        visible: modelData.kind === "dependencies"
+                        x: setupIcon.width + 8
+                        kind: "ghost"; compact: true; iconName: "terminal"
+                        text: qsTr("Set up in terminal")
+                        Accessible.description: qsTr("Opens a terminal in that folder with %1 typed. Press Enter to run it.").arg(modelData.command)
+                        onClicked: app.setUpInTerminal(modelData.folder, modelData.command)
+                    }
+                }
+            }
             SectionLabel { width: parent.width; text: qsTr("Checks"); trailing: checks.s.loaded && checks.s.findings.length > 0 ? String(checks.s.findings.length) : "" }
             Text {
                 textFormat: Text.PlainText

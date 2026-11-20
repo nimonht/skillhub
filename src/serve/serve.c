@@ -22,6 +22,7 @@
 #include "sh_sysinfo.h"
 #include "sh_reports.h"
 #include "sh_scan.h"
+#include "sh_setup.h"
 #include "sh_selfupdate.h"
 #include "sh_utf.h"
 
@@ -947,6 +948,8 @@ static void m_skill_safety(server *s, sh_rpc_msg *m, const slow_call *c) {
     } else {
         sh_findings f;
         sh_scan_dir(found->path, &f);
+        sh_setup setup;
+        sh_setup_dir(found->path, &setup);
         const char *names[] = {name};
         sh_report rep;
         sh_reports_get(st.cache, &found->src, names, 1, false, &rep);
@@ -959,11 +962,15 @@ static void m_skill_safety(server *s, sh_rpc_msg *m, const slow_call *c) {
         sh_findings_json(d, list, &f);
         yyjson_mut_obj_add_val(d, r, "findings", list);
         yyjson_mut_obj_add_bool(d, r, "truncated", f.truncated);
+        yyjson_mut_val *needs = yyjson_mut_arr(d);
+        sh_setup_json(d, needs, &setup);
+        yyjson_mut_obj_add_val(d, r, "setup", needs);
         sh_report_json(d, reports, &rep);
         yyjson_mut_obj_add_val(d, r, "reports", reports);
         send_result(s, m, d, r);
         yyjson_mut_doc_free(d);
         sh_report_free(&rep);
+        sh_setup_free(&setup);
         sh_findings_free(&f);
     }
     sh_skills_free(&sk);

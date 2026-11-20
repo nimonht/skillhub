@@ -330,6 +330,8 @@ public:
     Q_INVOKABLE void setUpdateChannel(const QString &channel);   // "stable" or "beta": saved, then looks again
     Q_INVOKABLE void readSafety(const QString &name);
     Q_INVOKABLE void askSecondOpinion(const QString &agent);  // of the selected skill, in a terminal tab
+    // A setup note of the selected skill (app.safety.setup): a terminal in that folder of it, the command typed and not run
+    Q_INVOKABLE void setUpInTerminal(const QString &folder, const QString &command);
     void showAppUpdate(const QString &latest, bool canInstall, bool back = false);   // the screenshots; back: an older, final version
     Q_INVOKABLE void setScope(const QString &path);
     Q_INVOKABLE void addProject(const QString &path);

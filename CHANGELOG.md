@@ -32,6 +32,14 @@ since beta3 this version arrives through the Update button.
   list itself shows 2000 at first (`install.listLimit`, also in *Settings, Updates*), says how many are left, and *List N more*
   shows the rest. A name that is in no source is now an error that names it, not "0 installed". A long section heading no
   longer runs into its count, and a long skill name no longer runs into its description in `skillhub add`.
+- **What a skill needs, said, and none of it run.** Skill Hub installs a skill's files and never runs what it ships, which
+  left some skills half working without a word: one whose scripts need `npm install`, one whose author ships an `install.sh`,
+  one from a Claude Code plugin that reads `${CLAUDE_PLUGIN_ROOT}/...`, a path that exists only inside that plugin (about one
+  skill in 75 of those we looked at). Now *Add skills* says so under each skill, the skill's *Setup* section lists it with
+  *Set up in terminal*, which opens a terminal in that folder with the command typed (`pnpm install` when a pnpm lock file is
+  next to the manifest, and so on), and Review says when an update changes a manifest, so the install is due again.
+  `skillhub add`, `skillhub diff` and `skillhub scan` print the same. Commands come from a fixed table, never from a skill's
+  text, and nothing runs until you press Enter.
 - **Spinners rest while the window is minimised.** Spinners and loading placeholders woke the processor 60 times a second
   even with nothing on screen.
 

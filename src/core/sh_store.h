@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#include "sh_setup.h"
 #include "sh_str.h"
 #include "yyjson.h"
 
@@ -80,6 +81,7 @@ typedef struct sh_candidate {
     char *slug;  // where it comes from: owner/repo, the repository URL, or the local folder
     char *url;
     char *key;   // the repository in the engine that found it
+    sh_setup setup;  // what it needs beyond its files (sh_setup.h)
 } sh_candidate;
 
 typedef struct { sh_candidate *items; size_t len; } sh_candidates;
