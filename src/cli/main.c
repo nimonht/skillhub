@@ -85,7 +85,9 @@ static void errf(const char *fmt, ...) {
 static void padded(const char *s, size_t width) {
     char *shown = sh_printable(s, false);
     out(shown);
-    for (size_t n = sh_utf16_len(shown); n < width; ++n) putchar(' ');
+    const size_t len = sh_utf16_len(shown);
+    for (size_t n = len; n < width; ++n) putchar(' ');
+    if (len >= width) putchar(' ');  // a longer name still stands apart from what follows it
     free(shown);
 }
 
@@ -1036,6 +1038,7 @@ static int cmd_add(sh_store *st, const args_t *a) {
     const bool all = has(a, "--all");
     const bool listing = !all && want.len == 0;
     sh_engine *engine = sh_engine_new(st);
+    if (!listing) sh_engine_list_everything(engine);  // a name is looked for in the whole repository, and --all is all of it
     sh_discovery *found = sh_xcalloc(repos.len, sizeof *found);
     sh_engine_discover(engine, (const char *const *)repos.items, repos.len, found);
     int failed_repos = 0;
@@ -1054,7 +1057,20 @@ static int cmd_add(sh_store *st, const args_t *a) {
                 outf("%s\n", desc);
                 free(desc);
             }
+            if (found[r].more)  // past install.listLimit: still there, and still installable
+                outf("  ... and %zu more, not listed here: name one with --skill, or take every one with --all\n", found[r].more);
         }
+    }
+    // a name no source has: said, never a silent "0 installed"
+    int missing = 0;
+    for (size_t w = 0; !listing && !all && w < want.len; ++w) {
+        bool there = false;
+        for (size_t r = 0; r < repos.len && !there; ++r)
+            for (size_t i = 0; i < found[r].cands.len && !there; ++i) there = strcmp(found[r].cands.items[i].name, want.items[w]) == 0;
+        if (there) continue;
+        ++missing;
+        if (repos.len == 1) errf("%s has no skill called %s\n", repos.items[0], want.items[w]);
+        else errf("none of the sources has a skill called %s\n", want.items[w]);
     }
     int ok = 0;
     if (!listing) {
@@ -1071,7 +1087,7 @@ static int cmd_add(sh_store *st, const args_t *a) {
         rc = failed_repos ? 1 : 0;
     } else {
         if (failed_repos < (int)repos.len) outf("%d installed\n", ok);
-        rc = ok && !failed_repos ? 0 : 1;
+        rc = ok && !failed_repos && !missing ? 0 : 1;
         if (sh_engine_lock_failed(engine)) {
             errf("the lock file could not be updated; see the lines above\n");
             rc = 1;

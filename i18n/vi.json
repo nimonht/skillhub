@@ -580,5 +580,12 @@
   "Saved the report to %1": "Đã lưu báo cáo vào %1",
   "Could not write %1": "Không ghi được %1",
   "Saved the log to %1": "Đã lưu nhật ký vào %1",
-  "Could not open Task Manager": "Không mở được Task Manager"
+  "Could not open Task Manager": "Không mở được Task Manager",
+  "%1 of %2": "%1 trên %2",
+  "List 1 more": "Liệt kê thêm 1",
+  "List %1 more": "Liệt kê thêm %1",
+  "Only the first %1 skills of this repository are listed. Settings, Updates sets how many": "Chỉ liệt kê %1 kỹ năng đầu tiên của kho mã này. Số lượng được đặt trong Cài đặt, Cập nhật",
+  "Skills listed per repository": "Số kỹ năng liệt kê cho mỗi kho mã",
+  "Add skills lists this many of a repository's skills at first, and the rest when you ask. A skill named on the command line is found among all of them.": "Thêm kỹ năng liệt kê trước ngần này kỹ năng của một kho mã, phần còn lại khi bạn yêu cầu. Kỹ năng được gọi tên trên dòng lệnh sẽ được tìm trong tất cả.",
+  "At first": "Ban đầu"
 }

@@ -369,7 +369,32 @@ def main():
     check(rows["linked"]["live"] and rows["linked"]["sourceType"] == "local", "the row: %s" % rows["linked"])
     check(rows["beta"]["sourceType"] == "gitlab" and not rows["beta"]["live"], "the row: %s" % rows["beta"])
 
+    list_limit()
     print("sources smoke test passed (%s)" % sys.platform)
+
+
+def list_limit():
+    """A repository with more skills than install.listLimit: the listing says how many are left out, and a name, --all and
+    skills.install still reach every one of them. A name that is nowhere is an error, not a silent "0 installed"."""
+    home, env = make_home("limit-home")
+    big = ROOT + "/big"
+    for i in range(30):
+        skill(big + "/skills/s%02d" % i, "s%02d" % i)
+    write(env["SKILLHUB_CONFIG"] + "/settings.json", '{"version": 1, "install": {"listLimit": 10}}')
+    p = run(env, "add", big)
+    check("s09" in p.stdout and "s10" not in p.stdout and "20 more" in p.stdout, "the listing of a large folder:\n" + p.stdout)
+    run(env, "add", big, "--skill", "s25")
+    check("s25" in listed(env), "a skill past the listing was not installed by name")
+    p = run(env, "add", big, "--skill", "nosuchskill", expect=1)
+    check("no skill called nosuchskill" in p.stdout + p.stderr, "a missing name was not said:\n" + p.stdout + p.stderr)
+    (_, found) = rpc(env, ("sources.discover", {"input": big}))[0]
+    check(found["ok"] and len(found["candidates"]) == 10 and found["more"] == 20, "discover past the limit: %s" % str(found)[:300])
+    (_, found) = rpc(env, ("sources.discover", {"input": big, "all": True}))[0]
+    check(len(found["candidates"]) == 30 and found["more"] == 0, "discover with all: %s" % str(found)[:300])
+    (_, done) = rpc(env, ("skills.install", {"source": big, "skills": ["s29"]}))[0]
+    check(done["ok"] and "s29" in listed(env), "skills.install past the listing: %s" % done)
+    run(env, "add", big, "--all")
+    check(len([n for n in listed(env) if n.startswith("s")]) == 30, "--all left skills out: %s" % listed(env))
 
 
 if __name__ == "__main__":

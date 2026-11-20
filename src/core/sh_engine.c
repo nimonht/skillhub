@@ -24,7 +24,8 @@
 #define CHECKS_PER_HOST 32  // ... and clones already there brought up to date (mostly round trips)
 #define COMMIT_EVERY 200    // lock entries per group commit ...
 #define COMMIT_MS 5000      // ... or after this long, whichever comes first
-#define DISCOVER_BUDGET 400 // SKILL.md files looked at per repository when listing what it offers
+#define LIST_LIMIT 2000     // skills listed per repository when adding from it (install.listLimit) ...
+#define LIST_LIMIT_MAX 50000  // ... and the most a setting may ask for: each one goes to the window in one reply
 #define FRONTMATTER_MAX (64 * 1024)
 #define WALK_MAX 200000     // files searched for skills in a local folder: more than this is no folder of skills
 
@@ -68,6 +69,7 @@ struct sh_engine {
     int64_t last_commit;
     sh_trees *trees;  // what GitLab and git skills were installed from; read-only while tasks run
     int workers;      // repositories handled at once
+    size_t list_limit;  // skills listed per repository by sh_engine_discover; 0: every one
     bool auto_mode;
     bool skip_scripts;
     bool skip_findings;  // automatic runs leave out updates that bring a high finding (updates.autoSkipFindings)
@@ -80,6 +82,7 @@ struct sh_engine {
 
 void sh_engine_cancel(sh_engine *e) { sh_atomic_inc(&e->cancelled); }
 void sh_engine_set_interactive(sh_engine *e) { e->sched = SH_SCHED_INTERACTIVE; }
+void sh_engine_list_everything(sh_engine *e) { e->list_limit = 0; }
 bool sh_engine_cancelled(sh_engine *e) { return sh_atomic_get(&e->cancelled) > 0; }
 bool sh_engine_lock_failed(const sh_engine *e) { return e->lock_failed; }
 
@@ -122,6 +125,8 @@ sh_engine *sh_engine_new(sh_store *st) {
     e->per_host.heavy = clones < 1 ? 1 : clones > 64 ? 64 : (int)clones;
     e->per_host.light = checks < 1 ? 1 : checks > 64 ? 64 : (int)checks;
     e->sched = SH_SCHED_BATCH;
+    const long long limit = sh_setting_int("install", "listLimit", LIST_LIMIT);
+    e->list_limit = limit < 10 ? 10 : limit > LIST_LIMIT_MAX ? LIST_LIMIT_MAX : (size_t)limit;
     e->m = sh_mutex_new();
     e->last_commit = sh_mono_ms();
     return e;
@@ -1164,14 +1169,13 @@ static bool usable_name(const char *name) {
     return text;
 }
 
-static void candidates_of(const repo_slot *s, const char *subpath, sh_discovery *d) {
+// What a repository offers below `subpath`, best location first: at most `limit` skills (0: all), and how many more there are.
+static void candidates_of(const repo_slot *s, const char *subpath, size_t limit, sh_discovery *d) {
     sh_strv seen = SH_STRV_INIT;
     d->cands.items = sh_xcalloc(s->n_skills + 1, sizeof *d->cands.items);
-    size_t looked = 0;
-    for (size_t i = 0; i < s->n_skills && looked < DISCOVER_BUDGET; ++i) {
+    for (size_t i = 0; i < s->n_skills; ++i) {
         const skill_file *f = &s->skills[i];
         if (!below(f->path, subpath)) continue;
-        ++looked;
         char *dir = sh_dir_of(f->path);
         const char *name = *f->name ? f->name : sh_path_name(dir);
         if (!usable_name(name) || sh_strv_contains(&seen, name)) {
@@ -1179,6 +1183,11 @@ static void candidates_of(const repo_slot *s, const char *subpath, sh_discovery 
             continue;
         }
         sh_strv_push(&seen, name);
+        if (limit && d->cands.len >= limit) {  // counted, not listed: the caller says how to see them
+            ++d->more;
+            free(dir);
+            continue;
+        }
         sh_candidate *c = &d->cands.items[d->cands.len++];
         c->name = sh_strdup(name);
         c->description = sh_strdup(f->description);
@@ -1216,7 +1225,7 @@ void sh_engine_discover(sh_engine *e, const char *const *inputs, size_t n, sh_di
         out[i].type = sh_origin_type_name(s->o.type);
         out[i].host = sh_strdup(s->o.host);
         if (!s->ok) out[i].err = sh_strdup(s->err ? s->err : "");
-        else candidates_of(s, subpaths.items[i], &out[i]);
+        else candidates_of(s, subpaths.items[i], e->list_limit, &out[i]);
     }
     sh_strv_free(&subpaths);
     free(slot_of);

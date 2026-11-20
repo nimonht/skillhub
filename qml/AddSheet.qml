@@ -93,7 +93,7 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
 
-        SectionLabel { id: lbl; x: 24; width: parent.width - 48; text: root.origin !== "" ? qsTr("Skills in %1 · %2").arg(app.candidateRepo).arg(root.origin) : qsTr("Skills in %1").arg(app.candidateRepo); trailing: app.candidates.length }
+        SectionLabel { id: lbl; x: 24; width: parent.width - 48; text: root.origin !== "" ? qsTr("Skills in %1 · %2").arg(app.candidateRepo).arg(root.origin) : qsTr("Skills in %1").arg(app.candidateRepo); trailing: app.candidateMore > 0 ? qsTr("%1 of %2").arg(app.candidates.length).arg(app.candidates.length + app.candidateMore) : app.candidates.length }
         Toggle {
             id: liveToggle
             visible: app.candidateType === "local" && !app.inProject
@@ -181,6 +181,15 @@ Item {
                         if (root.chosenCount !== app.candidates.length) for (var i = 0; i < app.candidates.length; ++i) c[app.candidates[i].name] = true
                         root.chosen = c
                     }
+                }
+                Btn {   // past install.listLimit: the rest of a large repository, on request
+                    visible: app.candidateMore > 0
+                    kind: "ghost"
+                    iconName: "search"
+                    text: app.candidateMore === 1 ? qsTr("List 1 more") : qsTr("List %1 more").arg(app.candidateMore)
+                    Accessible.description: qsTr("Only the first %1 skills of this repository are listed. Settings, Updates sets how many").arg(app.candidates.length)
+                    enabled: app.canRead
+                    onClicked: app.discoverAll()
                 }
             }
         }

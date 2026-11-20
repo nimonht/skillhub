@@ -145,6 +145,7 @@ class AppController : public QObject {
     Q_PROPERTY(QString candidateType READ candidateType NOTIFY candidatesChanged)  // github, gitlab, git, local
     Q_PROPERTY(QString candidateHost READ candidateHost NOTIFY candidatesChanged)
     Q_PROPERTY(bool discovering READ discovering NOTIFY candidatesChanged)
+    Q_PROPERTY(int candidateMore READ candidateMore NOTIFY candidatesChanged)  // skills there past install.listLimit, not listed
     Q_PROPERTY(bool reviewOpen READ reviewOpen NOTIFY reviewChanged)
     Q_PROPERTY(bool reviewLoading READ reviewLoading NOTIFY reviewChanged)
     Q_PROPERTY(QVariantList reviews READ reviews NOTIFY reviewChanged)
@@ -232,6 +233,7 @@ public:
     QString candidateType() const { return candidateType_; }
     QString candidateHost() const { return candidateHost_; }
     bool discovering() const { return discovering_; }
+    int candidateMore() const { return candidateMore_; }
     bool reviewOpen() const { return reviewOpen_; }
     bool reviewLoading() const { return reviewLoading_; }
     QVariantList reviews() const { return reviews_; }
@@ -336,7 +338,8 @@ public:
     Q_INVOKABLE void updateSkill(const QString &name);
     Q_INVOKABLE void adopt();
     Q_INVOKABLE void select(const QString &name);
-    Q_INVOKABLE void discover(const QString &repo);
+    Q_INVOKABLE void discover(const QString &repo, bool all = false);
+    Q_INVOKABLE void discoverAll() { discover(candidateRepo_, true); }   // every skill of the repository read last
     Q_INVOKABLE void installChosen(const QStringList &names, bool live);
     Q_INVOKABLE void closeAdd();
     Q_INVOKABLE void dismiss();
@@ -468,6 +471,7 @@ private:
     QString languageChoice_ = QStringLiteral("system");
     JsonTranslator translator_;
     bool translatorInstalled_ = false, languageForced_ = false;
+    int candidateMore_ = 0;
     bool discovering_ = false, reduce_ = false, forcedStill_ = false, noHover_ = false, loaded_ = false;
     bool automationSupported_ = false, themeForced_ = false;
 };
