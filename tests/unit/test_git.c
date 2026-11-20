@@ -100,7 +100,7 @@ static void build_upstream(void) {
 
 static void open_repo(sh_repo *r) {
     char *dir = at("cache/repos/up"), *url = at("upstream"), *err = NULL;
-    CHECK(sh_repo_open(r, dir, url, "", NULL, &err));
+    CHECK(sh_repo_open(r, dir, url, "", &err));
     if (err) fprintf(stderr, "open: %s\n", err);
     free(err);
     free(url);

@@ -7,7 +7,6 @@
 #include <stddef.h>
 
 #include "sh_str.h"
-#include "sh_thread.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -46,9 +45,9 @@ typedef struct {
 
 bool sh_repo_cloned(const char *dir);  // a cache clone exists there
 // Clones `url` into `dir`, or brings the clone up to date when upstream has moved, then reads the commit's tree. `ref` is
-// a branch or tag ("": upstream's default). Other processes using the same clone wait (`dir`.lock). `fetches` (may be
-// NULL) bounds clones and fetches per host. On failure *err holds git's own message.
-bool sh_repo_open(sh_repo *r, const char *dir, const char *url, const char *ref, sh_limiter *fetches, char **err);
+// a branch or tag ("": upstream's default). Other processes using the same clone wait (`dir`.lock). How many
+// repositories of one host are opened at once is the caller's to limit (sh_parallel_sched). On failure *err holds git's own message.
+bool sh_repo_open(sh_repo *r, const char *dir, const char *url, const char *ref, char **err);
 void sh_repo_free(sh_repo *r);
 const sh_tree_entry *sh_repo_find(const sh_repo *r, const char *path);  // NULL when the commit has no such path
 const char *sh_repo_id(const sh_repo *r, const char *path);             // the object at path ("" = the top), or ""

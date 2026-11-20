@@ -4,6 +4,7 @@
 
 #include "sh_thread.h"
 
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -106,50 +107,234 @@ long sh_atomic_get(long *v) { return __atomic_load_n(v, __ATOMIC_SEQ_CST); }
 
 #endif
 
-// ---- parallel loop ----
+// ---- the scheduler ----
+//
+// Borrowed from the CPU schedulers of sched_ext and from the CAKE queue discipline, at the scale of a job's repositories:
+// tasks wait in queues by host, a host's share is capped (CAKE's isolation of hosts), the costliest task that can start
+// goes first so that a long one does not run alone at the end (longest processing time first), and the work a person
+// waits for goes before work nobody waits for (LAVD's latency-critical tasks). Everything below is guarded by one lock
+// for the whole process, since the slots of a host are shared by every run.
+
+#ifdef _WIN32
+static sh_mutex sched_m = {SRWLOCK_INIT};
+static sh_cond sched_cv = {CONDITION_VARIABLE_INIT};  // a task ended or a slot came free, in any run
+#else
+static sh_mutex sched_m = {PTHREAD_MUTEX_INITIALIZER};
+static sh_cond sched_cv = {PTHREAD_COND_INITIALIZER};
+#endif
+
+typedef struct host_slots {
+    char *host;
+    int used[2];    // tasks of any run that hold one of its light [0] or heavy [1] slots now
+    int wanted[2];  // tasks of interactive runs that have not started: a batch run leaves them as many slots
+    int runs;       // runs with tasks for this host; the entry goes when none is left
+    struct host_slots *next;
+} host_slots;
+
+static host_slots *all_hosts;
+
+static host_slots *host_slots_for(const char *host) {
+    for (host_slots *h = all_hosts; h; h = h->next)
+        if (strcmp(h->host, host) == 0) return h;
+    host_slots *h = sh_xcalloc(1, sizeof *h);
+    h->host = sh_strdup(host);
+    h->next = all_hosts;
+    all_hosts = h;
+    return h;
+}
+
+static void host_slots_drop(host_slots *gone) {
+    for (host_slots **p = &all_hosts; *p; p = &(*p)->next) {
+        if (*p == gone) {
+            *p = gone->next;
+            free(gone->host);
+            free(gone);
+            return;
+        }
+    }
+}
 
 typedef struct {
-    size_t n, next, finished;
+    host_slots *slots;  // NULL: tasks that need no host
+    int heavy;          // 1: the host's heavy slots, 0: its light ones
+    size_t *order;      // its tasks, costliest first
+    size_t n, next;     // order[next] starts next
+    int wanted;         // what this run added to slots->wanted[heavy] and has not taken back
+} task_queue;
+
+typedef struct {
+    task_queue *queues;
+    size_t n_queues;
+    size_t n, left, finished;  // tasks; not started yet; done
+    const sh_task *tasks;
+    int limit[2];  // light, heavy
+    bool interactive;
     void (*fn)(size_t, void *);
     void *ctx;
-    sh_mutex *m;
-    sh_cond *done;
-} loop_state;
+} sched_run;
+
+static long cost_of(const sched_run *r, size_t i) { return r->tasks ? r->tasks[i].cost : 0; }
+
+// `a` before `b`: costlier first; then the host with fewer tasks running (a queue without a host counts none); then the
+// task that came first
+static bool goes_before(const sched_run *r, const task_queue *a, const task_queue *b) {
+    const size_t ia = a->order[a->next], ib = b->order[b->next];
+    const long ca = cost_of(r, ia), cb = cost_of(r, ib);
+    if (ca != cb) return ca > cb;
+    const int ua = a->slots ? a->slots->used[0] + a->slots->used[1] : 0, ub = b->slots ? b->slots->used[0] + b->slots->used[1] : 0;
+    if (ua != ub) return ua < ub;
+    return ia < ib;
+}
+
+// the queue whose next task starts now, or NULL when none can (sched_m held)
+static task_queue *pick(sched_run *r) {
+    task_queue *best = NULL;
+    for (size_t k = 0; k < r->n_queues; ++k) {
+        task_queue *q = &r->queues[k];
+        if (q->next == q->n) continue;
+        if (q->slots) {
+            const int taken = q->slots->used[q->heavy] + (r->interactive ? 0 : q->slots->wanted[q->heavy]);
+            if (taken >= r->limit[q->heavy]) continue;
+        }
+        if (!best || goes_before(r, q, best)) best = q;
+    }
+    return best;
+}
+
+static void sched_work(sched_run *r) {
+    sh_mutex_lock(&sched_m);
+    while (r->left > 0) {
+        task_queue *q = pick(r);
+        if (!q) {  // every host this run needs is full: wait for a slot, never sit on one
+            sh_cond_wait(&sched_cv, &sched_m);
+            continue;
+        }
+        const size_t i = q->order[q->next++];
+        --r->left;
+        if (q->slots) {
+            ++q->slots->used[q->heavy];
+            if (q->wanted > 0) {
+                --q->wanted;
+                --q->slots->wanted[q->heavy];
+            }
+        }
+        sh_mutex_unlock(&sched_m);
+        r->fn(i, r->ctx);
+        sh_mutex_lock(&sched_m);
+        if (q->slots) --q->slots->used[q->heavy];
+        ++r->finished;
+        sh_cond_broadcast(&sched_cv);
+    }
+    sh_mutex_unlock(&sched_m);
+}
 
 #ifdef _WIN32
 static DWORD WINAPI worker(void *arg) {
+    sched_work(arg);
+    return 0;
+}
 #else
 static void *worker(void *arg) {
-#endif
-    loop_state *s = arg;
-    for (;;) {
-        sh_mutex_lock(s->m);
-        const size_t i = s->next < s->n ? s->next++ : s->n;
-        sh_mutex_unlock(s->m);
-        if (i >= s->n) break;
-        s->fn(i, s->ctx);
-        sh_mutex_lock(s->m);
-        ++s->finished;
-        sh_cond_broadcast(s->done);
-        sh_mutex_unlock(s->m);
-    }
-#ifdef _WIN32
-    return 0;
-#else
+    sched_work(arg);
     return NULL;
+}
 #endif
+
+typedef struct {
+    size_t queue, i;
+    long cost;
+} sort_key;
+
+static int cmp_key(const void *a, const void *b) {
+    const sort_key *x = a, *y = b;
+    if (x->queue != y->queue) return x->queue < y->queue ? -1 : 1;
+    if (x->cost != y->cost) return x->cost > y->cost ? -1 : 1;
+    return x->i < y->i ? -1 : x->i > y->i;
 }
 
-void sh_parallel_for(size_t n, int workers, void (*fn)(size_t, void *), void *ctx, void (*idle)(void *), int idle_ms) {
+// one queue for each host and kind of slot, plus one for the tasks without a host; registers the run's hosts (sched_m held)
+static void build_queues(sched_run *r) {
+    task_queue *qs = sh_xcalloc(r->n + 1, sizeof *qs);
+    size_t nq = 0, local = SIZE_MAX;
+    sort_key *keys = sh_xcalloc(r->n, sizeof *keys);
+    for (size_t i = 0; i < r->n; ++i) {
+        const sh_task *t = r->tasks ? &r->tasks[i] : NULL;
+        size_t k;
+        if (!t || !t->host || !*t->host) {
+            if (local == SIZE_MAX) local = nq++;
+            k = local;
+        } else {
+            host_slots *h = host_slots_for(t->host);
+            const int heavy = t->heavy ? 1 : 0;
+            for (k = 0; k < nq; ++k)
+                if (qs[k].slots == h && qs[k].heavy == heavy) break;
+            if (k == nq) {
+                qs[nq].slots = h;
+                qs[nq].heavy = heavy;
+                ++nq;
+                bool counted = false;  // a host counts each run once, whichever kinds of slot it uses
+                for (size_t o = 0; o + 1 < nq && !counted; ++o) counted = qs[o].slots == h;
+                if (!counted) ++h->runs;
+            }
+        }
+        keys[i] = (sort_key){k, i, cost_of(r, i)};
+    }
+    qsort(keys, r->n, sizeof *keys, cmp_key);
+    for (size_t j = 0; j < r->n;) {
+        task_queue *q = &qs[keys[j].queue];
+        size_t end = j;
+        while (end < r->n && keys[end].queue == keys[j].queue) ++end;
+        q->n = end - j;
+        q->order = sh_xcalloc(q->n, sizeof *q->order);
+        for (size_t t = 0; t < q->n; ++t) q->order[t] = keys[j + t].i;
+        if (r->interactive && q->slots) {
+            q->wanted = (int)q->n;
+            q->slots->wanted[q->heavy] += q->wanted;
+        }
+        j = end;
+    }
+    free(keys);
+    r->queues = qs;
+    r->n_queues = nq;
+}
+
+// takes back what the run registered (sched_m held)
+static void drop_queues(sched_run *r) {
+    for (size_t k = 0; k < r->n_queues; ++k) {
+        task_queue *q = &r->queues[k];
+        if (q->slots) q->slots->wanted[q->heavy] -= q->wanted;
+    }
+    for (size_t k = 0; k < r->n_queues; ++k) {
+        task_queue *q = &r->queues[k];
+        bool last = q->slots != NULL;  // the last queue of its host in this run lets go of the host
+        for (size_t o = k + 1; o < r->n_queues && last; ++o) last = r->queues[o].slots != q->slots;
+        if (last && --q->slots->runs == 0) host_slots_drop(q->slots);
+        free(q->order);
+    }
+    free(r->queues);
+}
+
+void sh_parallel_sched(size_t n, const sh_task *tasks, int workers, sh_host_limits limits, sh_sched_class cls, void (*fn)(size_t, void *),
+                       void *ctx, void (*idle)(void *), int idle_ms) {
     if (n == 0) return;
     if (workers < 1) workers = 1;
     if ((size_t)workers > n) workers = (int)n;
-    loop_state s = {n, 0, 0, fn, ctx, sh_mutex_new(), sh_cond_new()};
+    sched_run r = {0};
+    r.n = r.left = n;
+    r.tasks = tasks;
+    r.limit[0] = limits.light > 0 ? limits.light : 1;
+    r.limit[1] = limits.heavy > 0 ? limits.heavy : 1;
+    r.interactive = cls == SH_SCHED_INTERACTIVE;
+    r.fn = fn;
+    r.ctx = ctx;
+    sh_mutex_lock(&sched_m);
+    build_queues(&r);
+    sh_mutex_unlock(&sched_m);
     int started = 0;
 #ifdef _WIN32
     HANDLE *threads = sh_xcalloc((size_t)workers, sizeof *threads);
     for (int t = 0; t < workers; ++t) {
-        HANDLE h = CreateThread(NULL, 0, worker, &s, 0, NULL);
+        HANDLE h = CreateThread(NULL, 0, worker, &r, 0, NULL);
         if (h) threads[started++] = h;
     }
 #else
@@ -158,20 +343,20 @@ void sh_parallel_for(size_t n, int workers, void (*fn)(size_t, void *), void *ct
     pthread_attr_init(&attr);
     pthread_attr_setstacksize(&attr, 1024 * 1024);  // the tasks use little stack; keeps many workers cheap
     for (int t = 0; t < workers; ++t)
-        if (pthread_create(&threads[started], &attr, worker, &s) == 0) ++started;
+        if (pthread_create(&threads[started], &attr, worker, &r) == 0) ++started;
     pthread_attr_destroy(&attr);
 #endif
-    if (started == 0) (void)worker(&s);  // no thread could start: the caller does the work
-    sh_mutex_lock(s.m);
-    while (s.finished < s.n) {
-        sh_cond_wait_ms(s.done, s.m, idle_ms > 0 ? idle_ms : 1000);
+    if (started == 0) sched_work(&r);  // no thread could start: the caller does the work
+    sh_mutex_lock(&sched_m);
+    while (r.finished < r.n) {
+        sh_cond_wait_ms(&sched_cv, &sched_m, idle_ms > 0 ? idle_ms : 1000);
         if (idle) {
-            sh_mutex_unlock(s.m);
+            sh_mutex_unlock(&sched_m);
             idle(ctx);
-            sh_mutex_lock(s.m);
+            sh_mutex_lock(&sched_m);
         }
     }
-    sh_mutex_unlock(s.m);
+    sh_mutex_unlock(&sched_m);
     for (int t = 0; t < started; ++t) {
 #ifdef _WIN32
         WaitForSingleObject(threads[t], INFINITE);
@@ -181,8 +366,14 @@ void sh_parallel_for(size_t n, int workers, void (*fn)(size_t, void *), void *ct
 #endif
     }
     free(threads);
-    sh_cond_free(s.done);
-    sh_mutex_free(s.m);
+    sh_mutex_lock(&sched_m);
+    drop_queues(&r);
+    sh_cond_broadcast(&sched_cv);  // what it held back for itself is free for the other runs
+    sh_mutex_unlock(&sched_m);
+}
+
+void sh_parallel_for(size_t n, int workers, void (*fn)(size_t, void *), void *ctx, void (*idle)(void *), int idle_ms) {
+    sh_parallel_sched(n, NULL, workers, (sh_host_limits){1, 1}, SH_SCHED_BATCH, fn, ctx, idle, idle_ms);
 }
 
 // ---- threads of their own ----
@@ -237,63 +428,4 @@ void sh_thread_join(sh_thread *t) {
     pthread_join(t->t, NULL);
 #endif
     free(t);
-}
-
-// ---- per-host limits ----
-
-typedef struct {
-    char *host;
-    int used;
-} host_slot;
-
-struct sh_limiter {
-    int per_host;
-    host_slot *slots;
-    size_t n, cap;
-    sh_mutex *m;
-    sh_cond *freed;
-};
-
-sh_limiter *sh_limiter_new(int per_host) {
-    sh_limiter *l = sh_xcalloc(1, sizeof *l);
-    l->per_host = per_host > 0 ? per_host : 1;
-    l->m = sh_mutex_new();
-    l->freed = sh_cond_new();
-    return l;
-}
-
-void sh_limiter_free(sh_limiter *l) {
-    if (!l) return;
-    for (size_t i = 0; i < l->n; ++i) free(l->slots[i].host);
-    free(l->slots);
-    sh_cond_free(l->freed);
-    sh_mutex_free(l->m);
-    free(l);
-}
-
-static host_slot *slot_for(sh_limiter *l, const char *host) {
-    for (size_t i = 0; i < l->n; ++i)
-        if (strcmp(l->slots[i].host, host) == 0) return &l->slots[i];
-    if (l->n == l->cap) {
-        l->cap = l->cap ? l->cap * 2 : 8;
-        l->slots = sh_xrealloc(l->slots, l->cap * sizeof *l->slots);
-    }
-    l->slots[l->n].host = sh_strdup(host);
-    l->slots[l->n].used = 0;
-    return &l->slots[l->n++];
-}
-
-void sh_limiter_acquire(sh_limiter *l, const char *host) {
-    sh_mutex_lock(l->m);
-    while (slot_for(l, host)->used >= l->per_host) sh_cond_wait(l->freed, l->m);
-    slot_for(l, host)->used++;
-    sh_mutex_unlock(l->m);
-}
-
-void sh_limiter_release(sh_limiter *l, const char *host) {
-    sh_mutex_lock(l->m);
-    host_slot *s = slot_for(l, host);
-    if (s->used > 0) s->used--;
-    sh_cond_broadcast(l->freed);
-    sh_mutex_unlock(l->m);
 }

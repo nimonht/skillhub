@@ -211,7 +211,8 @@ if(SKILLHUB_TESTS)
     enable_testing()
     add_executable(skillhub_unit_tests tests/unit/test_main.c tests/unit/test.h tests/unit/test_text.c tests/unit/test_paths.c
                                        tests/unit/test_frontmatter.c tests/unit/test_lock.c tests/unit/test_git.c
-                                       tests/unit/test_store.c tests/unit/test_shellstart.c tests/unit/test_selfupdate.c tests/unit/test_scan.c tests/unit/test_diag.c)
+                                       tests/unit/test_store.c tests/unit/test_shellstart.c tests/unit/test_selfupdate.c tests/unit/test_scan.c tests/unit/test_diag.c
+                                       tests/unit/test_thread.c)
     target_link_libraries(skillhub_unit_tests PRIVATE skillhub_core)
     target_compile_options(skillhub_unit_tests PRIVATE ${SKILLHUB_C_WARNINGS})
     target_compile_definitions(skillhub_unit_tests PRIVATE SKILLHUB_SOURCE_DIR="${CMAKE_SOURCE_DIR}")

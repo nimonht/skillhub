@@ -20,7 +20,8 @@
 #include "sh_utf.h"
 
 #define WORKERS 16          // repositories handled at once; each runs one git process at a time
-#define FETCHES_PER_HOST 8  // clones and fetches from one host at a time
+#define CLONES_PER_HOST 8   // new clones from one host at once, across every job of the process ...
+#define CHECKS_PER_HOST 32  // ... and clones already there brought up to date (mostly round trips)
 #define COMMIT_EVERY 200    // lock entries per group commit ...
 #define COMMIT_MS 5000      // ... or after this long, whichever comes first
 #define DISCOVER_BUDGET 400 // SKILL.md files looked at per repository when listing what it offers
@@ -59,7 +60,8 @@ struct sh_engine {
     sh_store *st;
     repo_slot *slots;
     size_t n_slots, cap_slots;
-    sh_limiter *fetches;
+    sh_host_limits per_host;  // repositories of one host at once
+    sh_sched_class sched;  // whether a person waits for this engine's work (sh_engine_set_interactive)
     sh_mutex *m;  // guards `pending`
     pending_entry *pending;
     size_t n_pending, cap_pending;
@@ -77,6 +79,7 @@ struct sh_engine {
 };
 
 void sh_engine_cancel(sh_engine *e) { sh_atomic_inc(&e->cancelled); }
+void sh_engine_set_interactive(sh_engine *e) { e->sched = SH_SCHED_INTERACTIVE; }
 bool sh_engine_cancelled(sh_engine *e) { return sh_atomic_get(&e->cancelled) > 0; }
 bool sh_engine_lock_failed(const sh_engine *e) { return e->lock_failed; }
 
@@ -114,8 +117,11 @@ sh_engine *sh_engine_new(sh_store *st) {
     e->workers = (int)sh_setting_int("updates", "parallel", WORKERS);
     if (e->workers < 1) e->workers = 1;
     if (e->workers > 64) e->workers = 64;
-    const long long per_host = sh_setting_int("updates", "parallelPerHost", FETCHES_PER_HOST);
-    e->fetches = sh_limiter_new(per_host < 1 ? 1 : per_host > 64 ? 64 : (int)per_host);
+    const long long clones = sh_setting_int("updates", "parallelPerHost", CLONES_PER_HOST);
+    const long long checks = sh_setting_int("updates", "parallelChecksPerHost", CHECKS_PER_HOST);
+    e->per_host.heavy = clones < 1 ? 1 : clones > 64 ? 64 : (int)clones;
+    e->per_host.light = checks < 1 ? 1 : checks > 64 ? 64 : (int)checks;
+    e->sched = SH_SCHED_BATCH;
     e->m = sh_mutex_new();
     e->last_commit = sh_mono_ms();
     return e;
@@ -147,7 +153,6 @@ void sh_engine_free(sh_engine *e) {
     }
     free(e->pending);
     sh_trees_free(e->trees);
-    sh_limiter_free(e->fetches);
     sh_mutex_free(e->m);
     free(e);
 }
@@ -286,7 +291,7 @@ static bool ensure_synced(sh_engine *e, repo_slot *s) {
         s->ok = open_local(s, &err);
     } else {
         if (!sh_repo_cloned(s->key)) sh_store_log(e->st, "cloning %s ...", s->o.source);
-        s->ok = sh_repo_open(&s->repo, s->key, s->o.url, s->o.ref, e->fetches, &err);
+        s->ok = sh_repo_open(&s->repo, s->key, s->o.url, s->o.ref, &err);
     }
     if (!s->ok) {
         const char *hint = login_hint(err);
@@ -569,10 +574,25 @@ static void run_task(size_t i, void *arg) {
 
 static void on_idle(void *arg) { maybe_commit(((job *)arg)->e); }
 
+// What the scheduler starts first: a clone still to be made, then a clone to bring up to date, then a folder on this disk,
+// which needs no host and fills the workers that a full host leaves idle; between equals, the one with more skills.
+static long task_cost(bool local, bool cloned, const group *gr) {
+    const long kind = local ? 0 : cloned ? 1 : 2;
+    return kind << 24 | (long)(gr->n < 0xFFFFFF ? gr->n : 0xFFFFFF);
+}
+
 static void run_job(job *j) {
-    for (size_t i = 0; i < j->g.n; ++i) j->total += (long)j->g.groups[i].n;
-    const int workers = j->g.n < (size_t)j->e->workers ? (int)j->g.n : j->e->workers;
-    sh_parallel_for(j->g.n, workers, run_task, j, on_idle, 250);
+    sh_task *tasks = sh_xcalloc(j->g.n + 1, sizeof *tasks);
+    for (size_t i = 0; i < j->g.n; ++i) {
+        const repo_slot *s = &j->e->slots[j->g.groups[i].slot];
+        j->total += (long)j->g.groups[i].n;
+        const bool cloned = !is_local(s) && sh_repo_cloned(s->key);
+        tasks[i].host = is_local(s) ? "" : s->o.host;
+        tasks[i].heavy = !is_local(s) && !cloned;  // a clone to make; one that is there asks upstream, and fetches one commit at most
+        tasks[i].cost = task_cost(is_local(s), cloned, &j->g.groups[i]);
+    }
+    sh_parallel_sched(j->g.n, tasks, j->e->workers, j->e->per_host, j->e->sched, run_task, j, on_idle, 250);
+    free(tasks);
     commit_pending(j->e);
 }
 

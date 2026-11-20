@@ -22,6 +22,10 @@ void sh_engine_free(sh_engine *e);
 // scripts, unless settings.json switches that off. Such a skill gets `left_out`: it was not updated, and that is no failure.
 void sh_engine_set_auto(sh_engine *e);
 
+// A person waits for this engine's work (a short job beside a long one): it gets a host's next free slot before the work
+// of other engines, which nobody waits for (sh_parallel_sched).
+void sh_engine_set_interactive(sh_engine *e);
+
 // Stops the job at its next safe point: no further repository is started and no further skill is swapped in. Skills
 // swapped in already stay, and their lock entries are committed. Callable from any thread.
 void sh_engine_cancel(sh_engine *e);
