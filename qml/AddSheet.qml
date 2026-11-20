@@ -42,13 +42,13 @@ Item {
             width: parent.width
             iconName: "branch"
             placeholderText: qsTr("owner/repo, a GitLab or git URL, or a local folder")
-            enabled: !app.busy
+            enabled: app.canRead
             onAccepted: if (text.trim() !== "") app.discover(text)
         }
         Row {
             spacing: 8
-            Btn { kind: "primary"; iconName: "search"; text: qsTr("Read source"); enabled: repo.text.trim() !== "" && !app.busy; onClicked: app.discover(repo.text) }
-            Btn { visible: dialogs.status === Loader.Ready; kind: "secondary"; iconName: "folder"; text: qsTr("Choose folder"); enabled: !app.busy; onClicked: dialogs.item.openFolder() }
+            Btn { kind: "primary"; iconName: "search"; text: qsTr("Read source"); enabled: repo.text.trim() !== "" && app.canRead; onClicked: app.discover(repo.text) }
+            Btn { visible: dialogs.status === Loader.Ready; kind: "secondary"; iconName: "folder"; text: qsTr("Choose folder"); enabled: app.canRead; onClicked: dialogs.item.openFolder() }
             Btn { kind: "ghost"; text: qsTr("Close"); onClicked: app.closeAdd() }
         }
         Text {
@@ -170,7 +170,7 @@ Item {
                     kind: "primary"
                     iconName: "download"
                     text: root.chosenCount === 0 ? qsTr("Install") : root.chosenCount === 1 ? qsTr("Install 1 skill") : qsTr("Install %1 skills").arg(root.chosenCount)
-                    enabled: root.chosenCount > 0 && !app.busy
+                    enabled: root.chosenCount > 0 && app.canChange
                     onClicked: app.installChosen(Object.keys(root.chosen), root.live)
                 }
                 Btn {

@@ -35,7 +35,7 @@ static void on_change(uv_fs_event_t *h, const char *filename, int events, int st
         return;
     }
     // changes the running job makes are covered by the rescan that follows it
-    if ((sv->job && sv->job->mutating) || uv_now(sv->loop) < (uint64_t)sv->quiet_until) return;
+    if (job_changing(sv) || uv_now(sv->loop) < (uint64_t)sv->quiet_until) return;
     uv_timer_start(&sv->debounce, on_debounce, 300, 0);
 }
 

@@ -100,6 +100,10 @@ char *log_line_json(const char *text);  // a job's log line as {time, level, tex
 
 // ---- jobs (jobs.c) ----
 
+// A long job, and one beside it that only reads (docs/protocol.md, Jobs): reading a repository to install from, or checking
+// a skill, while every skill is checked or updated.
+#define MAX_JOBS 2
+
 typedef void (*job_body)(job *j, sh_store *st);
 
 struct job {
@@ -124,10 +128,17 @@ struct job {
     sh_strv updated;        // skills this job updated
     char *project;          // the scope it runs in; NULL: the user's own skills
     bool rescan;            // the shared folder may have changed
+    bool interactive;       // started beside another job: a person waits for it, and its engine goes first for a host
+    // progress on the loop thread, sent merged
+    bool progress_dirty;
+    long progress_done, progress_total;
+    char *progress_current;
 };
 
 // Starts a job for request `m` (replies {job} or an error). `mutating` jobs need the mutation lock.
 void job_start(server *sv, sh_rpc_msg *m, const char *kind, bool mutating, job_body body);
+job *job_named(server *sv, const char *name);  // a running job, or NULL
+bool job_changing(server *sv);                  // a running job changes skills
 void job_cancel(job *j);
 void job_finish(server *sv, job *j);  // on the loop thread, after EV_JOB_DONE: reports and frees it
 const char *job_method_kind(const char *method, bool *mutating, job_body *body);  // NULL: not a job
@@ -157,7 +168,8 @@ struct server {
     bool closed;       // no more events are taken (guarded by m)
 
     bool initialized, shutting_down, input_closed;
-    sh_rpc_msg *shutdown_msg;  // answered once the running job has stopped
+    sh_rpc_msg *shutdown_msg;  // answered once the running jobs have stopped
+    sh_strv stopped_jobs;      // jobs a shutdown cancelled half way, for its answer
 
     // state
     char *project;        // the scope the window shows; NULL: the user's own skills
@@ -171,11 +183,9 @@ struct server {
     waiting *waiting;      // requests answered after the next scan
 
     // jobs
-    job *job;
+    job *jobs[MAX_JOBS];   // running, oldest first
+    int n_jobs;
     long next_job;
-    bool progress_dirty;   // pending progress, sent merged
-    long progress_done, progress_total;
-    char *progress_current;
     sh_strv pending_logs;  // JSON objects
     char *settings_seen;   // settings.json as last announced
 

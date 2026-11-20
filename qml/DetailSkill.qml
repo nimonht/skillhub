@@ -101,12 +101,12 @@ Flickable {
         Flow {
             width: parent.width
             spacing: 8
-            Btn { visible: root.d.state === "available"; kind: "primary"; iconName: "search"; text: qsTr("Review changes"); enabled: !app.busy; onClicked: app.openReview([root.d.name]) }
-            Btn { visible: root.d.state === "available"; iconName: "upgrade"; text: qsTr("Update now"); enabled: !app.busy; onClicked: app.updateSkill(root.d.name) }
-            Btn { visible: root.d.state === "tracked" || root.d.state === "error"; iconName: "refresh"; text: root.d.state === "error" ? qsTr("Retry") : qsTr("Check and update"); enabled: !app.busy; onClicked: app.updateSkill(root.d.name) }
+            Btn { visible: root.d.state === "available"; kind: "primary"; iconName: "search"; text: qsTr("Review changes"); enabled: app.canRead; onClicked: app.openReview([root.d.name]) }
+            Btn { visible: root.d.state === "available"; iconName: "upgrade"; text: qsTr("Update now"); enabled: app.canChange; onClicked: app.updateSkill(root.d.name) }
+            Btn { visible: root.d.state === "tracked" || root.d.state === "error"; iconName: "refresh"; text: root.d.state === "error" ? qsTr("Retry") : qsTr("Check and update"); enabled: app.canChange; onClicked: app.updateSkill(root.d.name) }
             Btn { visible: !root.d.tracked; iconName: "branch"; text: qsTr("Set update source"); onClicked: root.editSource = !root.editSource }
-            Btn { visible: !app.inProject && app.projects.length > 0; iconName: "branch"; text: qsTr("Copy to project"); enabled: !app.busy; onClicked: root.pickProject = !root.pickProject }
-            Btn { kind: "danger"; iconName: "trash"; text: qsTr("Remove"); enabled: !app.busy; onClicked: root.confirmRemove = !root.confirmRemove }
+            Btn { visible: !app.inProject && app.projects.length > 0; iconName: "branch"; text: qsTr("Copy to project"); enabled: app.canChange; onClicked: root.pickProject = !root.pickProject }
+            Btn { kind: "danger"; iconName: "trash"; text: qsTr("Remove"); enabled: app.canChange; onClicked: root.confirmRemove = !root.confirmRemove }
         }
         Column {
             visible: root.pickProject && !app.inProject
@@ -118,7 +118,7 @@ Flickable {
                     required property var modelData
                     kind: "ghost"; compact: true; iconName: "branch"
                     text: modelData.name
-                    enabled: !app.busy
+                    enabled: app.canChange
                     onClicked: { root.pickProject = false; app.copyToProject(root.d.name, modelData.path) }
                 }
             }
@@ -143,7 +143,7 @@ Flickable {
             }
             Row {
                 spacing: 8
-                Btn { kind: "primary"; text: qsTr("Link source"); enabled: srcField.text !== "" && !app.busy; onClicked: { app.trackSkill(root.d.name, srcField.text); root.editSource = false } }
+                Btn { kind: "primary"; text: qsTr("Link source"); enabled: srcField.text !== "" && app.canChange; onClicked: { app.trackSkill(root.d.name, srcField.text); root.editSource = false } }
                 Btn { kind: "ghost"; text: qsTr("Cancel"); onClicked: root.editSource = false }
             }
         }
@@ -211,7 +211,7 @@ Flickable {
                         showLabel: false
                         visible: !app.inProject
                         checked: modelData.state !== "off"
-                        enabled: !app.busy
+                        enabled: app.canChange
                         onToggled: app.setAgentEnabled([root.d.name], modelData.id, checked)
                     }
                 }
@@ -248,7 +248,7 @@ Flickable {
                     showLabel: false
                     visible: !app.inProject
                     checked: !root.d.parked
-                    enabled: !app.busy
+                    enabled: app.canChange
                     onToggled: app.setAgentEnabled([root.d.name], "@shared", checked)
                 }
             }
@@ -282,11 +282,11 @@ Flickable {
                     text: qsTr("On hold: automatic updates leave this skill alone")
                     color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsSmall
                 }
-                Btn { id: holdOff; kind: "ghost"; compact: true; text: qsTr("Release"); enabled: !app.busy; onClicked: app.setHold(root.d.name, false) }
+                Btn { id: holdOff; kind: "ghost"; compact: true; text: qsTr("Release"); enabled: app.canChange; onClicked: app.setHold(root.d.name, false) }
             }
             Btn {
                 visible: root.d.tracked && !app.onHold
-                kind: "ghost"; compact: true; iconName: "clock"; text: qsTr("Hold this version"); enabled: !app.busy
+                kind: "ghost"; compact: true; iconName: "clock"; text: qsTr("Hold this version"); enabled: app.canChange
                 onClicked: app.setHold(root.d.name, true)
                 Accessible.name: qsTr("Hold this version: automatic updates leave it alone")
             }
@@ -302,7 +302,7 @@ Flickable {
                         NumText { width: parent.width; text: modelData.when; color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
                         Text { textFormat: Text.PlainText; width: parent.width; text: modelData.label; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
                     }
-                    Btn { id: back; kind: "ghost"; compact: true; iconName: "refresh"; text: qsTr("Roll back"); enabled: !app.busy; onClicked: app.rollback(root.d.name, modelData.stamp) }
+                    Btn { id: back; kind: "ghost"; compact: true; iconName: "refresh"; text: qsTr("Roll back"); enabled: app.canChange; onClicked: app.rollback(root.d.name, modelData.stamp) }
                 }
             }
         }

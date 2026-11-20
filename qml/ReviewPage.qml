@@ -105,7 +105,7 @@ Rectangle {
                 iconName: "upgrade"
                 visible: !app.reviewLoading
                 text: root.chosen.length === 0 ? qsTr("Nothing to apply") : root.chosen.length === 1 ? qsTr("Apply 1 update") : qsTr("Apply %1 updates").arg(root.chosen.length)
-                enabled: root.chosen.length > 0 && !app.busy
+                enabled: root.chosen.length > 0 && app.canChange
                 onClicked: app.applyReview(root.chosen)
             }
             Btn { kind: "ghost"; text: qsTr("Close"); onClicked: app.closeReview() }
