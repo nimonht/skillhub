@@ -1,5 +1,6 @@
-// Jobs: anything that changes files or talks to the network (docs/protocol.md, Jobs). One runs at a time, on a thread of
-// its own with a store of its own; a job that changes skills holds the mutation lock that the command line uses too.
+// Jobs: anything that changes files or talks to the network (docs/protocol.md, Jobs). Each runs on a thread of its own with
+// a store of its own; a job that changes skills holds the mutation lock that the command line uses too. Two may run at once
+// when one of them only reads (job_beside).
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -31,6 +32,7 @@ static void job_progress(void *user, size_t done, size_t total, const char *curr
 static sh_engine *engine_for(job *j, sh_store *st) {
     sh_engine *e = sh_engine_new(st);
     sh_engine_on_progress(e, job_progress, j);
+    if (j->interactive) sh_engine_set_interactive(e);
     sh_mutex_lock(j->m);
     j->engine = e;
     if (j->cancelled) sh_engine_cancel(e);
@@ -644,8 +646,37 @@ static void job_free(job *j) {
     free(j->error);
     check_map_free(&j->checks);
     sh_strv_free(&j->updated);
+    free(j->progress_current);
     sh_mutex_free(j->m);
     free(j);
+}
+
+// a job that changes nothing: check, diff, discover, sizes
+static bool reads_only(const char *kind) {
+    if (strcmp(kind, "selfUpdate") == 0) return false;  // it replaces the program
+    for (size_t i = 0; i < sizeof METHODS / sizeof METHODS[0]; ++i)
+        if (strcmp(METHODS[i].kind, kind) == 0) return !METHODS[i].mutating;
+    return false;
+}
+
+// `kind` may start beside the running jobs: one at most, and one of the two only reads, so at most one changes skills.
+// The self-update runs alone: it ends with the program.
+static bool job_beside(server *sv, const char *kind) {
+    if (sv->n_jobs == 0) return true;
+    if (sv->n_jobs >= MAX_JOBS || strcmp(kind, "selfUpdate") == 0 || strcmp(sv->jobs[0]->kind, "selfUpdate") == 0) return false;
+    return reads_only(kind) || reads_only(sv->jobs[0]->kind);
+}
+
+job *job_named(server *sv, const char *name) {
+    for (int i = 0; i < sv->n_jobs; ++i)
+        if (strcmp(sv->jobs[i]->name, name) == 0) return sv->jobs[i];
+    return NULL;
+}
+
+bool job_changing(server *sv) {
+    for (int i = 0; i < sv->n_jobs; ++i)
+        if (sv->jobs[i]->mutating) return true;
+    return false;
 }
 
 // why a job cannot start now, or NULL; *code is the error to answer with
@@ -659,7 +690,7 @@ static const char *refusal(server *sv, sh_rpc_msg *m, const char *kind, int *cod
         return *owned = sh_strfmt("missing parameter \"%s\"", missing);
     }
     *code = SH_RPC_BUSY;
-    return sv->job ? "another job is running" : NULL;
+    return job_beside(sv, kind) ? NULL : "another job is running";
 }
 
 void job_start(server *sv, sh_rpc_msg *m, const char *kind, bool mutating, job_body body) {
@@ -698,7 +729,8 @@ void job_start(server *sv, sh_rpc_msg *m, const char *kind, bool mutating, job_b
     j->params_doc = m->doc;  // the job keeps the request's parameters
     j->params = m->params;
     m->doc = NULL;
-    sv->job = j;
+    j->interactive = sv->n_jobs > 0;  // what is asked for while a long job runs is what a person waits for
+    sv->jobs[sv->n_jobs++] = j;
     j->thread = sh_thread_start(job_main, j);
     if (!j->thread) {
         fail(j, "could not start a thread for the job");
@@ -724,7 +756,12 @@ void job_finish(server *sv, job *j) {
     yyjson_mut_obj_add_val(d, p, "summary", j->summary);
     yyjson_mut_obj_add_val(d, p, "results", j->results);
     send_notification(sv, d, "event.jobDone", p);
-    sv->job = NULL;
+    for (int i = 0; i < sv->n_jobs; ++i) {
+        if (sv->jobs[i] != j) continue;
+        for (int k = i + 1; k < sv->n_jobs; ++k) sv->jobs[k - 1] = sv->jobs[k];
+        --sv->n_jobs;
+        break;
+    }
     if (j->rescan) {
         sv->quiet_until = uv_now(sv->loop) + 500;  // the watchers still report the job's own changes for a moment
         request_scan(sv);

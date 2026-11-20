@@ -50,7 +50,7 @@ from different versions". `capabilities.automation` is `systemd`, `launchd`, `ta
 
 ### `shutdown`
 
-`→ {"id":9,"method":"shutdown"}`, `← {"id":9,"result":{"cancelled":["<job>"]}}`
+`→ {"id":9,"method":"shutdown"}`, `← {"id":9,"result":{"cancelled":["<job>"]}}`, once every running job has stopped.
 
 ## State: snapshot and deltas
 
@@ -140,8 +140,12 @@ Then come notifications:
 - `jobs.cancel {"job":"j7"}` stops a job at its next safe point: between skills, never inside a swap. Finished items stay
   done and are committed; staging folders of unfinished ones are removed. The job then ends with `"ok":false,
   "cancelled":true`.
-- One job runs at a time. Another job request while one runs gets error `1001` (busy). Requests that are not jobs
-  (`state.snapshot`, `skills.read`, `settings.*`, ...) are answered alongside.
+- Two jobs may run at once when one of them only reads: `skills.check`, `skills.diff`, `sources.discover` or `paths.sizes`
+  (so reading a repository to install from, or checking one skill, works while every skill is being updated, and an install
+  works while every skill is being checked). Never two jobs that change skills, never a third, and `app.update` only alone:
+  those get error `1001` (busy). The second job is the one a person waits for: its clones and fetches get a host's next free
+  slot before the first job's. Requests that are not jobs (`state.snapshot`, `skills.read`, `settings.*`, ...) are answered
+  alongside; those that write what jobs read (`scope.set`, and the methods named in the next point) get `1001` while any job runs.
 - Jobs that change skills (all but `skills.check` and `sources.discover`) hold the mutation lock that the command line
   uses (`docs/formats.md`, section 8). When another process holds it, the request gets error `1002` at once. Methods that
   are not jobs but change what jobs read (`providers.addCustom`, `providers.removeCustom`, `automation.set`) follow the

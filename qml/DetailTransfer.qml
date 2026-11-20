@@ -177,7 +177,7 @@ Flickable {
                 Btn {
                     kind: "primary"; iconName: "download"
                     text: preview.chosenCount === 0 ? qsTr("Install") : preview.chosenCount === 1 ? qsTr("Install 1 skill") : qsTr("Install %1 skills").arg(preview.chosenCount)
-                    enabled: preview.chosenCount > 0 && !app.busy
+                    enabled: preview.chosenCount > 0 && app.canChange
                     onClicked: app.importInstall(Object.keys(preview.chosen))
                 }
                 Btn { kind: "ghost"; text: qsTr("Cancel"); onClicked: app.importClear() }

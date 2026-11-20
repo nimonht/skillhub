@@ -101,6 +101,16 @@ class Backend:
         self.send_raw(json.dumps(msg) + "\n")
         return self.next_id
 
+    def request_together(self, *calls):
+        """Several requests in one write, so the backend reads them while the first one's job is still starting."""
+        lines, ids = "", []
+        for method in calls:
+            self.next_id += 1
+            ids.append(self.next_id)
+            lines += json.dumps({"jsonrpc": "2.0", "id": self.next_id, "method": method}) + "\n"
+        self.send_raw(lines)
+        return ids
+
     def wait(self, match, what, timeout=TIMEOUT):
         """The first message (seen before, or arriving within `timeout`) that `match` accepts."""
         for m in self.seen:
@@ -267,11 +277,27 @@ def main():
             fail("check after an upstream change: %s" % done)
         b.note("state.delta", lambda p: any(u["name"] == "one" and u["status"] == "available" for u in p["upserts"]), why="check after an upstream change")
 
-        # one job at a time; the command line's lock keeps changing jobs out
-        job = b.call("skills.check")["job"]
-        if b.error_of("adopt") != 1001:
-            fail("a second job was not refused as busy")
+        # two jobs at once when one of them only reads: never two that change skills, never a third
+        changing, other = b.request_together("adopt", "relink")
+        job = b.response(changing)["result"]["job"]
+        r = b.response(other)
+        if r.get("error", {}).get("code") != 1001:
+            fail("a second changing job was not refused as busy: %s" % r)
         b.job_done(job)
+        reading, changing, third = b.request_together("skills.check", "adopt", "relink")
+        job = b.response(reading)["result"]["job"]
+        r = b.response(changing)
+        if "result" not in r:
+            fail("a changing job beside a check was refused: %s" % r)
+        beside = r["result"]["job"]
+        r = b.response(third)
+        if r.get("error", {}).get("code") != 1001:
+            fail("a third job was not refused as busy: %s" % r)
+        b.job_done(job)
+        b.job_done(beside)
+        reading, other = b.request_together("skills.check", "skills.check")   # two that read
+        b.job_done(b.response(reading)["result"]["job"])
+        b.job_done(b.response(other)["result"]["job"])
         held = lock_file(os.path.join(env["SKILLHUB_STATE"], "mutate.lock"))
         if b.error_of("adopt") != 1002:
             fail("a changing job ran while another process held the mutation lock")
@@ -321,11 +347,14 @@ def main():
         if home and home in report["text"]:
             fail("diag.report shows the home folder as it is")
 
-        # shutting down in the middle of a job: it stops at a safe point, then the answer comes
-        job = b.call("skills.check")["job"]
+        # shutting down in the middle of two jobs: each stops at a safe point, then the answer comes
+        first, second = b.request_together("skills.check", "skills.check")
+        jobs = {b.response(first)["result"]["job"], b.response(second)["result"]["job"]}
         sd = b.call("shutdown")
-        if sd["cancelled"] not in ([job], []):
+        if not set(sd["cancelled"]) <= jobs:
             fail("shutdown result: %s" % sd)
+        for job in jobs:
+            b.job_done(job)   # both ended before the answer
         if b.error_of("settings.get") != 1003:
             fail("a request after shutdown was accepted")
         code = b.close()
