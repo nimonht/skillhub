@@ -325,6 +325,7 @@ Everything that both the command line and the window need. Missing keys mean the
     "appCheck": true
   },
   "security": { "reports": false },
+  "install": { "listLimit": 2000 },
   "storage": { "cacheMaxMB": 1024, "backupDays": 90 },
   "projects": { "roots": [] }
 }
@@ -344,6 +345,9 @@ Everything that both the command line and the window need. Missing keys mean the
   install or update (`reports` in `state.json`). A report that cannot be had holds nothing. A manual update is never held.
 - `security.reports`: look up skills.sh's security reports for skills from public GitHub repositories. Off by default; off
   whatever it says while `DO_NOT_TRACK` or `DISABLE_TELEMETRY` is set. See SECURITY.md for what is sent.
+- `install.listLimit` (2000; 10 to 50000): how many skills of one repository *Add skills*, `sources.discover` and `skillhub add`
+  without `--skill` or `--all` list. The rest are counted and can be listed on request; naming a skill, `--all` and imports
+  always look through every skill of the repository.
 - `updates.parallel` is how many repositories are handled at once. `updates.parallelPerHost` limits the new clones from one
   host (each can use tens of MB), and `updates.parallelChecksPerHost` the clones of one host that are already there and are
   brought up to date (an `ls-remote`, then a shallow fetch of one commit when upstream moved), which are bound by network round

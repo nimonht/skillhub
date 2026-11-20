@@ -407,6 +407,7 @@ static void body_hold(job *j, sh_store *st) {
 static void body_discover(job *j, sh_store *st) {
     const char *input = param_str(j->params, "input");
     sh_engine *e = engine_for(j, st);
+    if (param_bool(j->params, "all", false)) sh_engine_list_everything(e);
     sh_discovery found;
     sh_engine_discover(e, &input, 1, &found);
     engine_done(j, e);
@@ -426,6 +427,7 @@ static void body_discover(job *j, sh_store *st) {
             free(dest);
         }
         yyjson_mut_obj_add_val(j->out, j->extra, "candidates", list);
+        yyjson_mut_obj_add_uint(j->out, j->extra, "more", found.more);  // past install.listLimit: ask again with "all"
         yyjson_mut_obj_add_strcpy(j->out, j->extra, "source", found.cands.items[0].slug);
         yyjson_mut_obj_add_strcpy(j->out, j->extra, "host", found.host);
         yyjson_mut_obj_add_strcpy(j->out, j->extra, "sourceType", found.type);
@@ -439,6 +441,7 @@ static void body_install(job *j, sh_store *st) {
     sh_strv want = SH_STRV_INIT;
     param_strv(j->params, "skills", &want);
     sh_engine *e = engine_for(j, st);
+    sh_engine_list_everything(e);  // the names may come from a list of every skill there ("all")
     sh_discovery found;
     sh_engine_discover(e, &source, 1, &found);
     if (found.cands.len == 0) {

@@ -15,6 +15,8 @@ Item {
     Text {
         textFormat: Text.PlainText
         x: 12
+        width: parent.width - x - (count.visible ? count.implicitWidth + 12 : 0)   // a long title gives way to the count
+        elide: Text.ElideRight
         anchors.verticalCenter: parent.verticalCenter
         text: root.text
         color: Theme.text
@@ -24,6 +26,7 @@ Item {
         font.letterSpacing: 0.4
     }
     NumText {
+        id: count
         visible: root.trailing !== ""
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter

@@ -172,7 +172,7 @@ Parameters marked `?` are optional. `names` is a list of skill names; an empty o
 | `skills.restore` | `name` (from `_removed/`) | job |
 | `skills.hold` | `name`, `on` | job |
 | `skills.setAgentEnabled` | `name` or `names`, `agent` (an agent id, `@shared`, or `@all`), `enabled` | job. All at once: one write of each file, one relink. An agent that reads the shared folder is refused: use `@shared` |
-| `sources.discover` | `input` | job; the results carry `candidates:[{"name","description","dir","installed"}]`, `host`, `sourceType` |
+| `sources.discover` | `input`, `all?` | job; the results carry `candidates:[{"name","description","dir","installed"}]`, `host`, `sourceType`, and `more`: the skills past `install.listLimit` (2000) that are not listed. `all` lists every one. `skills.install` finds a skill by name among all of them |
 | `adopt` | none | job |
 | `relink` | none | job |
 | `doctor` | `fix?` | `{ "problems":[...], "fixed":N }`; with `fix` it is a job |

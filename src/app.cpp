@@ -1311,6 +1311,7 @@ void AppController::jobDone(const QJsonObject &done, const QString &kind, const 
                                        {QStringLiteral("installed"), c.value(QStringLiteral("installed")).toBool()}};
         }
         candidateError_ = error;
+        candidateMore_ = done.value(QStringLiteral("more")).toInt();
         candidateType_ = done.value(QStringLiteral("sourceType")).toString();
         candidateHost_ = done.value(QStringLiteral("host")).toString();
         emit candidatesChanged();
@@ -1480,14 +1481,15 @@ void AppController::trackSkill(const QString &name, const QString &repo) {
              QStringLiteral("track"), false, name);
 }
 
-void AppController::discover(const QString &repo) {
+void AppController::discover(const QString &repo, bool all) {
     if (!canRead()) return;
     candidateRepo_ = repo.trimmed();
     candidateError_.clear();
     candidates_.clear();
+    candidateMore_ = 0;
     discovering_ = true;
     emit candidatesChanged();
-    startJob(QStringLiteral("sources.discover"), {{QStringLiteral("input"), candidateRepo_}}, tr("Reading %1").arg(candidateRepo_),
+    startJob(QStringLiteral("sources.discover"), {{QStringLiteral("input"), candidateRepo_}, {QStringLiteral("all"), all}}, tr("Reading %1").arg(candidateRepo_),
              QStringLiteral("discover"), false);
 }
 

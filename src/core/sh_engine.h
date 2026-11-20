@@ -26,6 +26,10 @@ void sh_engine_set_auto(sh_engine *e);
 // of other engines, which nobody waits for (sh_parallel_sched).
 void sh_engine_set_interactive(sh_engine *e);
 
+// sh_engine_discover lists every skill of a repository, not the first install.listLimit (2000): for a caller that looks
+// for skills by name, or installs them all.
+void sh_engine_list_everything(sh_engine *e);
+
 // Stops the job at its next safe point: no further repository is started and no further skill is swapped in. Skills
 // swapped in already stay, and their lock entries are committed. Callable from any thread.
 void sh_engine_cancel(sh_engine *e);
@@ -50,6 +54,7 @@ int sh_engine_apply(sh_engine *e, sh_skill *const *todo, const char *const *stag
 
 typedef struct {
     sh_candidates cands;
+    size_t more;       // skills of the repository not listed in cands: past install.listLimit (sh_engine_list_everything)
     char *err;         // why there are none
     const char *type;  // github, gitlab, git or local ("" when the input could not be read)
     char *host;        // "" for a local folder

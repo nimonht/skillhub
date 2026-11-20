@@ -26,6 +26,12 @@ since beta3 this version arrives through the Update button.
   be batched (and, where the kernel has it, a cap that keeps the work on small cores at a low clock); on macOS the background
   priority, and launchd runs both as background jobs; on Windows below-normal priority, background mode and EcoQoS. Before,
   only the systemd and launchd units lowered the priority, and the scheduled task on Windows ran at normal priority.
+- **Large repositories, all of them.** Adding from a repository listed its first 400 skills and quietly left out the rest:
+  `skillhub add alirezarezvani/claude-skills --skill loop-library` said "0 installed" for a skill that is there (it has 495).
+  Now a name given with `--skill`, `--all`, and an install from *Add skills* look through every skill of the repository. The
+  list itself shows 2000 at first (`install.listLimit`, also in *Settings, Updates*), says how many are left, and *List N more*
+  shows the rest. A name that is in no source is now an error that names it, not "0 installed". A long section heading no
+  longer runs into its count, and a long skill name no longer runs into its description in `skillhub add`.
 - **Spinners rest while the window is minimised.** Spinners and loading placeholders woke the processor 60 times a second
   even with nothing on screen.
 
