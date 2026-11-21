@@ -5,6 +5,14 @@ import "."
 // Add skills from a repository or a folder: read it, tick the skills, install. Inline, not a modal.
 Item {
     id: root
+    // a skill's setup notes in a few words: the command for dependencies, a script to read, files of its Claude Code plugin
+    function setupText(notes) {
+        return notes.map(function (n) {
+            if (n.kind === "dependencies") return n.folder !== "" ? qsTr("needs %1 in %2").arg(n.command).arg(n.folder) : qsTr("needs %1").arg(n.command)
+            if (n.kind === "script") return qsTr("comes with an install script, %1").arg(n.file)
+            return qsTr("reads files of its Claude Code plugin")
+        }).filter(function (t, i, all) { return all.indexOf(t) === i }).join("  ·  ")
+    }
     property var chosen: ({})
     property bool live: false
     readonly property int chosenCount: Object.keys(chosen).length
@@ -42,13 +50,13 @@ Item {
             width: parent.width
             iconName: "branch"
             placeholderText: qsTr("owner/repo, a GitLab or git URL, or a local folder")
-            enabled: !app.busy
+            enabled: app.canRead
             onAccepted: if (text.trim() !== "") app.discover(text)
         }
         Row {
             spacing: 8
-            Btn { kind: "primary"; iconName: "search"; text: qsTr("Read source"); enabled: repo.text.trim() !== "" && !app.busy; onClicked: app.discover(repo.text) }
-            Btn { visible: dialogs.status === Loader.Ready; kind: "secondary"; iconName: "folder"; text: qsTr("Choose folder"); enabled: !app.busy; onClicked: dialogs.item.openFolder() }
+            Btn { kind: "primary"; iconName: "search"; text: qsTr("Read source"); enabled: repo.text.trim() !== "" && app.canRead; onClicked: app.discover(repo.text) }
+            Btn { visible: dialogs.status === Loader.Ready; kind: "secondary"; iconName: "folder"; text: qsTr("Choose folder"); enabled: app.canRead; onClicked: dialogs.item.openFolder() }
             Btn { kind: "ghost"; text: qsTr("Close"); onClicked: app.closeAdd() }
         }
         Text {
@@ -76,7 +84,7 @@ Item {
                 color: Theme.bg2
                 opacity: Theme.still ? 0.8 : 0.5
                 SequentialAnimation on opacity {
-                    running: app.discovering && !Theme.still
+                    running: app.discovering && Theme.looping
                     loops: Animation.Infinite
                     NumberAnimation { to: 0.9; duration: 700 }
                     NumberAnimation { to: 0.45; duration: 700 }
@@ -93,7 +101,7 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
 
-        SectionLabel { id: lbl; x: 24; width: parent.width - 48; text: root.origin !== "" ? qsTr("Skills in %1 · %2").arg(app.candidateRepo).arg(root.origin) : qsTr("Skills in %1").arg(app.candidateRepo); trailing: app.candidates.length }
+        SectionLabel { id: lbl; x: 24; width: parent.width - 48; text: root.origin !== "" ? qsTr("Skills in %1 · %2").arg(app.candidateRepo).arg(root.origin) : qsTr("Skills in %1").arg(app.candidateRepo); trailing: app.candidateMore > 0 ? qsTr("%1 of %2").arg(app.candidates.length).arg(app.candidates.length + app.candidateMore) : app.candidates.length }
         Toggle {
             id: liveToggle
             visible: app.candidateType === "local" && !app.inProject
@@ -120,12 +128,14 @@ Item {
                 id: cand
                 required property var modelData
                 readonly property bool on: root.chosen[modelData.name] === true
+                readonly property var setup: modelData.setup ? modelData.setup : []
                 width: list.width
-                height: 62
+                height: setup.length > 0 ? 80 : 62
                 hoverEnabled: true
                 focusPolicy: Qt.StrongFocus
                 Accessible.role: Accessible.CheckBox
                 Accessible.name: modelData.name
+                Accessible.description: setup.length > 0 ? root.setupText(setup) : ""
                 Accessible.checked: on
                 onClicked: root.toggle(modelData.name)
                 background: Rectangle {
@@ -150,6 +160,13 @@ Item {
                         spacing: 2
                         Text { textFormat: Text.PlainText; width: parent.width; text: cand.modelData.name; elide: Text.ElideRight; color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold }
                         Text { textFormat: Text.PlainText; width: parent.width; text: cand.modelData.description; elide: Text.ElideRight; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
+                        Row {   // what it needs beyond its files: Skill Hub installs the files and runs nothing
+                            visible: cand.setup.length > 0
+                            width: parent.width
+                            spacing: 6
+                            Icon { id: needsIcon; name: "tool"; size: 13; color: Theme.notifyText; anchors.verticalCenter: parent.verticalCenter }
+                            Text { textFormat: Text.PlainText; width: parent.width - needsIcon.width - 6; text: root.setupText(cand.setup); elide: Text.ElideRight; color: Theme.notifyText; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
+                        }
                     }
                     Tag { id: installed; visible: cand.modelData.installed; kind: "current"; label: qsTr("Installed"); anchors.right: parent.right; anchors.rightMargin: 24; anchors.verticalCenter: parent.verticalCenter }
                 }
@@ -170,7 +187,7 @@ Item {
                     kind: "primary"
                     iconName: "download"
                     text: root.chosenCount === 0 ? qsTr("Install") : root.chosenCount === 1 ? qsTr("Install 1 skill") : qsTr("Install %1 skills").arg(root.chosenCount)
-                    enabled: root.chosenCount > 0 && !app.busy
+                    enabled: root.chosenCount > 0 && app.canChange
                     onClicked: app.installChosen(Object.keys(root.chosen), root.live)
                 }
                 Btn {
@@ -181,6 +198,15 @@ Item {
                         if (root.chosenCount !== app.candidates.length) for (var i = 0; i < app.candidates.length; ++i) c[app.candidates[i].name] = true
                         root.chosen = c
                     }
+                }
+                Btn {   // past install.listLimit: the rest of a large repository, on request
+                    visible: app.candidateMore > 0
+                    kind: "ghost"
+                    iconName: "search"
+                    text: app.candidateMore === 1 ? qsTr("List 1 more") : qsTr("List %1 more").arg(app.candidateMore)
+                    Accessible.description: qsTr("Only the first %1 skills of this repository are listed. Settings, Updates sets how many").arg(app.candidates.length)
+                    enabled: app.canRead
+                    onClicked: app.discoverAll()
                 }
             }
         }

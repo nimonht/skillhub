@@ -43,6 +43,9 @@ that into one directory plus a few symlinks, and tells you the moment something 
 - **Shows an update before it happens**: *Review changes* lists the files with a diff, flags scripts and your own edits, and
   applies exactly what you read. *Undo* is one click, every skill keeps its last three versions, and a skill you rolled back
   stays put until upstream moves on.
+- **Says what a skill needs and runs none of it**: dependencies to install (`npm install` in `scripts/`, typed in a terminal
+  there when you ask), an install script of the author's to read, files of the Claude Code plugin a skill came from. Shown
+  before you install, in the skill's Checks, in Review when an update changes them, and by `skillhub add` and `scan`.
 - **Per-agent switches**: turn a skill off for one agent and leave it on for the others. Agents that read the shared folder
   switch together; for them the skill is parked in `~/.agents/.parked`, where `npx skills` leaves it alone, and it keeps
   getting updates.

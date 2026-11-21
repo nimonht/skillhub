@@ -4,6 +4,7 @@
 #include <QDesktopServices>
 #include <QFontDatabase>
 #include <QFontMetricsF>
+#include <QGlyphRun>
 #include <QGuiApplication>
 #include <QInputMethodEvent>
 #include <QKeyEvent>
@@ -114,7 +115,29 @@ void VTermItem::measure() {
     cellW_ = m.horizontalAdvance(QLatin1Char('M'));
     cellH_ = qCeil(m.height());
     ascent_ = m.ascent();
+    underlinePos_ = qCeil(m.underlinePos()) + 0.5;   // where QPainter puts them for a font that underlines or strikes out
+    strikePos_ = m.ascent() / 3;
+    lineW_ = qMax<qreal>(1, m.lineWidth());
+    restyle();
     resizeGrid();
+}
+
+enum : int { StyleBold = 1, StyleItalic = 2, StyleUnderline = 4, StyleStrike = 8 };
+
+static int styleOf(const VTermScreenCell &c) {
+    return (c.attrs.bold ? StyleBold : 0) | (c.attrs.italic ? StyleItalic : 0) | (c.attrs.underline ? StyleUnderline : 0) | (c.attrs.strike ? StyleStrike : 0);
+}
+
+void VTermItem::restyle() {
+    for (int s = 0; s < 16; ++s) {
+        QFont f = font_;
+        f.setBold(s & StyleBold);
+        f.setItalic(s & StyleItalic);
+        f.setUnderline(s & StyleUnderline);
+        f.setStrikeOut(s & StyleStrike);
+        styled_[s] = f;
+    }
+    for (int s = 0; s < 4; ++s) raw_[s] = QRawFont::fromFont(styled_[s]);
 }
 
 void VTermItem::setScrollback(int lines) {
@@ -394,38 +417,114 @@ QColor VTermItem::resolve(VTermColor c, bool fg) const {
 
 bool VTermItem::selected(int row, int col) const { return sel_.contains(TermSelection::lineOf(row, scroll_.offset), col); }
 
-void VTermItem::paint(QPainter *p) {
-    p->fillRect(boundingRect(), flash_ ? selectionColor_ : background_);
-    p->setFont(font_);
-    for (int row = 0; row < rows_; ++row) {
-        const qreal y = row * cellH_;
-        int col = 0;
-        while (col < cols_) {
-            VTermScreenCell cell = cellAt(row, col);
-            const int span = qMax(1, int(cell.width));
-            QColor fg = resolve(cell.fg, true), bg = resolve(cell.bg, false);
-            if (cell.attrs.reverse) std::swap(fg, bg);
-            if (selected(row, col)) bg = selectionColor_;
-            const QRectF box(col * cellW_, y, span * cellW_, cellH_);
-            if (bg != background_) p->fillRect(box, bg);
-            if (cell.chars[0] == 0x2588 || cell.chars[0] == 0x2580 || cell.chars[0] == 0x2584) {   // blocks are drawn: fonts leave seams between them
-                const qreal half = qRound(cellH_ / 2);
-                p->fillRect(cell.chars[0] == 0x2588 ? box : cell.chars[0] == 0x2580 ? QRectF(box.x(), y, box.width(), half) : QRectF(box.x(), y + half, box.width(), cellH_ - half), fg);
-            } else if (cell.chars[0] && cell.chars[0] != ' ') {
-                QString text;
-                for (int i = 0; i < VTERM_MAX_CHARS_PER_CELL && cell.chars[i]; ++i) text += charOf(cell.chars[i]);
-                QFont f = font_;
-                f.setBold(cell.attrs.bold);
-                f.setItalic(cell.attrs.italic);
-                f.setUnderline(cell.attrs.underline != 0);
-                f.setStrikeOut(cell.attrs.strike);
-                if (f != p->font()) p->setFont(f);
-                p->setPen(fg);
-                p->drawText(QPointF(box.x(), y + ascent_), text);
-            }
-            col += span;
+// One row. Neighbouring cells of one background are one rectangle, and neighbouring glyphs of one colour and style are one
+// glyph run, placed at the cells' own positions so the grid holds whatever the font's advances are. A character the font
+// lacks, a wide one, or one with combining marks is drawn on its own with drawText, which finds a font that has it.
+void VTermItem::paintRow(QPainter *p, int row) {
+    const qreal y = row * cellH_;
+    int bgFrom = -1, runFrom = -1, runStyle = 0;
+    QColor bgRun, runColor;
+    const auto flushBg = [&](int to) {
+        if (bgFrom >= 0) p->fillRect(QRectF(bgFrom * cellW_, y, (to - bgFrom) * cellW_, cellH_), bgRun);
+        bgFrom = -1;
+    };
+    const auto flushRun = [&]() {
+        if (runFrom >= 0 && !runGlyphs_.isEmpty()) {
+            QGlyphRun g;
+            g.setRawFont(raw_[runStyle & 3]);
+            g.setGlyphIndexes(runGlyphs_);
+            g.setPositions(runAt_);
+            p->setPen(runColor);
+            p->drawGlyphRun(QPointF(runFrom * cellW_, y + ascent_), g);
+            // the lines go under and through every cell of the run, spaces too, as in other terminals
+            const qreal x = runFrom * cellW_, w = runAt_.last().x() + cellW_;
+            if (runStyle & StyleUnderline) p->fillRect(QRectF(x, y + ascent_ + underlinePos_ - lineW_ / 2, w, lineW_), runColor);
+            if (runStyle & StyleStrike) p->fillRect(QRectF(x, y + ascent_ - strikePos_ - lineW_ / 2, w, lineW_), runColor);
         }
+        runFrom = -1;
+        runGlyphs_.clear();
+        runAt_.clear();
+    };
+    // backgrounds first, so that no fill cuts into a glyph that leans over its cell (italics)
+    for (int col = 0; col < cols_;) {
+        const VTermScreenCell cell = cellAt(row, col);
+        const int span = qMax(1, int(cell.width));
+        QColor fg = resolve(cell.fg, true), bg = resolve(cell.bg, false);
+        if (cell.attrs.reverse) std::swap(fg, bg);
+        if (selected(row, col)) bg = selectionColor_;
+        if (bg == background_ || bg != bgRun) flushBg(col);
+        if (bg != background_ && bgFrom < 0) {
+            bgFrom = col;
+            bgRun = bg;
+        }
+        col += span;
     }
+    flushBg(cols_);
+    for (int col = 0; col < cols_;) {
+        const VTermScreenCell cell = cellAt(row, col);
+        const int span = qMax(1, int(cell.width));
+        const uint32_t ch = cell.chars[0];
+        QColor fg = resolve(cell.fg, true), bg = resolve(cell.bg, false);
+        if (cell.attrs.reverse) std::swap(fg, bg);
+        const int style = styleOf(cell);
+        const QRectF box(col * cellW_, y, span * cellW_, cellH_);
+        if (ch == 0x2588 || ch == 0x2580 || ch == 0x2584) {   // blocks are drawn: fonts leave seams between them
+            flushRun();
+            const qreal half = qRound(cellH_ / 2);
+            p->fillRect(ch == 0x2588 ? box : ch == 0x2580 ? QRectF(box.x(), y, box.width(), half) : QRectF(box.x(), y + half, box.width(), cellH_ - half), fg);
+            col += span;
+            continue;
+        }
+        if (ch == uint32_t(-1)) {   // the second half of a wide character, drawn with its first
+            col += 1;
+            continue;
+        }
+        const bool blank = ch == 0 || ch == ' ';
+        const bool decorated = style & (StyleUnderline | StyleStrike);
+        if (blank && !decorated) {   // nothing to draw; glyphs have their own positions, so a run goes on past it
+            if (runFrom >= 0 && (runStyle & (StyleUnderline | StyleStrike))) flushRun();   // but a line under the run stops here
+            col += span;
+            continue;
+        }
+        quint32 glyph = 0;
+        const QRawFont &raw = raw_[style & 3];
+        if (span == 1 && cell.chars[1] == 0 && raw.isValid() && (blank || ch <= 0xFFFF)) {
+            const QChar c = blank ? QChar(u' ') : QChar(char16_t(ch));
+            int one = 1;
+            if (!raw.glyphIndexesForChars(&c, 1, &glyph, &one) || one != 1) glyph = 0;
+        }
+        if (glyph) {
+            if (runFrom >= 0 && (runStyle != style || runColor != fg)) flushRun();
+            if (runFrom < 0) {
+                runFrom = col;
+                runStyle = style;
+                runColor = fg;
+            }
+            runGlyphs_ << glyph;
+            runAt_ << QPointF((col - runFrom) * cellW_, 0);
+            col += span;
+            continue;
+        }
+        flushRun();
+        QString text;
+        for (int i = 0; i < VTERM_MAX_CHARS_PER_CELL && cell.chars[i]; ++i) text += charOf(cell.chars[i]);
+        p->setFont(styled_[style]);
+        p->setPen(fg);
+        p->drawText(QPointF(box.x(), y + ascent_), text);
+        col += span;
+    }
+    flushRun();
+}
+
+void VTermItem::paint(QPainter *p) {
+    // Only the rows that changed. libvterm reports what it damaged, update() passes those rectangles on, and the painter
+    // arrives clipped to them; walking every cell anyway made a blinking cursor cost as much as a whole screen.
+    const QRectF area = p->hasClipping() ? p->clipBoundingRect().intersected(boundingRect()) : boundingRect();
+    p->fillRect(area, flash_ ? selectionColor_ : background_);
+    const int top = qBound(0, int(area.top() / cellH_), rows_), bottom = qBound(0, qCeil(area.bottom() / cellH_), rows_);
+    runGlyphs_.reserve(cols_);
+    runAt_.reserve(cols_);
+    for (int row = top; row < bottom; ++row) paintRow(p, row);
     if (showBar_ && scroll_.max > 0) {   // where the view is in the history
         const qreal h = rows_ * cellH_, bar = qMax<qreal>(24, h * rows_ / (rows_ + scroll_.max));
         const qreal top = (h - bar) * (scroll_.max - scroll_.offset) / scroll_.max;

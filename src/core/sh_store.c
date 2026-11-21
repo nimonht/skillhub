@@ -206,6 +206,7 @@ void sh_strays_free(sh_strays *s) {
 
 void sh_candidate_free(sh_candidate *c) {
     free(c->name); free(c->description); free(c->dir); free(c->slug); free(c->url); free(c->key);
+    sh_setup_free(&c->setup);
     memset(c, 0, sizeof *c);
 }
 

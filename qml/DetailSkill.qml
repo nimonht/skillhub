@@ -101,12 +101,12 @@ Flickable {
         Flow {
             width: parent.width
             spacing: 8
-            Btn { visible: root.d.state === "available"; kind: "primary"; iconName: "search"; text: qsTr("Review changes"); enabled: !app.busy; onClicked: app.openReview([root.d.name]) }
-            Btn { visible: root.d.state === "available"; iconName: "upgrade"; text: qsTr("Update now"); enabled: !app.busy; onClicked: app.updateSkill(root.d.name) }
-            Btn { visible: root.d.state === "tracked" || root.d.state === "error"; iconName: "refresh"; text: root.d.state === "error" ? qsTr("Retry") : qsTr("Check and update"); enabled: !app.busy; onClicked: app.updateSkill(root.d.name) }
+            Btn { visible: root.d.state === "available"; kind: "primary"; iconName: "search"; text: qsTr("Review changes"); enabled: app.canRead; onClicked: app.openReview([root.d.name]) }
+            Btn { visible: root.d.state === "available"; iconName: "upgrade"; text: qsTr("Update now"); enabled: app.canChange; onClicked: app.updateSkill(root.d.name) }
+            Btn { visible: root.d.state === "tracked" || root.d.state === "error"; iconName: "refresh"; text: root.d.state === "error" ? qsTr("Retry") : qsTr("Check and update"); enabled: app.canChange; onClicked: app.updateSkill(root.d.name) }
             Btn { visible: !root.d.tracked; iconName: "branch"; text: qsTr("Set update source"); onClicked: root.editSource = !root.editSource }
-            Btn { visible: !app.inProject && app.projects.length > 0; iconName: "branch"; text: qsTr("Copy to project"); enabled: !app.busy; onClicked: root.pickProject = !root.pickProject }
-            Btn { kind: "danger"; iconName: "trash"; text: qsTr("Remove"); enabled: !app.busy; onClicked: root.confirmRemove = !root.confirmRemove }
+            Btn { visible: !app.inProject && app.projects.length > 0; iconName: "branch"; text: qsTr("Copy to project"); enabled: app.canChange; onClicked: root.pickProject = !root.pickProject }
+            Btn { kind: "danger"; iconName: "trash"; text: qsTr("Remove"); enabled: app.canChange; onClicked: root.confirmRemove = !root.confirmRemove }
         }
         Column {
             visible: root.pickProject && !app.inProject
@@ -118,7 +118,7 @@ Flickable {
                     required property var modelData
                     kind: "ghost"; compact: true; iconName: "branch"
                     text: modelData.name
-                    enabled: !app.busy
+                    enabled: app.canChange
                     onClicked: { root.pickProject = false; app.copyToProject(root.d.name, modelData.path) }
                 }
             }
@@ -143,7 +143,7 @@ Flickable {
             }
             Row {
                 spacing: 8
-                Btn { kind: "primary"; text: qsTr("Link source"); enabled: srcField.text !== "" && !app.busy; onClicked: { app.trackSkill(root.d.name, srcField.text); root.editSource = false } }
+                Btn { kind: "primary"; text: qsTr("Link source"); enabled: srcField.text !== "" && app.canChange; onClicked: { app.trackSkill(root.d.name, srcField.text); root.editSource = false } }
                 Btn { kind: "ghost"; text: qsTr("Cancel"); onClicked: root.editSource = false }
             }
         }
@@ -211,7 +211,7 @@ Flickable {
                         showLabel: false
                         visible: !app.inProject
                         checked: modelData.state !== "off"
-                        enabled: !app.busy
+                        enabled: app.canChange
                         onToggled: app.setAgentEnabled([root.d.name], modelData.id, checked)
                     }
                 }
@@ -248,7 +248,7 @@ Flickable {
                     showLabel: false
                     visible: !app.inProject
                     checked: !root.d.parked
-                    enabled: !app.busy
+                    enabled: app.canChange
                     onToggled: app.setAgentEnabled([root.d.name], "@shared", checked)
                 }
             }
@@ -282,11 +282,11 @@ Flickable {
                     text: qsTr("On hold: automatic updates leave this skill alone")
                     color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsSmall
                 }
-                Btn { id: holdOff; kind: "ghost"; compact: true; text: qsTr("Release"); enabled: !app.busy; onClicked: app.setHold(root.d.name, false) }
+                Btn { id: holdOff; kind: "ghost"; compact: true; text: qsTr("Release"); enabled: app.canChange; onClicked: app.setHold(root.d.name, false) }
             }
             Btn {
                 visible: root.d.tracked && !app.onHold
-                kind: "ghost"; compact: true; iconName: "clock"; text: qsTr("Hold this version"); enabled: !app.busy
+                kind: "ghost"; compact: true; iconName: "clock"; text: qsTr("Hold this version"); enabled: app.canChange
                 onClicked: app.setHold(root.d.name, true)
                 Accessible.name: qsTr("Hold this version: automatic updates leave it alone")
             }
@@ -302,7 +302,7 @@ Flickable {
                         NumText { width: parent.width; text: modelData.when; color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
                         Text { textFormat: Text.PlainText; width: parent.width; text: modelData.label; color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall }
                     }
-                    Btn { id: back; kind: "ghost"; compact: true; iconName: "refresh"; text: qsTr("Roll back"); enabled: !app.busy; onClicked: app.rollback(root.d.name, modelData.stamp) }
+                    Btn { id: back; kind: "ghost"; compact: true; iconName: "refresh"; text: qsTr("Roll back"); enabled: app.canChange; onClicked: app.rollback(root.d.name, modelData.stamp) }
                 }
             }
         }
@@ -310,11 +310,52 @@ Flickable {
         // the offline check, what outside scanners said, and a second opinion: findings to read, never a verdict
         Column {
             id: checks
-            readonly property var s: Object.assign({ loaded: false, findings: [], high: 0, medium: 0, truncated: false,
+            readonly property var s: Object.assign({ loaded: false, findings: [], high: 0, medium: 0, truncated: false, setup: [],
                                                      reports: { state: "off", source: "", scanners: [] } }, app.safety)
             readonly property var rep: checks.s.reports
             width: parent.width
             spacing: 6
+            // what the skill needs beyond its files: Skill Hub runs none of it, and types a command only when asked
+            SectionLabel { width: parent.width; text: qsTr("Setup"); visible: checks.s.loaded && checks.s.setup.length > 0; trailing: String(checks.s.setup.length) }
+            Text {
+                textFormat: Text.PlainText
+                visible: checks.s.loaded && checks.s.setup.length > 0
+                width: parent.width
+                wrapMode: Text.Wrap
+                text: qsTr("Some of this skill works only after a step Skill Hub does not take for you: it never runs what a skill ships.")
+                color: Theme.text2; font.family: Theme.ui; font.pixelSize: Theme.fsSmall; lineHeight: 1.2
+            }
+            Repeater {
+                model: checks.s.loaded ? checks.s.setup : []
+                delegate: Column {
+                    required property var modelData
+                    width: checks.width
+                    spacing: 4
+                    Row {
+                        width: parent.width
+                        spacing: 8
+                        Icon { id: setupIcon; name: modelData.kind === "pluginRoot" ? "alert" : "tool"; size: 14; color: Theme.notifyText; anchors.top: parent.top; anchors.topMargin: 2 }
+                        Text {
+                            textFormat: Text.PlainText
+                            width: parent.width - setupIcon.width - 8
+                            wrapMode: Text.Wrap
+                            text: modelData.kind === "dependencies" ? qsTr("%1 lists dependencies. Install them with %2 in %3.").arg(modelData.file).arg(modelData.command).arg(modelData.folder !== "" ? modelData.folder : qsTr("the skill's folder"))
+                                : modelData.kind === "script" ? qsTr("%1 is the author's install script. Read it before you run it.").arg(modelData.file)
+                                : modelData.detail ? qsTr("%1 reads %2 from the Claude Code plugin it came from. Outside that plugin the file is not there.").arg(modelData.file).arg("${CLAUDE_PLUGIN_ROOT}/" + modelData.detail)   // i18n-ok
+                                : qsTr("%1 names %2, which only a Claude Code plugin sets.").arg(modelData.file).arg("${CLAUDE_PLUGIN_ROOT}")   // i18n-ok
+                            color: Theme.text; font.family: Theme.ui; font.pixelSize: Theme.fsSmall; lineHeight: 1.2
+                        }
+                    }
+                    Btn {
+                        visible: modelData.kind === "dependencies"
+                        x: setupIcon.width + 8
+                        kind: "ghost"; compact: true; iconName: "terminal"
+                        text: qsTr("Set up in terminal")
+                        Accessible.description: qsTr("Opens a terminal in that folder with %1 typed. Press Enter to run it.").arg(modelData.command)
+                        onClicked: app.setUpInTerminal(modelData.folder, modelData.command)
+                    }
+                }
+            }
             SectionLabel { width: parent.width; text: qsTr("Checks"); trailing: checks.s.loaded && checks.s.findings.length > 0 ? String(checks.s.findings.length) : "" }
             Text {
                 textFormat: Text.PlainText

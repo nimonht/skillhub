@@ -105,7 +105,7 @@ Rectangle {
                 iconName: "upgrade"
                 visible: !app.reviewLoading
                 text: root.chosen.length === 0 ? qsTr("Nothing to apply") : root.chosen.length === 1 ? qsTr("Apply 1 update") : qsTr("Apply %1 updates").arg(root.chosen.length)
-                enabled: root.chosen.length > 0 && !app.busy
+                enabled: root.chosen.length > 0 && app.canChange
                 onClicked: app.applyReview(root.chosen)
             }
             Btn { kind: "ghost"; text: qsTr("Close"); onClicked: app.closeReview() }
@@ -172,6 +172,16 @@ Rectangle {
                           + (high > 0 ? qsTr(", %1 of them high").arg(high) : "") + ": "
                           + found.slice(0, 3).map(function (f) { return f.title.toLowerCase() + " (" + f.file + ":" + f.line + ")" }).join("; ")
                           + (found.length > 3 ? qsTr("; and more") : "") + "."
+                }
+                Note {   // a manifest or a script the update adds or changes: the install it needs again, which Skill Hub does not run
+                    readonly property var needs: notes.r !== null && notes.r.setup ? notes.r.setup : []
+                    visible: needs.length > 0
+                    icon: "tool"; tone: Theme.notifyText; fill: Theme.notifyLow
+                    text: qsTr("Needs setup after this update, which Skill Hub does not run: %1.").arg(needs.map(function (n) {
+                        return n.kind === "dependencies" ? qsTr("%1 changed, run %2 there").arg(n.file).arg(n.command)
+                             : n.kind === "script" ? qsTr("%1 changed, an install script to read").arg(n.file)
+                             : qsTr("%1 reads files of its Claude Code plugin").arg(n.file)
+                    }).join("; "))
                 }
                 Note {
                     visible: notes.r !== null && notes.r.available && notes.r.localEdits

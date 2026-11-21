@@ -6,6 +6,7 @@
 #include <stddef.h>
 
 #include "sh_scan.h"
+#include "sh_setup.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -33,6 +34,7 @@ typedef struct {
     sh_diff_file *files;
     size_t n;
     sh_findings added; // what the offline check finds in the new version and not in the installed one
+    sh_setup setup;    // what the new version needs whose file is added or changed: a manifest that changed wants its install again
     char *err;         // why there is no review
 } sh_review;
 

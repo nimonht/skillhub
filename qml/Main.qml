@@ -14,6 +14,8 @@ ApplicationWindow {
     font.family: Theme.ui
     font.pixelSize: Theme.fsBody
 
+    Binding { target: Theme; property: "asleep"; value: win.visibility === Window.Minimized || win.visibility === Window.Hidden }
+
     property bool consoleOpen: false
     property bool settingsOpen: false
     onSettingsOpenChanged: if (!settingsOpen) list.forceActiveFocus()

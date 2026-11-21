@@ -1,5 +1,48 @@
 # Changelog
 
+## 2.0.1 - 2026-11-20
+
+Less waiting behind a long job, a faster terminal, and automatic runs that keep to the background. From 2.0.0 and the betas
+since beta3 this version arrives through the Update button.
+
+- **Two jobs at once.** While every skill was checked (as at every start), updated or imported, everything else said busy.
+  Now a repository can be read in *Add skills* while every skill is updated, and a skill can be installed, updated or removed
+  while every skill is checked. One of the two jobs always only reads: two that change skills still wait for each other.
+  What was asked second is what you are waiting for, so it goes first for the network.
+- **Repositories in a better order.** An update, a check or an import took repositories in the order they were listed, and
+  a clone waiting for its turn at one host kept every repository behind it waiting, those of other hosts and local folders
+  too. Now new clones start first, hosts take turns, and local folders fill the time while a host is full. Installing 16
+  GitHub and 16 GitLab repositories and 8 folders took 3.3 seconds instead of 4.8 in a test with simulated network delay;
+  where the order was already mixed, or with one host only, it takes as long as before, and so does a check.
+  `updates.parallelPerHost` (8) limits the new clones from one host; `updates.parallelChecksPerHost` (32), described in
+  docs/formats.md and never read until now, limits the clones of one host brought up to date at once.
+- **The terminal draws what changed.** Every frame went through every cell of the screen, one character at a time, even for a
+  blinking cursor. Now only the rows that changed are drawn, and text of one colour and style is drawn in one go: a full
+  1600×800 screen of an agent's output takes 6-7 ms instead of 18-24 ms, a line 0.16 ms instead of 13, a cursor 0.07 ms.
+  With Claude Code or Codex in the dock that is less work for the processor on every spinner frame. An underline or a line
+  through the text now runs on under spaces too, as in other terminals.
+- **Automatic runs stay in the background.** The daily update and the watcher tell the system that nobody waits for them,
+  and the git processes they start inherit it: on Linux SCHED_BATCH at nice 10, the lowest I/O priority and timers that may
+  be batched (and, where the kernel has it, a cap that keeps the work on small cores at a low clock); on macOS the background
+  priority, and launchd runs both as background jobs; on Windows below-normal priority, background mode and EcoQoS. Before,
+  only the systemd and launchd units lowered the priority, and the scheduled task on Windows ran at normal priority.
+- **Large repositories, all of them.** Adding from a repository listed its first 400 skills and quietly left out the rest:
+  `skillhub add alirezarezvani/claude-skills --skill loop-library` said "0 installed" for a skill that is there (it has 495).
+  Now a name given with `--skill`, `--all`, and an install from *Add skills* look through every skill of the repository. The
+  list itself shows 2000 at first (`install.listLimit`, also in *Settings, Updates*), says how many are left, and *List N more*
+  shows the rest. A name that is in no source is now an error that names it, not "0 installed". A long section heading no
+  longer runs into its count, and a long skill name no longer runs into its description in `skillhub add`.
+- **What a skill needs, said, and none of it run.** Skill Hub installs a skill's files and never runs what it ships, which
+  left some skills half working without a word: one whose scripts need `npm install`, one whose author ships an `install.sh`,
+  one from a Claude Code plugin that reads `${CLAUDE_PLUGIN_ROOT}/...`, a path that exists only inside that plugin (about one
+  skill in 75 of those we looked at). Now *Add skills* says so under each skill, the skill's *Setup* section lists it with
+  *Set up in terminal*, which opens a terminal in that folder with the command typed (`pnpm install` when a pnpm lock file is
+  next to the manifest, and so on), and Review says when an update changes a manifest, so the install is due again.
+  `skillhub add`, `skillhub diff` and `skillhub scan` print the same. Commands come from a fixed table, never from a skill's
+  text, and nothing runs until you press Enter.
+- **Spinners rest while the window is minimised.** Spinners and loading placeholders woke the processor 60 times a second
+  even with nothing on screen.
+
 ## 2.0.0 - 2026-11-11
 
 Skill Hub 2.0, final: what the six betas below brought, and a way to choose between final versions and betas. From beta3 or later it

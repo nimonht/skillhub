@@ -295,7 +295,8 @@ AppController::AppController(QObject *parent) : QObject(parent) {
     connect(&core_, &CoreClient::ready, this, &AppController::onReady);
     connect(&core_, &CoreClient::notification, this, &AppController::onNotification);
     connect(&core_, &CoreClient::failed, this, [this](const QString &why) {
-        setBusy(false);
+        jobs_.clear();
+        emit busyChanged();
         log_.addText(tr("FAILED to start the background service: %1").arg(why), QStringLiteral("error"));
         emit toast(QStringLiteral("error"), tr("Skill Hub's background service did not start: %1").arg(why));
     });
@@ -304,8 +305,8 @@ AppController::AppController(QObject *parent) : QObject(parent) {
 
 void AppController::onReady(bool restarted) {
     if (restarted) {
-        job_.clear();
-        setBusy(false);
+        jobs_.clear();
+        emit busyChanged();
         scope_.clear();  // a new backend starts on the user's own skills
         scopeCentral_.clear();
         emit scopeChanged();
@@ -349,7 +350,7 @@ void AppController::loadProjects() {
 }
 
 void AppController::setScope(const QString &path) {
-    if (busy_ || path == scope_) return;
+    if (busy() || path == scope_) return;
     core_.call(QStringLiteral("scope.set"), {{QStringLiteral("scope"), path.isEmpty() ? QStringLiteral("user") : path}}, [this, path](const CoreReply &r) {
         if (!r.ok()) {
             emit toast(QStringLiteral("error"), r.message());
@@ -595,7 +596,7 @@ void AppController::cleanStorage(bool cache, bool versions, bool removed, bool c
 }
 
 void AppController::restartBackend() {
-    if (busy_) return;
+    if (busy()) return;
     core_.restart();
 }
 
@@ -726,14 +727,23 @@ void AppController::onNotification(const QString &method, const QJsonObject &par
     if (method == QLatin1String("state.delta")) applyDelta(params, rows);
     else if (method == QLatin1String("state.resync")) loadSnapshot();
     else if (method == QLatin1String("event.log")) log_.add(params.value(QStringLiteral("lines")).toArray());
-    else if (method == QLatin1String("event.progress") && params.value(QStringLiteral("job")).toString() == job_ && progress_ >= 0) {
+    else if (method == QLatin1String("event.progress")) {
+        const QString id = params.value(QStringLiteral("job")).toString();
         const double total = params.value(QStringLiteral("total")).toDouble();
-        if (total > 0) {
-            progress_ = params.value(QStringLiteral("done")).toDouble() / total;
+        for (RunningJob &j : jobs_) {
+            if (j.id != id || j.progress < 0 || total <= 0) continue;
+            j.progress = params.value(QStringLiteral("done")).toDouble() / total;
             emit busyChanged();
         }
-    } else if (method == QLatin1String("event.jobDone") && params.value(QStringLiteral("job")).toString() == job_) {
-        jobDone(params);
+    } else if (method == QLatin1String("event.jobDone")) {
+        const QString id = params.value(QStringLiteral("job")).toString();
+        for (int i = 0; i < jobs_.size(); ++i) {
+            if (jobs_[i].id != id) continue;
+            const RunningJob j = jobs_.takeAt(i);
+            emit busyChanged();
+            jobDone(params, j.kind, j.name);
+            break;
+        }
     } else if (method == QLatin1String("lock.split")) {
         lockSplit_ = params.value(QStringLiteral("onlyInOther")).toInt();
         emit lockSplitChanged();
@@ -940,11 +950,25 @@ void AppController::saveLayout(const QString &key, const QVariant &state) {
 
 // ---- selection and detail --------------------------------------------------------------------------------------------------
 
-void AppController::setBusy(bool busy, const QString &text, double progress) {
-    busy_ = busy;
-    busyText_ = busy ? text : QString();
-    progress_ = busy ? progress : -1;
-    emit busyChanged();
+// the status bar: what runs, oldest first
+QString AppController::busyText() const {
+    QStringList texts;
+    for (const RunningJob &j : jobs_) texts << j.text;
+    return texts.join(QStringLiteral("  ·  "));
+}
+
+// jobs that change nothing, and so may run beside another (docs/protocol.md, Jobs)
+static bool readsOnly(const QString &method) {
+    return method == QLatin1String("skills.check") || method == QLatin1String("skills.diff") || method == QLatin1String("sources.discover")
+        || method == QLatin1String("paths.sizes");
+}
+
+bool AppController::canRead() const {
+    return jobs_.isEmpty() || (jobs_.size() == 1 && jobs_.first().kind != QLatin1String("selfUpdate"));
+}
+
+bool AppController::canChange() const {
+    return jobs_.isEmpty() || (jobs_.size() == 1 && !jobs_.first().changes && jobs_.first().kind != QLatin1String("selfUpdate"));
 }
 
 void AppController::setFocusAgent(const QString &id) {
@@ -1018,7 +1042,7 @@ void AppController::offerUndo(const QString &method, const QStringList &names, c
 }
 
 void AppController::undoLast() {
-    if (busy_ || undoNames_.isEmpty()) return;
+    if (!canChange() || undoNames_.isEmpty()) return;
     const QString method = undoMethod_;
     const QStringList names = undoNames_;
     undoNames_.clear();
@@ -1027,7 +1051,7 @@ void AppController::undoLast() {
 }
 
 void AppController::openReview(const QStringList &names) {
-    if (busy_) return;
+    if (!canRead()) return;
     reviews_.clear();
     reviewOpen_ = reviewLoading_ = true;
     emit reviewChanged();
@@ -1041,7 +1065,7 @@ void AppController::closeReview() {
 }
 
 void AppController::applyReview(const QStringList &names) {
-    if (busy_ || names.isEmpty()) return;
+    if (!canChange() || names.isEmpty()) return;
     QJsonObject stages;
     for (const QVariant &v : reviews_) {
         const QVariantMap r = v.toMap();
@@ -1143,29 +1167,32 @@ void AppController::rebuildDetail() {
 
 // ---- jobs ------------------------------------------------------------------------------------------------------------------
 
-void AppController::startJob(const QString &method, const QJsonObject &params, const QString &busyText, const QString &kind, bool determinate) {
-    if (busy_) return;
-    jobKind_ = kind;
-    job_ = QStringLiteral("?");  // until the backend names it
-    setBusy(true, busyText, determinate ? 0.0 : -1.0);
-    core_.call(method, params, [this](const CoreReply &r) {
-        if (!r.ok()) {
-            job_.clear();
-            discovering_ = false;
-            setBusy(false);
+void AppController::startJob(const QString &method, const QJsonObject &params, const QString &busyText, const QString &kind, bool determinate,
+                             const QString &about) {
+    const bool reads = readsOnly(method);
+    if (method == QLatin1String("app.update") ? busy() : reads ? !canRead() : !canChange()) return;
+    const int ticket = ++nextTicket_;
+    jobs_.append({ticket, QString(), kind, about, busyText, determinate ? 0.0 : -1.0, !reads});
+    emit busyChanged();
+    core_.call(method, params, [this, ticket](const CoreReply &r) {
+        for (int i = 0; i < jobs_.size(); ++i) {
+            if (jobs_[i].ticket != ticket) continue;
+            if (r.ok()) {   // before any of the job's own events
+                jobs_[i].id = r.result.toObject().value(QStringLiteral("job")).toString();
+                return;
+            }
+            if (jobs_[i].kind == QLatin1String("discover")) discovering_ = false;
+            jobs_.removeAt(i);
+            emit busyChanged();
             emit candidatesChanged();
             emit toast(QStringLiteral("error"), r.message());
             return;
         }
-        job_ = r.result.toObject().value(QStringLiteral("job")).toString();
     });
 }
 
 // The toast for a finished job.
-void AppController::jobDone(const QJsonObject &done) {
-    const QString kind = std::exchange(jobKind_, {}), name = std::exchange(jobName_, {});
-    job_.clear();
-    setBusy(false);
+void AppController::jobDone(const QJsonObject &done, const QString &kind, const QString &name) {
     const QJsonObject sum = done.value(QStringLiteral("summary")).toObject();
     const QJsonArray results = done.value(QStringLiteral("results")).toArray();
     const QString error = done.value(QStringLiteral("error")).toString();
@@ -1271,7 +1298,7 @@ void AppController::jobDone(const QJsonObject &done) {
             msg = error;
             level = QStringLiteral("error");
         } else {  // look up the new source right away
-            startJob(QStringLiteral("skills.check"), {{QStringLiteral("names"), QJsonArray{name}}}, tr("Checking %1").arg(name), QStringLiteral("check-quiet"), false);
+            startJob(QStringLiteral("skills.check"), {{QStringLiteral("names"), QJsonArray{name}}}, tr("Checking %1").arg(name), QStringLiteral("check-quiet"), false, name);
             return;
         }
     } else if (kind == QLatin1String("discover")) {
@@ -1281,9 +1308,11 @@ void AppController::jobDone(const QJsonObject &done) {
             const QJsonObject c = v.toObject();
             candidates_ << QVariantMap{{QStringLiteral("name"), c.value(QStringLiteral("name")).toString()},
                                        {QStringLiteral("description"), c.value(QStringLiteral("description")).toString()},
-                                       {QStringLiteral("installed"), c.value(QStringLiteral("installed")).toBool()}};
+                                       {QStringLiteral("installed"), c.value(QStringLiteral("installed")).toBool()},
+                                       {QStringLiteral("setup"), c.value(QStringLiteral("setup")).toArray().toVariantList()}};
         }
         candidateError_ = error;
+        candidateMore_ = done.value(QStringLiteral("more")).toInt();
         candidateType_ = done.value(QStringLiteral("sourceType")).toString();
         candidateHost_ = done.value(QStringLiteral("host")).toString();
         emit candidatesChanged();
@@ -1395,6 +1424,19 @@ void AppController::askSecondOpinion(const QString &agent) {
     emit openTerminalAt(work.path(), command);
 }
 
+// Skill Hub runs nothing a skill ships: the person reads the command in the terminal and presses Enter, or does not. Only
+// commands of the backend's own table (sh_setup.c) are typed, never text from a skill, and only inside the skill's folder.
+void AppController::setUpInTerminal(const QString &folder, const QString &command) {
+    static const QStringList known = {QStringLiteral("npm install"), QStringLiteral("pnpm install"), QStringLiteral("yarn install"),
+                                      QStringLiteral("bun install"), QStringLiteral("pip install -r requirements.txt"),
+                                      QStringLiteral("pip install ."), QStringLiteral("uv sync"), QStringLiteral("poetry install"),
+                                      QStringLiteral("pipenv install"), QStringLiteral("bundle install"), QStringLiteral("composer install")};
+    const QString skill = QDir::cleanPath(safety_.value(QStringLiteral("folder")).toString());
+    const QString at = QDir::cleanPath(folder.isEmpty() ? skill : skill + QLatin1Char('/') + folder);
+    if (!known.contains(command) || skill.isEmpty() || QDir::isAbsolutePath(folder) || (at != skill && !at.startsWith(skill + QLatin1Char('/')))) return;
+    emit openTerminalAt(at, command);
+}
+
 void AppController::checkAppUpdate(bool asked) {
     if (!asked && !setting(QStringLiteral("updates"), QStringLiteral("appCheck"), true).toBool()) return;
     core_.call(QStringLiteral("app.checkUpdate"), {}, [this, asked](const CoreReply &r) {
@@ -1442,32 +1484,31 @@ void AppController::updateSkill(const QString &name) {
 void AppController::adopt() { startJob(QStringLiteral("adopt"), {}, tr("Adopting strays and repairing links"), QStringLiteral("adopt"), false); }
 
 void AppController::removeSkill(const QString &name) {
-    if (busy_) return;
+    if (!canChange()) return;
     if (selected_ == name) select(QString());
-    startJob(QStringLiteral("skills.remove"), {{QStringLiteral("name"), name}}, tr("Removing %1").arg(name), QStringLiteral("remove"), false);
-    jobName_ = name;
+    startJob(QStringLiteral("skills.remove"), {{QStringLiteral("name"), name}}, tr("Removing %1").arg(name), QStringLiteral("remove"), false, name);
 }
 
 void AppController::trackSkill(const QString &name, const QString &repo) {
-    if (busy_) return;
+    if (!canChange()) return;
     startJob(QStringLiteral("skills.track"), {{QStringLiteral("name"), name}, {QStringLiteral("source"), repo.trimmed()}}, tr("Linking source"),
-             QStringLiteral("track"), false);
-    jobName_ = name;
+             QStringLiteral("track"), false, name);
 }
 
-void AppController::discover(const QString &repo) {
-    if (busy_) return;
+void AppController::discover(const QString &repo, bool all) {
+    if (!canRead()) return;
     candidateRepo_ = repo.trimmed();
     candidateError_.clear();
     candidates_.clear();
+    candidateMore_ = 0;
     discovering_ = true;
     emit candidatesChanged();
-    startJob(QStringLiteral("sources.discover"), {{QStringLiteral("input"), candidateRepo_}}, tr("Reading %1").arg(candidateRepo_),
+    startJob(QStringLiteral("sources.discover"), {{QStringLiteral("input"), candidateRepo_}, {QStringLiteral("all"), all}}, tr("Reading %1").arg(candidateRepo_),
              QStringLiteral("discover"), false);
 }
 
 void AppController::installChosen(const QStringList &names, bool live) {
-    if (busy_ || names.isEmpty()) return;
+    if (!canChange() || names.isEmpty()) return;
     const QString first = names.first(), repo = candidateRepo_;
     startJob(QStringLiteral("skills.install"),
              {{QStringLiteral("source"), repo},
@@ -1494,7 +1535,7 @@ void AppController::setProviderManaged(const QString &id, bool on) {
 }
 
 void AppController::addCustomProvider(const QString &label, const QString &dir, bool readsShared) {
-    if (busy_) {
+    if (busy()) {
         emit customProviderAdded(QStringLiteral("busy"));
         return;
     }
@@ -1513,7 +1554,7 @@ void AppController::addCustomProvider(const QString &label, const QString &dir, 
 }
 
 void AppController::removeCustomProvider(const QString &id) {
-    if (busy_) return;
+    if (busy()) return;
     if (focus_ == id) {
         focus_.clear();
         emit focusChanged();
@@ -1773,7 +1814,7 @@ void AppController::importClear() {
 }
 
 void AppController::importInstall(const QStringList &names) {
-    if (busy_ || names.isEmpty()) return;
+    if (!canChange() || names.isEmpty()) return;
     startJob(QStringLiteral("transfer.import"), {{QStringLiteral("path"), importPath_}, {QStringLiteral("names"), QJsonArray::fromStringList(names)}},
              tr("Installing from the export"), QStringLiteral("import"), true);
     importClear();

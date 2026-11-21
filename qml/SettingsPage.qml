@@ -416,6 +416,18 @@ Rectangle {
                         onMoved: (v) => app.setSetting("updates", "parallelPerHost", Math.round(v))
                     }
                 }
+                Group {
+                    title: qsTr("Skills listed per repository")
+                    note: qsTr("Add skills lists this many of a repository's skills at first, and the rest when you ask. A skill named on the command line is found among all of them.")
+                    Range {
+                        width: Math.min(parent.width, 420)
+                        label: qsTr("At first")
+                        from: 100; to: 10000; stepSize: 100
+                        value: Theme.setting("install", "listLimit", 2000)
+                        shown: Math.round(value)
+                        onMoved: (v) => app.setSetting("install", "listLimit", Math.round(v))
+                    }
+                }
             }
 
             // ---- projects

@@ -79,37 +79,6 @@ bool sh_repo_cloned(const char *dir) {
     return yes;
 }
 
-// the host of a clone URL, lower case; "" for local paths and file:// URLs, which no limit applies to
-static char *url_host(const char *url) {
-    const char *p = strstr(url, "://");
-    const char *start;
-    if (p) {
-        if (sh_starts_with(url, "file:")) return sh_strdup("");
-        start = p + 3;
-    } else {
-        const char *colon = strchr(url, ':'), *slash = strchr(url, '/');
-        if (!colon || (slash && slash < colon) || colon - url < 2) return sh_strdup("");  // a path, or C:\ on Windows
-        start = url;
-    }
-    const char *at = strchr(start, '@'), *end = start + strcspn(start, "/:");
-    if (at && at < end) {
-        start = at + 1;
-        end = start + strcspn(start, "/:");
-    }
-    char *host = sh_strndup(start, (size_t)(end - start));
-    for (char *c = host; *c; ++c)
-        if (*c >= 'A' && *c <= 'Z') *c = (char)(*c - 'A' + 'a');
-    return host;
-}
-
-// a git command that downloads: at most `fetches` of them per host at a time
-static sh_git_result network_git(const char *const *args, const char *work_dir, const char *host, sh_limiter *fetches) {
-    if (fetches && *host) sh_limiter_acquire(fetches, host);
-    sh_git_result r = sh_git_run(args, work_dir, 0);
-    if (fetches && *host) sh_limiter_release(fetches, host);
-    return r;
-}
-
 static bool failed(sh_git_result *r, char **err) {
     if (r->ok) return false;
     if (err) *err = sh_strdup(r->err ? r->err : "");
@@ -202,8 +171,7 @@ static void compact_clone(const sh_repo *r) {
     sh_git_result_free(&c);
 }
 
-static bool update_clone(sh_repo *r, const char *url, const char *ref, sh_limiter *fetches, char **err) {
-    char *host = url_host(url);
+static bool update_clone(sh_repo *r, const char *url, const char *ref, char **err) {
     bool ok;
     if (!sh_repo_cloned(r->dir)) {
         char *parent = sh_path_parent(r->dir);
@@ -213,7 +181,7 @@ static bool update_clone(sh_repo *r, const char *url, const char *ref, sh_limite
         // no working tree: everything is read from the object store
         const char *plain[] = {"clone", "--depth", "1", "--no-checkout", "--quiet", "--", url, r->dir, NULL};
         const char *at_ref[] = {"clone", "--depth", "1", "--no-checkout", "--quiet", "--branch", ref, "--", url, r->dir, NULL};
-        sh_git_result g = network_git(*ref ? at_ref : plain, NULL, host, fetches);
+        sh_git_result g = sh_git_run(*ref ? at_ref : plain, NULL, 0);
         ok = !failed(&g, err) && read_heads(r, err);
         sh_git_result_free(&g);
     } else if (!read_heads(r, err)) {
@@ -225,14 +193,14 @@ static bool update_clone(sh_repo *r, const char *url, const char *ref, sh_limite
                 free(*err);
                 *err = NULL;
             }
-            ok = update_clone(r, url, ref, fetches, err);
+            ok = update_clone(r, url, ref, err);
         }
     } else {
         char *remote = remote_head(r, ref, err);
         ok = remote != NULL;
         if (ok && strcmp(remote, r->head) != 0) {  // upstream moved: download that commit and point the clone at it
             const char *fetch[] = {"fetch", "--depth", "1", "--quiet", "--", "origin", *ref ? ref : "HEAD", NULL};
-            sh_git_result g = network_git(fetch, r->dir, host, fetches);
+            sh_git_result g = sh_git_run(fetch, r->dir, 0);
             ok = !failed(&g, err);
             sh_git_result_free(&g);
             if (ok) {
@@ -245,7 +213,6 @@ static bool update_clone(sh_repo *r, const char *url, const char *ref, sh_limite
         }
         free(remote);
     }
-    free(host);
     return ok;
 }
 
@@ -289,7 +256,7 @@ static bool read_tree(sh_repo *r, char **err) {
     return true;
 }
 
-bool sh_repo_open(sh_repo *r, const char *dir, const char *url, const char *ref, sh_limiter *fetches, char **err) {
+bool sh_repo_open(sh_repo *r, const char *dir, const char *url, const char *ref, char **err) {
     memset(r, 0, sizeof *r);
     r->dir = sh_strdup(dir);
     char *lock_path = sh_strfmt("%s.lock", dir);
@@ -299,7 +266,7 @@ bool sh_repo_open(sh_repo *r, const char *dir, const char *url, const char *ref,
         if (err) *err = sh_strfmt("%s is in use by another Skill Hub", dir);
         return false;
     }
-    const bool ok = update_clone(r, url, ref, fetches, err) && read_tree(r, err);
+    const bool ok = update_clone(r, url, ref, err) && read_tree(r, err);
     if (ok) {  // the cache limit removes what was used longest ago
         char *mark = sh_path_join(dir, ".git/skillhub-used");
         sh_write_file(mark, "1", 1);

@@ -24,6 +24,7 @@
 #include "sh_projects.h"
 #include "sh_reports.h"
 #include "sh_scan.h"
+#include "sh_setup.h"
 #include "sh_selfupdate.h"
 #include "sh_serve.h"
 #include "sh_state.h"
@@ -85,7 +86,9 @@ static void errf(const char *fmt, ...) {
 static void padded(const char *s, size_t width) {
     char *shown = sh_printable(s, false);
     out(shown);
-    for (size_t n = sh_utf16_len(shown); n < width; ++n) putchar(' ');
+    const size_t len = sh_utf16_len(shown);
+    for (size_t n = len; n < width; ++n) putchar(' ');
+    if (len >= width) putchar(' ');  // a longer name still stands apart from what follows it
     free(shown);
 }
 
@@ -605,6 +608,17 @@ static void print_review(const sh_review *r, bool patches) {
             outf("    %-6s %-20s %s:%d  %s\n", f->level == SH_FIND_HIGH ? "high" : "medium", f->rule, f->file, f->line, f->excerpt);
         }
     }
+    if (r->setup.len) out("  needs setup after it (Skill Hub runs none of it):\n");
+    for (size_t i = 0; i < r->setup.len; ++i) {
+        const sh_setup_note *n = &r->setup.items[i];
+        char *file = sh_printable(n->file, false), *folder = sh_printable(n->folder, false), *detail = sh_printable(n->detail, false);
+        if (n->kind == SH_SETUP_DEPENDENCIES) outf("    %s changed: run `%s` in %s\n", file, n->command, *folder ? folder : "the skill's folder");
+        else if (n->kind == SH_SETUP_SCRIPT) outf("    %s changed: the author's install script, to read before you run it\n", file);
+        else outf("    %s reads ${CLAUDE_PLUGIN_ROOT}/%s, which exists only inside the Claude Code plugin it came from\n", file, detail);
+        free(detail);
+        free(folder);
+        free(file);
+    }
     for (size_t i = 0; i < r->n; ++i) print_file(&r->files[i]);
     for (size_t i = 0; patches && i < r->n; ++i) print_patch(&r->files[i]);
 }
@@ -988,6 +1002,23 @@ static int cmd_check_update(sh_store *st, const args_t *a, bool do_update) {
     return rc;
 }
 
+// What a skill needs beyond its files, as lines for a terminal. Skill Hub runs none of it: the person reads and decides.
+static void print_setup(const char *skill_dir, const sh_setup *s) {
+    for (size_t i = 0; i < s->len; ++i) {
+        const sh_setup_note *n = &s->items[i];
+        char *where = *n->folder ? sh_path_join(skill_dir, n->folder) : sh_strdup(skill_dir);
+        char *shown = sh_printable(where, false), *file = sh_printable(n->file, false), *detail = sh_printable(n->detail, false);
+        if (n->kind == SH_SETUP_DEPENDENCIES) outf("  %s lists dependencies: run `%s` in %s\n", file, n->command, shown);
+        else if (n->kind == SH_SETUP_SCRIPT) outf("  %s is the author's install script: read it before you run it, in %s\n", file, shown);
+        else if (*n->detail) outf("  %s reads ${CLAUDE_PLUGIN_ROOT}/%s, which exists only inside the Claude Code plugin it came from\n", file, detail);
+        else outf("  %s names ${CLAUDE_PLUGIN_ROOT}, which is set only inside a Claude Code plugin\n", file);
+        free(detail);
+        free(file);
+        free(shown);
+        free(where);
+    }
+}
+
 // The chosen candidates of every repository, one per name: when two repositories offer the same name, the one named
 // last on the command line wins, as if they had been added one after the other.
 static size_t chosen(sh_store *st, const sh_discovery *found, size_t n, bool all, const sh_strv *want, const sh_candidate **pick) {
@@ -1036,6 +1067,7 @@ static int cmd_add(sh_store *st, const args_t *a) {
     const bool all = has(a, "--all");
     const bool listing = !all && want.len == 0;
     sh_engine *engine = sh_engine_new(st);
+    if (!listing) sh_engine_list_everything(engine);  // a name is looked for in the whole repository, and --all is all of it
     sh_discovery *found = sh_xcalloc(repos.len, sizeof *found);
     sh_engine_discover(engine, (const char *const *)repos.items, repos.len, found);
     int failed_repos = 0;
@@ -1054,7 +1086,20 @@ static int cmd_add(sh_store *st, const args_t *a) {
                 outf("%s\n", desc);
                 free(desc);
             }
+            if (found[r].more)  // past install.listLimit: still there, and still installable
+                outf("  ... and %zu more, not listed here: name one with --skill, or take every one with --all\n", found[r].more);
         }
+    }
+    // a name no source has: said, never a silent "0 installed"
+    int missing = 0;
+    for (size_t w = 0; !listing && !all && w < want.len; ++w) {
+        bool there = false;
+        for (size_t r = 0; r < repos.len && !there; ++r)
+            for (size_t i = 0; i < found[r].cands.len && !there; ++i) there = strcmp(found[r].cands.items[i].name, want.items[w]) == 0;
+        if (there) continue;
+        ++missing;
+        if (repos.len == 1) errf("%s has no skill called %s\n", repos.items[0], want.items[w]);
+        else errf("none of the sources has a skill called %s\n", want.items[w]);
     }
     int ok = 0;
     if (!listing) {
@@ -1062,6 +1107,13 @@ static int cmd_add(sh_store *st, const args_t *a) {
         const size_t n_pick = chosen(st, found, repos.len, all, &want, pick);
         bool *done = sh_xcalloc(n_pick + 1, sizeof *done);
         ok = n_pick ? sh_engine_install(engine, pick, n_pick, has(a, "--link"), done) : 0;
+        for (size_t i = 0; i < n_pick; ++i) {
+            if (!done[i] || pick[i]->setup.len == 0) continue;
+            char *dir = sh_store_skill_dir(st, pick[i]->name);
+            outf("%s needs setup before all of it works (Skill Hub runs nothing a skill ships):\n", pick[i]->name);
+            print_setup(dir, &pick[i]->setup);
+            free(dir);
+        }
         free(done);
         free(pick);
     }
@@ -1071,7 +1123,7 @@ static int cmd_add(sh_store *st, const args_t *a) {
         rc = failed_repos ? 1 : 0;
     } else {
         if (failed_repos < (int)repos.len) outf("%d installed\n", ok);
-        rc = ok && !failed_repos ? 0 : 1;
+        rc = ok && !failed_repos && !missing ? 0 : 1;
         if (sh_engine_lock_failed(engine)) {
             errf("the lock file could not be updated; see the lines above\n");
             rc = 1;
@@ -1394,10 +1446,12 @@ static int cmd_scan(sh_store *st, const args_t *a) {
         if (wanted.len && !sh_strv_contains(&wanted, s->name)) continue;
         sh_findings f;
         sh_scan_dir(s->path, &f);
+        sh_setup setup;
+        sh_setup_dir(s->path, &setup);
         const size_t h = sh_findings_count(&f, SH_FIND_HIGH), m = sh_findings_count(&f, SH_FIND_MEDIUM);
         high += h;
         medium += m;
-        clean += f.len == 0;
+        clean += f.len == 0 && setup.len == 0;
         if (d) {
             yyjson_mut_val *o = yyjson_mut_obj(d), *items = yyjson_mut_arr(d);
             yyjson_mut_obj_add_strcpy(d, o, "name", s->name);
@@ -1406,6 +1460,9 @@ static int cmd_scan(sh_store *st, const args_t *a) {
             sh_findings_json(d, items, &f);
             yyjson_mut_obj_add_val(d, o, "findings", items);
             yyjson_mut_obj_add_bool(d, o, "truncated", f.truncated);
+            yyjson_mut_val *needs = yyjson_mut_arr(d);
+            sh_setup_json(d, needs, &setup);
+            yyjson_mut_obj_add_val(d, o, "setup", needs);
             if (reports) {
                 yyjson_mut_val *r = yyjson_mut_obj(d);
                 sh_report_json(d, r, &rep[i]);
@@ -1418,6 +1475,11 @@ static int cmd_scan(sh_store *st, const args_t *a) {
             if (f.truncated) out("  ... and more\n");
             if (reports) print_report(&rep[i]);
         }
+        if (!d && setup.len) {
+            outf("%s needs setup:\n", s->name);
+            print_setup(s->path, &setup);
+        }
+        sh_setup_free(&setup);
         sh_findings_free(&f);
     }
     for (size_t i = 0; i < sk.len; ++i) sh_report_free(&rep[i]);
@@ -1521,7 +1583,10 @@ static int run_cli(int argc, char **argv) {
     // a scheduled run lacks the login environment; what automation recorded fills in. Before anything reads a path.
     bool scheduled = argc > 2 && strcmp(argv[1], "watch") == 0 && strcmp(argv[2], "--run") == 0;
     for (int i = 2; i < argc; ++i) scheduled = scheduled || strcmp(argv[i], "--auto") == 0 || (argc > 1 && strcmp(argv[1], "adopt") == 0 && strcmp(argv[i], "--notify") == 0);
-    if (scheduled) sh_automation_apply_env();
+    if (scheduled) {
+        sh_automation_apply_env();
+        sh_proc_background();  // nobody waits for it: the system's background class, before any thread starts
+    }
     if (argc > 2 && strcmp(argv[1], "watch") == 0 && strcmp(argv[2], "--run") == 0) return sh_watch_run();
     // --wait SECONDS (how long a changing command waits for another one to finish) is taken out before the commands see
     // their arguments

@@ -35,7 +35,7 @@ Item {
             to: 360
             duration: 900
             loops: Animation.Infinite
-            running: root.visible && !Theme.still
+            running: root.visible && Theme.looping
         }
     }
 }

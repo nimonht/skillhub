@@ -369,7 +369,63 @@ def main():
     check(rows["linked"]["live"] and rows["linked"]["sourceType"] == "local", "the row: %s" % rows["linked"])
     check(rows["beta"]["sourceType"] == "gitlab" and not rows["beta"]["live"], "the row: %s" % rows["beta"])
 
+    list_limit()
+    setup_notes()
     print("sources smoke test passed (%s)" % sys.platform)
+
+
+def setup_notes():
+    """What a skill needs beyond its files is said where it is installed, offered, checked and scanned, and never run."""
+    home, env = make_home("setup-home")
+    src = ROOT + "/setup-src"
+    skill(src + "/skills/tools", "tools")
+    write(src + "/skills/tools/scripts/package.json", '{"name": "t", "dependencies": {"left-pad": "1.3.0"}}')
+    write(src + "/skills/tools/scripts/yarn.lock", "# yarn lockfile v1\n")
+    write(src + "/skills/tools/install.sh", "#!/bin/sh\ntouch " + ROOT + "/install-ran\n")
+    write(src + "/skills/tools/meta/package.json", '{"name": "metadata-only"}')
+    skill(src + "/skills/plugged", "plugged", "Read ${CLAUDE_PLUGIN_ROOT}/prompts/review.md first.")
+    skill(src + "/skills/plain", "plain")
+    (_, found) = rpc(env, ("sources.discover", {"input": src}))[0]
+    by = {c["name"]: c for c in found["candidates"]}
+    check(by["tools"]["setup"] == [
+        {"kind": "dependencies", "file": "scripts/package.json", "folder": "scripts", "command": "yarn install"},
+        {"kind": "script", "file": "install.sh", "folder": ""}], "the setup of an offered skill: %s" % by["tools"]["setup"])
+    check(by["plugged"]["setup"] == [{"kind": "pluginRoot", "file": "SKILL.md", "folder": "", "detail": "prompts/review.md"}], "plugin: %s" % by["plugged"])
+    check(by["plain"]["setup"] == [], "a plain skill: %s" % by["plain"])
+    p = run(env, "add", src, "--all")
+    check("tools needs setup" in p.stdout and "run `yarn install` in " in p.stdout and "install.sh is the author's install script" in p.stdout,
+          "what `add` says:\n" + p.stdout)
+    check("${CLAUDE_PLUGIN_ROOT}/prompts/review.md" in p.stdout and "plain needs setup" not in p.stdout, "what `add` says:\n" + p.stdout)
+    check(not os.path.exists(ROOT + "/install-ran") and not os.path.isdir(home + "/.agents/skills/tools/scripts/node_modules"), "something ran")
+    (reply, _) = rpc(env, ("skills.safety", {"name": "tools"}))[0]
+    check([n["file"] for n in reply["result"]["setup"]] == ["scripts/package.json", "install.sh"], "safety: %s" % reply["result"]["setup"])
+    scanned = {s["name"]: s for s in json.loads(run(env, "scan", "--json").stdout)}
+    check(len(scanned["tools"]["setup"]) == 2 and scanned["plain"]["setup"] == [], "scan --json: %s" % scanned["tools"])
+
+
+
+def list_limit():
+    """A repository with more skills than install.listLimit: the listing says how many are left out, and a name, --all and
+    skills.install still reach every one of them. A name that is nowhere is an error, not a silent "0 installed"."""
+    home, env = make_home("limit-home")
+    big = ROOT + "/big"
+    for i in range(30):
+        skill(big + "/skills/s%02d" % i, "s%02d" % i)
+    write(env["SKILLHUB_CONFIG"] + "/settings.json", '{"version": 1, "install": {"listLimit": 10}}')
+    p = run(env, "add", big)
+    check("s09" in p.stdout and "s10" not in p.stdout and "20 more" in p.stdout, "the listing of a large folder:\n" + p.stdout)
+    run(env, "add", big, "--skill", "s25")
+    check("s25" in listed(env), "a skill past the listing was not installed by name")
+    p = run(env, "add", big, "--skill", "nosuchskill", expect=1)
+    check("no skill called nosuchskill" in p.stdout + p.stderr, "a missing name was not said:\n" + p.stdout + p.stderr)
+    (_, found) = rpc(env, ("sources.discover", {"input": big}))[0]
+    check(found["ok"] and len(found["candidates"]) == 10 and found["more"] == 20, "discover past the limit: %s" % str(found)[:300])
+    (_, found) = rpc(env, ("sources.discover", {"input": big, "all": True}))[0]
+    check(len(found["candidates"]) == 30 and found["more"] == 0, "discover with all: %s" % str(found)[:300])
+    (_, done) = rpc(env, ("skills.install", {"source": big, "skills": ["s29"]}))[0]
+    check(done["ok"] and "s29" in listed(env), "skills.install past the listing: %s" % done)
+    run(env, "add", big, "--all")
+    check(len([n for n in listed(env) if n.startswith("s")]) == 30, "--all left skills out: %s" % listed(env))
 
 
 if __name__ == "__main__":

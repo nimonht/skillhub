@@ -14,16 +14,19 @@
 #include "sh_path.h"
 #include "sh_reports.h"
 #include "sh_scan.h"
+#include "sh_setup.h"
 #include "sh_state.h"
 #include "sh_thread.h"
 #include "sh_time.h"
 #include "sh_utf.h"
 
 #define WORKERS 16          // repositories handled at once; each runs one git process at a time
-#define FETCHES_PER_HOST 8  // clones and fetches from one host at a time
+#define CLONES_PER_HOST 8   // new clones from one host at once, across every job of the process ...
+#define CHECKS_PER_HOST 32  // ... and clones already there brought up to date (mostly round trips)
 #define COMMIT_EVERY 200    // lock entries per group commit ...
 #define COMMIT_MS 5000      // ... or after this long, whichever comes first
-#define DISCOVER_BUDGET 400 // SKILL.md files looked at per repository when listing what it offers
+#define LIST_LIMIT 2000     // skills listed per repository when adding from it (install.listLimit) ...
+#define LIST_LIMIT_MAX 50000  // ... and the most a setting may ask for: each one goes to the window in one reply
 #define FRONTMATTER_MAX (64 * 1024)
 #define WALK_MAX 200000     // files searched for skills in a local folder: more than this is no folder of skills
 
@@ -33,6 +36,7 @@ typedef struct {
     char *path;  // of SKILL.md
     char *name;  // from its front matter ("" when it has none)
     char *description;
+    char *plugin_path;  // what it names after ${CLAUDE_PLUGIN_ROOT}/ ("" for the variable alone), NULL when it names none
 } skill_file;
 
 // A place skills come from: a cache clone, or a local folder read directly.
@@ -59,13 +63,15 @@ struct sh_engine {
     sh_store *st;
     repo_slot *slots;
     size_t n_slots, cap_slots;
-    sh_limiter *fetches;
+    sh_host_limits per_host;  // repositories of one host at once
+    sh_sched_class sched;  // whether a person waits for this engine's work (sh_engine_set_interactive)
     sh_mutex *m;  // guards `pending`
     pending_entry *pending;
     size_t n_pending, cap_pending;
     int64_t last_commit;
     sh_trees *trees;  // what GitLab and git skills were installed from; read-only while tasks run
     int workers;      // repositories handled at once
+    size_t list_limit;  // skills listed per repository by sh_engine_discover; 0: every one
     bool auto_mode;
     bool skip_scripts;
     bool skip_findings;  // automatic runs leave out updates that bring a high finding (updates.autoSkipFindings)
@@ -77,6 +83,8 @@ struct sh_engine {
 };
 
 void sh_engine_cancel(sh_engine *e) { sh_atomic_inc(&e->cancelled); }
+void sh_engine_set_interactive(sh_engine *e) { e->sched = SH_SCHED_INTERACTIVE; }
+void sh_engine_list_everything(sh_engine *e) { e->list_limit = 0; }
 bool sh_engine_cancelled(sh_engine *e) { return sh_atomic_get(&e->cancelled) > 0; }
 bool sh_engine_lock_failed(const sh_engine *e) { return e->lock_failed; }
 
@@ -114,8 +122,13 @@ sh_engine *sh_engine_new(sh_store *st) {
     e->workers = (int)sh_setting_int("updates", "parallel", WORKERS);
     if (e->workers < 1) e->workers = 1;
     if (e->workers > 64) e->workers = 64;
-    const long long per_host = sh_setting_int("updates", "parallelPerHost", FETCHES_PER_HOST);
-    e->fetches = sh_limiter_new(per_host < 1 ? 1 : per_host > 64 ? 64 : (int)per_host);
+    const long long clones = sh_setting_int("updates", "parallelPerHost", CLONES_PER_HOST);
+    const long long checks = sh_setting_int("updates", "parallelChecksPerHost", CHECKS_PER_HOST);
+    e->per_host.heavy = clones < 1 ? 1 : clones > 64 ? 64 : (int)clones;
+    e->per_host.light = checks < 1 ? 1 : checks > 64 ? 64 : (int)checks;
+    e->sched = SH_SCHED_BATCH;
+    const long long limit = sh_setting_int("install", "listLimit", LIST_LIMIT);
+    e->list_limit = limit < 10 ? 10 : limit > LIST_LIMIT_MAX ? LIST_LIMIT_MAX : (size_t)limit;
     e->m = sh_mutex_new();
     e->last_commit = sh_mono_ms();
     return e;
@@ -131,6 +144,7 @@ static void slot_free(repo_slot *s) {
         free(s->skills[i].path);
         free(s->skills[i].name);
         free(s->skills[i].description);
+        free(s->skills[i].plugin_path);
     }
     free(s->skills);
 }
@@ -147,7 +161,6 @@ void sh_engine_free(sh_engine *e) {
     }
     free(e->pending);
     sh_trees_free(e->trees);
-    sh_limiter_free(e->fetches);
     sh_mutex_free(e->m);
     free(e);
 }
@@ -286,7 +299,7 @@ static bool ensure_synced(sh_engine *e, repo_slot *s) {
         s->ok = open_local(s, &err);
     } else {
         if (!sh_repo_cloned(s->key)) sh_store_log(e->st, "cloning %s ...", s->o.source);
-        s->ok = sh_repo_open(&s->repo, s->key, s->o.url, s->o.ref, e->fetches, &err);
+        s->ok = sh_repo_open(&s->repo, s->key, s->o.url, s->o.ref, &err);
     }
     if (!s->ok) {
         const char *hint = login_hint(err);
@@ -362,6 +375,10 @@ static void fm_end(void *user, size_t i) {
     r->files[i].name = sh_strdup(sh_fm_value(&fm, "name"));
     r->files[i].description = sh_left_utf16(sh_fm_value(&fm, "description"), 600);  // a repository can hold thousands of these
     sh_fm_free(&fm);
+    sh_setup plugin = SH_SETUP_INIT;  // the SKILL.md as far as it was read: a path into the plugin it came from
+    sh_setup_text(&plugin, "SKILL.md", sh_buf_str(&r->text), r->text.len);
+    if (plugin.len) r->files[i].plugin_path = sh_strdup(plugin.items[0].detail);
+    sh_setup_free(&plugin);
 }
 
 static size_t rank_skill_files(const repo_slot *s, ranked_entry *ranked) {
@@ -569,10 +586,25 @@ static void run_task(size_t i, void *arg) {
 
 static void on_idle(void *arg) { maybe_commit(((job *)arg)->e); }
 
+// What the scheduler starts first: a clone still to be made, then a clone to bring up to date, then a folder on this disk,
+// which needs no host and fills the workers that a full host leaves idle; between equals, the one with more skills.
+static long task_cost(bool local, bool cloned, const group *gr) {
+    const long kind = local ? 0 : cloned ? 1 : 2;
+    return kind << 24 | (long)(gr->n < 0xFFFFFF ? gr->n : 0xFFFFFF);
+}
+
 static void run_job(job *j) {
-    for (size_t i = 0; i < j->g.n; ++i) j->total += (long)j->g.groups[i].n;
-    const int workers = j->g.n < (size_t)j->e->workers ? (int)j->g.n : j->e->workers;
-    sh_parallel_for(j->g.n, workers, run_task, j, on_idle, 250);
+    sh_task *tasks = sh_xcalloc(j->g.n + 1, sizeof *tasks);
+    for (size_t i = 0; i < j->g.n; ++i) {
+        const repo_slot *s = &j->e->slots[j->g.groups[i].slot];
+        j->total += (long)j->g.groups[i].n;
+        const bool cloned = !is_local(s) && sh_repo_cloned(s->key);
+        tasks[i].host = is_local(s) ? "" : s->o.host;
+        tasks[i].heavy = !is_local(s) && !cloned;  // a clone to make; one that is there asks upstream, and fetches one commit at most
+        tasks[i].cost = task_cost(is_local(s), cloned, &j->g.groups[i]);
+    }
+    sh_parallel_sched(j->g.n, tasks, j->e->workers, j->e->per_host, j->e->sched, run_task, j, on_idle, 250);
+    free(tasks);
     commit_pending(j->e);
 }
 
@@ -1144,14 +1176,38 @@ static bool usable_name(const char *name) {
     return text;
 }
 
-static void candidates_of(const repo_slot *s, const char *subpath, sh_discovery *d) {
+// What a skill of a repository needs beyond its files, before it is installed: in git, by the names in its folder and what its
+// SKILL.md names; in a local folder, from the files themselves.
+static void setup_of(const repo_slot *s, const skill_file *f, const char *dir, sh_setup *out) {
+    memset(out, 0, sizeof *out);
+    if (is_local(s)) {
+        char *full = local_path(s, dir);
+        sh_setup_dir(full, out);
+        free(full);
+        return;
+    }
+    char *prefix = *dir ? sh_strfmt("%s/", dir) : sh_strdup("");
+    const size_t pn = strlen(prefix);
+    size_t lo = 0, hi = s->repo.n;  // the first entry at or after the prefix: entries are sorted by path
+    while (lo < hi) {
+        const size_t mid = lo + (hi - lo) / 2;
+        if (strcmp(s->repo.entries[mid].path, prefix) < 0) lo = mid + 1;
+        else hi = mid;
+    }
+    for (size_t i = lo; i < s->repo.n && strncmp(s->repo.entries[i].path, prefix, pn) == 0; ++i)
+        if (s->repo.entries[i].mode != SH_MODE_TREE) sh_setup_file(out, s->repo.entries[i].path + pn);
+    if (f->plugin_path) sh_setup_plugin_root(out, "SKILL.md", f->plugin_path);
+    sh_setup_finish(out);
+    free(prefix);
+}
+
+// What a repository offers below `subpath`, best location first: at most `limit` skills (0: all), and how many more there are.
+static void candidates_of(const repo_slot *s, const char *subpath, size_t limit, sh_discovery *d) {
     sh_strv seen = SH_STRV_INIT;
     d->cands.items = sh_xcalloc(s->n_skills + 1, sizeof *d->cands.items);
-    size_t looked = 0;
-    for (size_t i = 0; i < s->n_skills && looked < DISCOVER_BUDGET; ++i) {
+    for (size_t i = 0; i < s->n_skills; ++i) {
         const skill_file *f = &s->skills[i];
         if (!below(f->path, subpath)) continue;
-        ++looked;
         char *dir = sh_dir_of(f->path);
         const char *name = *f->name ? f->name : sh_path_name(dir);
         if (!usable_name(name) || sh_strv_contains(&seen, name)) {
@@ -1159,10 +1215,16 @@ static void candidates_of(const repo_slot *s, const char *subpath, sh_discovery 
             continue;
         }
         sh_strv_push(&seen, name);
+        if (limit && d->cands.len >= limit) {  // counted, not listed: the caller says how to see them
+            ++d->more;
+            free(dir);
+            continue;
+        }
         sh_candidate *c = &d->cands.items[d->cands.len++];
         c->name = sh_strdup(name);
         c->description = sh_strdup(f->description);
         c->dir = dir;
+        setup_of(s, f, dir, &c->setup);
         c->slug = sh_strdup(s->o.source);
         c->url = sh_strdup(s->o.url);
         c->key = sh_strdup(s->key);
@@ -1196,7 +1258,7 @@ void sh_engine_discover(sh_engine *e, const char *const *inputs, size_t n, sh_di
         out[i].type = sh_origin_type_name(s->o.type);
         out[i].host = sh_strdup(s->o.host);
         if (!s->ok) out[i].err = sh_strdup(s->err ? s->err : "");
-        else candidates_of(s, subpaths.items[i], &out[i]);
+        else candidates_of(s, subpaths.items[i], e->list_limit, &out[i]);
     }
     sh_strv_free(&subpaths);
     free(slot_of);

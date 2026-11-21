@@ -7,6 +7,7 @@
 #include "sh_proc.h"
 
 #include <errno.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -22,10 +23,84 @@
 #include <spawn.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sys/resource.h>
 #include <time.h>
 #include <unistd.h>
+#if defined(__linux__)
+#include <sched.h>
+#include <sys/prctl.h>
+#include <sys/syscall.h>
+#endif
 extern char **environ;
 #endif
+
+static long background;  // sh_proc_background ran (sh_atomic_* is not needed: it is set before any thread starts)
+
+#ifdef _WIN32
+// EcoQoS: the system may run the process on efficiency cores at a low clock (Windows 10 1709 and newer; ignored before)
+static void eco_qos(HANDLE process) {
+#ifdef PROCESS_POWER_THROTTLING_CURRENT_VERSION
+    PROCESS_POWER_THROTTLING_STATE s;
+    memset(&s, 0, sizeof s);
+    s.Version = PROCESS_POWER_THROTTLING_CURRENT_VERSION;
+    s.ControlMask = PROCESS_POWER_THROTTLING_EXECUTION_SPEED;
+    s.StateMask = PROCESS_POWER_THROTTLING_EXECUTION_SPEED;
+    SetProcessInformation(process, ProcessPowerThrottling, &s, sizeof s);
+#else
+    (void)process;
+#endif
+}
+#endif
+
+#if defined(__linux__)
+// struct sched_attr of sched_setattr(2), version 1: not every C library declares it
+typedef struct {
+    uint32_t size, policy;
+    uint64_t flags;
+    int32_t nice;
+    uint32_t priority;
+    uint64_t runtime, deadline, period;
+    uint32_t util_min, util_max;
+} sched_attr_v1;
+#define FLAG_KEEP_POLICY 0x08
+#define FLAG_KEEP_PARAMS 0x10
+#define FLAG_UTIL_CLAMP_MAX 0x40
+#define UTIL_MAX 512  // of 1024: what a small core or a low clock gives
+#define IOPRIO_WHO_PROCESS 1
+#define IOPRIO_BEST_EFFORT_LOWEST ((2 << 13) | 7)
+#endif
+
+void sh_proc_background(void) {
+    background = 1;
+#ifdef _WIN32
+    SetPriorityClass(GetCurrentProcess(), BELOW_NORMAL_PRIORITY_CLASS);  // first: the programs it starts inherit the class
+    SetPriorityClass(GetCurrentProcess(), PROCESS_MODE_BACKGROUND_BEGIN);
+    eco_qos(GetCurrentProcess());
+#elif defined(__APPLE__)
+    setpriority(PRIO_DARWIN_PROCESS, 0, PRIO_DARWIN_BG);
+#else
+    errno = 0;
+    const int nice_now = getpriority(PRIO_PROCESS, 0);
+    if (errno == 0 && nice_now < 10) setpriority(PRIO_PROCESS, 0, 10);
+#if defined(__linux__)
+    const struct sched_param none = {0};
+    sched_setscheduler(0, SCHED_BATCH, &none);  // keeps the nice value; no wakeup preempts a program at the keyboard
+    syscall(SYS_ioprio_set, IOPRIO_WHO_PROCESS, 0, IOPRIO_BEST_EFFORT_LOWEST);
+    prctl(PR_SET_TIMERSLACK, 50UL * 1000 * 1000);
+#ifdef SYS_sched_setattr
+    sched_attr_v1 attr;
+    memset(&attr, 0, sizeof attr);
+    attr.size = sizeof attr;
+    attr.flags = FLAG_KEEP_POLICY | FLAG_KEEP_PARAMS | FLAG_UTIL_CLAMP_MAX;
+    attr.util_max = UTIL_MAX;
+    syscall(SYS_sched_setattr, 0, &attr, 0);  // kernels without uclamp refuse it
+#endif
+#endif
+    errno = 0;
+#endif
+}
+
+bool sh_proc_in_background(void) { return background != 0; }
 
 void sh_proc_result_free(sh_proc_result *r) {
     sh_buf_free(&r->out);
@@ -336,6 +411,7 @@ bool sh_proc_run(const char *const *argv, const sh_proc_opts *opts, sh_proc_resu
     }
     r->started = true;
     CloseHandle(pi.hThread);
+    if (background) eco_qos(pi.hProcess);  // the priority class is inherited, EcoQoS is not
 
     pipe_job wj = {in_w, o->input, o->input_len, NULL, NULL, NULL}, ej = {err_r, NULL, 0, &r->err, NULL, NULL},
              oj = {out_r, NULL, 0, &r->out, o, pi.hProcess};

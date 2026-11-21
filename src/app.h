@@ -115,6 +115,10 @@ class AppController : public QObject {
     Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
     Q_PROPERTY(QString busyText READ busyText NOTIFY busyChanged)
     Q_PROPERTY(double progress READ progress NOTIFY busyChanged)
+    // what may start now (docs/protocol.md, Jobs): a job that only reads goes beside one other, one that changes skills
+    // beside one that reads
+    Q_PROPERTY(bool canRead READ canRead NOTIFY busyChanged)
+    Q_PROPERTY(bool canChange READ canChange NOTIFY busyChanged)
     Q_PROPERTY(int skillCount READ skillCount NOTIFY countsChanged)
     Q_PROPERTY(int updateCount READ updateCount NOTIFY countsChanged)
     Q_PROPERTY(int localCount READ localCount NOTIFY countsChanged)
@@ -141,6 +145,7 @@ class AppController : public QObject {
     Q_PROPERTY(QString candidateType READ candidateType NOTIFY candidatesChanged)  // github, gitlab, git, local
     Q_PROPERTY(QString candidateHost READ candidateHost NOTIFY candidatesChanged)
     Q_PROPERTY(bool discovering READ discovering NOTIFY candidatesChanged)
+    Q_PROPERTY(int candidateMore READ candidateMore NOTIFY candidatesChanged)  // skills there past install.listLimit, not listed
     Q_PROPERTY(bool reviewOpen READ reviewOpen NOTIFY reviewChanged)
     Q_PROPERTY(bool reviewLoading READ reviewLoading NOTIFY reviewChanged)
     Q_PROPERTY(QVariantList reviews READ reviews NOTIFY reviewChanged)
@@ -195,9 +200,11 @@ public:
     SkillFilter *filter() { return &filter_; }
     QAbstractItemModel *logModel() { return &log_; }
     LogFilter *logView() { return &logView_; }
-    bool busy() const { return busy_; }
-    QString busyText() const { return busyText_; }
-    double progress() const { return progress_; }
+    bool busy() const { return !jobs_.isEmpty(); }
+    QString busyText() const;
+    double progress() const { return jobs_.isEmpty() ? -1 : jobs_.first().progress; }
+    bool canRead() const;
+    bool canChange() const;
     int skillCount() const { return model_.rowCount(); }
     int updateCount() const { return counts_.value(QStringLiteral("updates")).toInt(); }
     int localCount() const { return counts_.value(QStringLiteral("local")).toInt(); }
@@ -226,6 +233,7 @@ public:
     QString candidateType() const { return candidateType_; }
     QString candidateHost() const { return candidateHost_; }
     bool discovering() const { return discovering_; }
+    int candidateMore() const { return candidateMore_; }
     bool reviewOpen() const { return reviewOpen_; }
     bool reviewLoading() const { return reviewLoading_; }
     QVariantList reviews() const { return reviews_; }
@@ -276,7 +284,7 @@ public:
     QString documentsFolder() const;
     QVariantList importItems() const { return importItems_; }
     QString importError() const { return importError_; }
-    bool idle() const { return loaded_ && !busy_; }  // the screenshot harness waits for this
+    bool idle() const { return loaded_ && jobs_.isEmpty(); }  // the screenshot harness waits for this
 
     Q_INVOKABLE void refresh();
     Q_INVOKABLE void checkUpdates();
@@ -322,6 +330,8 @@ public:
     Q_INVOKABLE void setUpdateChannel(const QString &channel);   // "stable" or "beta": saved, then looks again
     Q_INVOKABLE void readSafety(const QString &name);
     Q_INVOKABLE void askSecondOpinion(const QString &agent);  // of the selected skill, in a terminal tab
+    // A setup note of the selected skill (app.safety.setup): a terminal in that folder of it, the command typed and not run
+    Q_INVOKABLE void setUpInTerminal(const QString &folder, const QString &command);
     void showAppUpdate(const QString &latest, bool canInstall, bool back = false);   // the screenshots; back: an older, final version
     Q_INVOKABLE void setScope(const QString &path);
     Q_INVOKABLE void addProject(const QString &path);
@@ -330,7 +340,8 @@ public:
     Q_INVOKABLE void updateSkill(const QString &name);
     Q_INVOKABLE void adopt();
     Q_INVOKABLE void select(const QString &name);
-    Q_INVOKABLE void discover(const QString &repo);
+    Q_INVOKABLE void discover(const QString &repo, bool all = false);
+    Q_INVOKABLE void discoverAll() { discover(candidateRepo_, true); }   // every skill of the repository read last
     Q_INVOKABLE void installChosen(const QStringList &names, bool live);
     Q_INVOKABLE void closeAdd();
     Q_INVOKABLE void dismiss();
@@ -405,8 +416,9 @@ private:
     void loadPage(int page, qint64 rev);
     void applyState(const QJsonObject &o);
     void applyDelta(const QJsonObject &params, const SkillRows &rows);
-    void startJob(const QString &method, const QJsonObject &params, const QString &busyText, const QString &kind, bool determinate);
-    void jobDone(const QJsonObject &done);
+    // `about`: the skill it is about, for the toast. A job that cannot start beside those running is not started.
+    void startJob(const QString &method, const QJsonObject &params, const QString &busyText, const QString &kind, bool determinate, const QString &about = {});
+    void jobDone(const QJsonObject &done, const QString &kind, const QString &name);
     void rebuildDetail();
     void readPreview(const QString &name);
     void loadVersions();
@@ -416,7 +428,6 @@ private:
     void applySettings(const QJsonObject &s);
     void watchPortalAccent();
     void saveSetting(const QString &key, const QJsonValue &value);
-    void setBusy(bool busy, const QString &text = {}, double progress = -1);
     QString tilde(const QString &path) const;
     QString windowReport() const;
 
@@ -431,7 +442,16 @@ private:
     int columns_ = 0, portW_ = 72, hidden_ = 0;
     qint64 rev_ = 0;
     bool loading_ = false, stale_ = false;
-    QString job_, jobKind_, jobName_;  // the running job: its id, kind, and the skill it is about
+    struct RunningJob {
+        int ticket;         // this window's own number for it, from before the backend names it
+        QString id;         // the backend's ("j7"); empty until it answers
+        QString kind, name; // what the toast says when it ends, and the skill it is about
+        QString text;       // what the status bar says meanwhile
+        double progress;    // 0..1, or -1 when its length is unknown
+        bool changes;       // it changes skills
+    };
+    QVector<RunningJob> jobs_;  // oldest first; two at most
+    int nextTicket_ = 0;
     QVariantMap detail_;
     QVariantList candidates_, reviews_, versions_, projects_;
     QStringList suggested_;
@@ -448,12 +468,12 @@ private:
     QVariantList importItems_;
     QString importError_, importPath_;
     QString selected_, preview_, focus_, mode_ = QStringLiteral("skill");
-    QString busyText_, candidateRepo_, candidateError_, candidateType_, candidateHost_, timer_ = QStringLiteral("off"), watch_ = QStringLiteral("off");
+    QString candidateRepo_, candidateError_, candidateType_, candidateHost_, timer_ = QStringLiteral("off"), watch_ = QStringLiteral("off");
     QString themeMode_ = QStringLiteral("system");
     QString languageChoice_ = QStringLiteral("system");
     JsonTranslator translator_;
     bool translatorInstalled_ = false, languageForced_ = false;
-    double progress_ = -1;
-    bool busy_ = false, discovering_ = false, reduce_ = false, forcedStill_ = false, noHover_ = false, loaded_ = false;
+    int candidateMore_ = 0;
+    bool discovering_ = false, reduce_ = false, forcedStill_ = false, noHover_ = false, loaded_ = false;
     bool automationSupported_ = false, themeForced_ = false;
 };

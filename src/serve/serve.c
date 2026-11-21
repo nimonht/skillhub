@@ -22,6 +22,7 @@
 #include "sh_sysinfo.h"
 #include "sh_reports.h"
 #include "sh_scan.h"
+#include "sh_setup.h"
 #include "sh_selfupdate.h"
 #include "sh_utf.h"
 
@@ -206,17 +207,19 @@ static void arm_flush(server *s) {
 }
 
 static void send_progress_and_logs(server *s) {
-    if (s->progress_dirty && s->job) {
+    for (int i = 0; i < s->n_jobs; ++i) {
+        job *j = s->jobs[i];
+        if (!j->progress_dirty) continue;
         yyjson_mut_doc *d = yyjson_mut_doc_new(NULL);
         yyjson_mut_val *p = yyjson_mut_obj(d);
-        yyjson_mut_obj_add_str(d, p, "job", s->job->name);
-        yyjson_mut_obj_add_int(d, p, "done", s->progress_done);
-        yyjson_mut_obj_add_int(d, p, "total", s->progress_total);
-        yyjson_mut_obj_add_strcpy(d, p, "current", s->progress_current ? s->progress_current : "");
+        yyjson_mut_obj_add_str(d, p, "job", j->name);
+        yyjson_mut_obj_add_int(d, p, "done", j->progress_done);
+        yyjson_mut_obj_add_int(d, p, "total", j->progress_total);
+        yyjson_mut_obj_add_strcpy(d, p, "current", j->progress_current ? j->progress_current : "");
         send_notification(s, d, "event.progress", p);
         yyjson_mut_doc_free(d);
+        j->progress_dirty = false;
     }
-    s->progress_dirty = false;
     if (s->pending_logs.len) {
         yyjson_mut_doc *d = yyjson_mut_doc_new(NULL);
         yyjson_mut_val *p = yyjson_mut_obj(d), *lines = yyjson_mut_arr(d);
@@ -384,7 +387,7 @@ bool mutation_lock_try(sh_flock **held) {
 
 // immediate methods that write config the jobs also read
 static bool may_write(server *s, sh_rpc_msg *m, sh_flock **lock) {
-    if (s->job) {
+    if (s->n_jobs) {
         send_error(s, m, SH_RPC_BUSY, "another job is running");
         return false;
     }
@@ -511,10 +514,11 @@ static void m_initialize(server *s, sh_rpc_msg *m) {
     sh_store_free(&st);
 }
 
-static void reply_shutdown(server *s, const char *cancelled_job) {
+// once every job has stopped: `cancelled` names those that were stopped half way
+static void reply_shutdown(server *s, const sh_strv *cancelled) {
     yyjson_mut_doc *d = yyjson_mut_doc_new(NULL);
     yyjson_mut_val *r = yyjson_mut_obj(d), *list = yyjson_mut_arr(d);
-    if (cancelled_job) yyjson_mut_arr_add_strcpy(d, list, cancelled_job);
+    for (size_t i = 0; cancelled && i < cancelled->len; ++i) yyjson_mut_arr_add_strcpy(d, list, cancelled->items[i]);
     yyjson_mut_obj_add_val(d, r, "cancelled", list);
     send_result(s, s->shutdown_msg, d, r);
     yyjson_mut_doc_free(d);
@@ -530,10 +534,10 @@ static bool m_shutdown(server *s, sh_rpc_msg *m) {
     }
     s->shutting_down = true;
     s->shutdown_msg = m;
-    if (!s->job) {
+    if (!s->n_jobs) {
         reply_shutdown(s, NULL);
     } else {
-        job_cancel(s->job);  // answered when it has stopped at a safe point
+        for (int i = 0; i < s->n_jobs; ++i) job_cancel(s->jobs[i]);  // answered when they have stopped at a safe point
     }
     return true;
 }
@@ -586,7 +590,7 @@ static bool m_from_state(server *s, sh_rpc_msg *m) {
 
 // `scope`: "user", or a project's folder. The window hears of the change as a delta, like any other.
 static void m_scope_set(server *s, sh_rpc_msg *m) {
-    if (s->job) {
+    if (s->n_jobs) {
         send_error(s, m, SH_RPC_BUSY, "another job is running");
         return;
     }
@@ -944,6 +948,8 @@ static void m_skill_safety(server *s, sh_rpc_msg *m, const slow_call *c) {
     } else {
         sh_findings f;
         sh_scan_dir(found->path, &f);
+        sh_setup setup;
+        sh_setup_dir(found->path, &setup);
         const char *names[] = {name};
         sh_report rep;
         sh_reports_get(st.cache, &found->src, names, 1, false, &rep);
@@ -956,11 +962,15 @@ static void m_skill_safety(server *s, sh_rpc_msg *m, const slow_call *c) {
         sh_findings_json(d, list, &f);
         yyjson_mut_obj_add_val(d, r, "findings", list);
         yyjson_mut_obj_add_bool(d, r, "truncated", f.truncated);
+        yyjson_mut_val *needs = yyjson_mut_arr(d);
+        sh_setup_json(d, needs, &setup);
+        yyjson_mut_obj_add_val(d, r, "setup", needs);
         sh_report_json(d, reports, &rep);
         yyjson_mut_obj_add_val(d, r, "reports", reports);
         send_result(s, m, d, r);
         yyjson_mut_doc_free(d);
         sh_report_free(&rep);
+        sh_setup_free(&setup);
         sh_findings_free(&f);
     }
     sh_skills_free(&sk);
@@ -1055,11 +1065,12 @@ static void m_settings_set(server *s, sh_rpc_msg *m) {
 }
 
 static void m_cancel(server *s, sh_rpc_msg *m) {
-    if (!s->job || strcmp(s->job->name, param_str(m->params, "job")) != 0) {
+    job *j = job_named(s, param_str(m->params, "job"));
+    if (!j) {
         send_error(s, m, SH_RPC_NOT_FOUND, "no such job is running");
         return;
     }
-    job_cancel(s->job);
+    job_cancel(j);
     yyjson_mut_doc *d = yyjson_mut_doc_new(NULL);
     send_result(s, m, d, yyjson_mut_obj(d));
     yyjson_mut_doc_free(d);
@@ -1182,7 +1193,7 @@ static void handle_line(server *s, char *text, size_t len, bool fits) {
 // ---- the loop ----
 
 static void maybe_stop(server *s) {
-    if (s->input_closed && !s->job && !s->scan_running && !s->slow_running) uv_stop(s->loop);
+    if (s->input_closed && !s->n_jobs && !s->scan_running && !s->slow_running) uv_stop(s->loop);
 }
 
 static void handle_event(server *s, event *ev) {
@@ -1198,26 +1209,24 @@ static void handle_event(server *s, event *ev) {
         // nobody is listening any more: stop the job at a safe point, keep what it finished, then exit
         s->input_closed = true;
         s->shutting_down = true;
-        if (s->job) job_cancel(s->job);
+        for (int i = 0; i < s->n_jobs; ++i) job_cancel(s->jobs[i]);
         break;
     case EV_LOG:
         sh_strv_take(&s->pending_logs, ev->text);
         arm_flush(s);
         break;
     case EV_PROGRESS:
-        free(s->progress_current);
-        s->progress_current = ev->text;
-        s->progress_done = ev->a;
-        s->progress_total = ev->b;
-        s->progress_dirty = true;
+        free(ev->job->progress_current);
+        ev->job->progress_current = ev->text;
+        ev->job->progress_done = ev->a;
+        ev->job->progress_total = ev->b;
+        ev->job->progress_dirty = true;
         arm_flush(s);
         break;
     case EV_JOB_DONE: {
-        char *name = sh_strdup(ev->job->name);
-        const bool stopped = ev->job->cancelled;
+        if (s->shutdown_msg && ev->job->cancelled) sh_strv_push(&s->stopped_jobs, ev->job->name);
         job_finish(s, ev->job);
-        if (s->shutdown_msg) reply_shutdown(s, stopped ? name : NULL);
-        free(name);
+        if (s->shutdown_msg && !s->n_jobs) reply_shutdown(s, &s->stopped_jobs);
         break;
     }
     case EV_SCAN_DONE:
@@ -1350,7 +1359,7 @@ int sh_serve_stdio(void) {
     check_map_free(&sv.checks);
     sh_strv_free(&sv.just_updated);
     sh_strv_free(&sv.pending_logs);
-    free(sv.progress_current);
+    sh_strv_free(&sv.stopped_jobs);
     free(sv.settings_seen);
     return 0;
 }

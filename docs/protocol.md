@@ -50,7 +50,7 @@ from different versions". `capabilities.automation` is `systemd`, `launchd`, `ta
 
 ### `shutdown`
 
-`→ {"id":9,"method":"shutdown"}`, `← {"id":9,"result":{"cancelled":["<job>"]}}`
+`→ {"id":9,"method":"shutdown"}`, `← {"id":9,"result":{"cancelled":["<job>"]}}`, once every running job has stopped.
 
 ## State: snapshot and deltas
 
@@ -140,8 +140,12 @@ Then come notifications:
 - `jobs.cancel {"job":"j7"}` stops a job at its next safe point: between skills, never inside a swap. Finished items stay
   done and are committed; staging folders of unfinished ones are removed. The job then ends with `"ok":false,
   "cancelled":true`.
-- One job runs at a time. Another job request while one runs gets error `1001` (busy). Requests that are not jobs
-  (`state.snapshot`, `skills.read`, `settings.*`, ...) are answered alongside.
+- Two jobs may run at once when one of them only reads: `skills.check`, `skills.diff`, `sources.discover` or `paths.sizes`
+  (so reading a repository to install from, or checking one skill, works while every skill is being updated, and an install
+  works while every skill is being checked). Never two jobs that change skills, never a third, and `app.update` only alone:
+  those get error `1001` (busy). The second job is the one a person waits for: its clones and fetches get a host's next free
+  slot before the first job's. Requests that are not jobs (`state.snapshot`, `skills.read`, `settings.*`, ...) are answered
+  alongside; those that write what jobs read (`scope.set`, and the methods named in the next point) get `1001` while any job runs.
 - Jobs that change skills (all but `skills.check` and `sources.discover`) hold the mutation lock that the command line
   uses (`docs/formats.md`, section 8). When another process holds it, the request gets error `1002` at once. Methods that
   are not jobs but change what jobs read (`providers.addCustom`, `providers.removeCustom`, `automation.set`) follow the
@@ -161,14 +165,14 @@ Parameters marked `?` are optional. `names` is a list of skill names; an empty o
 | `skills.remove` | `name` | job |
 | `skills.track` | `name`, `source`, `path?` | job |
 | `skills.read` | `name` | `{ "name", "text", "truncated" }`: the first 80 KB of its SKILL.md, for the preview |
-| `skills.safety` | `name` | Slow: may reach the network. `{ "name", "folder", "high", "medium", "findings":[{"rule","title","level":"high"\|"medium","file","line","excerpt"}], "truncated", "reports":{"state","source","scanners":[{"scanner","label","risk","alerts","analyzedAt"}]} }`. `state` is `off`, `not-github`, `private` (nothing was sent), `failed`, `none` or `ok`; `alerts` is -1 when not given |
-| `skills.diff` | `names?` (missing: every available update) | job; each review also carries `newFindings`, the offline check's findings in the new version and not in the installed one (shape as in `skills.safety`); the results carry `reviews:[{"name","stage","treeSha","available","localEdits","risk","truncated","error?","files":[{"path","status","add","del","binary","exec","risk","cut","patch"}]}]`. `status` is `added`, `removed` or `modified`; `patch` holds the hunks of that file. At most 256 KB per file, 4 MB per skill, 32 MB per reply; `cut` and `truncated` say when something is missing. A review with no `stage` has nothing to apply |
+| `skills.safety` | `name` | Slow: may reach the network. `{ "name", "folder", "high", "medium", "findings":[{"rule","title","level":"high"\|"medium","file","line","excerpt"}], "truncated", "setup":[<Setup>], "reports":{"state","source","scanners":[{"scanner","label","risk","alerts","analyzedAt"}]} }`. `state` is `off`, `not-github`, `private` (nothing was sent), `failed`, `none` or `ok`; `alerts` is -1 when not given |
+| `skills.diff` | `names?` (missing: every available update) | job; each review also carries `newFindings`, the offline check's findings in the new version and not in the installed one (shape as in `skills.safety`), and `setup:[<Setup>]`, the notes whose file the update adds or changes; the results carry `reviews:[{"name","stage","treeSha","available","localEdits","risk","truncated","error?","files":[{"path","status","add","del","binary","exec","risk","cut","patch"}]}]`. `status` is `added`, `removed` or `modified`; `patch` holds the hunks of that file. At most 256 KB per file, 4 MB per skill, 32 MB per reply; `cut` and `truncated` say when something is missing. A review with no `stage` has nothing to apply |
 | `skills.history` | `name` | `{ "versions":[{"stamp","reason","createdAt","treeSha","hasLockEntry"}], "hold": true }`, newest first |
 | `skills.rollback` | `name` with `stamp?` (newest when missing), or `names` (each to its newest version) | job |
 | `skills.restore` | `name` (from `_removed/`) | job |
 | `skills.hold` | `name`, `on` | job |
 | `skills.setAgentEnabled` | `name` or `names`, `agent` (an agent id, `@shared`, or `@all`), `enabled` | job. All at once: one write of each file, one relink. An agent that reads the shared folder is refused: use `@shared` |
-| `sources.discover` | `input` | job; the results carry `candidates:[{"name","description","dir","installed"}]`, `host`, `sourceType` |
+| `sources.discover` | `input`, `all?` | job; the results carry `candidates:[{"name","description","dir","installed","setup":[<Setup>]}]`, `host`, `sourceType`, and `more`: the skills past `install.listLimit` (2000) that are not listed. `all` lists every one. `skills.install` finds a skill by name among all of them |
 | `adopt` | none | job |
 | `relink` | none | job |
 | `doctor` | `fix?` | `{ "problems":[...], "fixed":N }`; with `fix` it is a job |
@@ -201,6 +205,13 @@ Parameters marked `?` are optional. `names` is a list of skill names; an empty o
 | `jobs.cancel` | `job` | `{}` |
 
 `<Project>`: `{ "path", "name", "skills":N, "autoUpdate":false }`.
+
+`<Setup>`: what a skill needs beyond its files, which Skill Hub never runs: `{ "kind", "file", "folder", "command"?, "detail"? }`.
+`kind` is `dependencies` (a manifest such as `package.json`: run `command`, from a fixed list and never from the skill, in
+`folder` inside the skill), `script` (an install script of the author's, to read) or `pluginRoot` (`file` names
+`${CLAUDE_PLUGIN_ROOT}`, set only inside a Claude Code plugin; `detail` is the path after it). An offered skill's notes come
+from the repository's file names and its SKILL.md; an installed skill's from its files, where a manifest that lists nothing is
+no note.
 
 The backend answers: `initialize`, `shutdown`, `state.snapshot`, `skills.read`,
 `skills.check`, `skills.update`, `skills.install`, `skills.remove`, `skills.track`, `skills.diff`, `skills.history`,
